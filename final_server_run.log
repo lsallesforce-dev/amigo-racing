@@ -1,0 +1,7 @@
+
+> amigo-racing-platform@1.0.0 server
+> tsx watch server/index.ts
+
+21:07:18 [tsx] change in ./server\db.ts Rerunning...
+c21:07:23 [tsx] Return key Rerunning...
+c

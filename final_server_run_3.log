@@ -1,0 +1,5 @@
+
+> amigo-racing-platform@1.0.0 server
+> tsx watch server/index.ts
+
+Deseja finalizar o arquivo em lotes (S/N)? 

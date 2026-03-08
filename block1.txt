@@ -1,0 +1,23 @@
+﻿    create: protectedProcedure
+      .input(z.object({
+        name: z.string().min(1),
+        description: z.string().optional(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        await db.createOrganizer({
+          ...input,
+          ownerId: ctx.user.openId, // ✅ Usa openId do usuário
+        });
+        return { success: true };
+      }),
+
+    update: organizerProcedure
+      .input(z.object({
+        id: z.number(),
+        name: z.string().optional(),
+        description: z.string().optional(),
+        active: z.boolean().optional(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        const { id, ...data } = input;
+        const organizer = await db.getOrganizerById(id);

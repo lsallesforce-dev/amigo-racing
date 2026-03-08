@@ -1,0 +1,7 @@
+[00:00.0 - 00:08.2] Manos, vamos pensar assim, se a gente criar um botão aqui, em cima aqui, um botão não,
+[00:08.2 - 00:13.2] outros campos né, aqui pode manter o que tiver, pode até tirar alguma coisa, beleza.
+[00:13.2 - 00:22.4] Aí a gente coloca aqui assim, horário, início da prova, beleza, eu coloco 8 horas, posição
+[00:22.4 - 00:28.2] de largada categoria, aí eu seleciono qual larga primeiro, qual larga segundo, terceiro,
+[00:28.2 - 00:32.4] quarto, quinto, conforme quantas categorias tiver, se tiver 10 vai ter opção para 10
+[00:32.4 - 00:41.3] categorias aqui, aí beleza, e nisso já vai estar puxando quantos inscritos tem, aí ele
+[00:41.3 - 00:45.6] vai preencher tudo automático, o que você me fala disso?

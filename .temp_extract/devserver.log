@@ -1,0 +1,99 @@
+[2026-02-12T19:25:28.832Z] 
+[2026-02-12T19:25:28.833Z] > amigo-racing-platform@1.0.0 dev /home/ubuntu/amigo-racing-platform
+[2026-02-12T19:25:28.833Z] > NODE_ENV=development tsx watch server/_core/index.ts
+[2026-02-12T19:25:28.834Z] 
+[2026-02-12T19:25:30.740Z] [OAuth] Initialized with baseURL: https://api.manus.im
+[2026-02-12T19:25:31.158Z] Server running on http://localhost:3000/
+[2026-02-12T19:26:13.578Z] 2:26:13 PM [tsx] change in ./drizzle/schema.ts Restarting...
+[2026-02-12T19:26:15.523Z] c[OAuth] Initialized with baseURL: https://api.manus.im
+[2026-02-12T19:26:15.889Z] Server running on http://localhost:3000/
+[2026-02-12T19:29:21.233Z] 2:29:21 PM [tsx] change in ./server/routers.ts Restarting...
+[2026-02-12T19:29:23.570Z] c[OAuth] Initialized with baseURL: https://api.manus.im
+[2026-02-12T19:29:23.933Z] 2:29:23 PM [vite] (client) Re-optimizing dependencies because lockfile has changed
+[2026-02-12T19:29:23.963Z] Server running on http://localhost:3000/
+[2026-02-12T19:29:50.042Z] 2:29:50 PM [tsx] change in ./server/routers.ts Restarting...
+[2026-02-12T19:29:51.919Z] c[OAuth] Initialized with baseURL: https://api.manus.im
+[2026-02-12T19:29:52.264Z] Server running on http://localhost:3000/
+[2026-02-12T19:31:19.507Z] 2:31:19 PM [tsx] change in ./server/routers.ts Restarting...
+[2026-02-12T19:31:21.499Z] c[OAuth] Initialized with baseURL: https://api.manus.im
+[2026-02-12T19:31:21.883Z] Server running on http://localhost:3000/
+[2026-02-12T19:32:35.451Z] [CORS] Origem da requisicao: undefined
+[2026-02-12T19:32:36.145Z] [baseline-browser-mapping] The data in this module is over two months old.  To ensure accurate Baseline data, please update: `npm i baseline-browser-mapping@latest -D`
+[2026-02-12T19:32:36.260Z] [CORS] Origem da requisicao: http://127.0.0.1:3000
+[2026-02-12T19:32:36.261Z] [CORS] Origem NAO permitida: http://127.0.0.1:3000
+[2026-02-12T19:32:36.265Z] [CORS] Origem da requisicao: http://127.0.0.1:3000
+[2026-02-12T19:32:36.266Z] [CORS] Origem NAO permitida: http://127.0.0.1:3000
+[2026-02-12T19:32:36.266Z] [CORS] Origem da requisicao: undefined
+[2026-02-12T19:32:36.270Z] [CORS] Origem da requisicao: http://127.0.0.1:3000
+[2026-02-12T19:32:36.270Z] [CORS] Origem NAO permitida: http://127.0.0.1:3000
+[2026-02-12T19:32:36.337Z] [CORS] Origem da requisicao: http://127.0.0.1:3000
+[2026-02-12T19:32:36.338Z] [CORS] Origem NAO permitida: http://127.0.0.1:3000
+[2026-02-12T19:32:36.435Z] [CORS] Origem da requisicao: http://127.0.0.1:3000
+[2026-02-12T19:32:36.436Z] [CORS] Origem NAO permitida: http://127.0.0.1:3000
+[2026-02-12T19:32:36.436Z] [CORS] Origem da requisicao: http://127.0.0.1:3000
+[2026-02-12T19:32:36.436Z] [CORS] Origem NAO permitida: http://127.0.0.1:3000
+[2026-02-12T19:32:36.437Z] [CORS] Origem da requisicao: http://127.0.0.1:3000
+[2026-02-12T19:32:36.438Z] [CORS] Origem NAO permitida: http://127.0.0.1:3000
+[2026-02-12T19:32:36.438Z] [CORS] Origem da requisicao: http://127.0.0.1:3000
+[2026-02-12T19:32:36.439Z] [CORS] Origem NAO permitida: http://127.0.0.1:3000
+[2026-02-12T19:32:36.445Z] [CORS] Origem da requisicao: http://127.0.0.1:3000
+[2026-02-12T19:32:36.446Z] [CORS] Origem NAO permitida: http://127.0.0.1:3000
+[2026-02-12T19:32:36.464Z] [CORS] Origem da requisicao: http://127.0.0.1:3000
+[2026-02-12T19:32:36.464Z] [CORS] Origem NAO permitida: http://127.0.0.1:3000
+[2026-02-12T19:32:36.493Z] [CORS] Origem da requisicao: http://127.0.0.1:3000
+[2026-02-12T19:32:36.494Z] [CORS] Origem NAO permitida: http://127.0.0.1:3000
+[2026-02-12T19:32:36.494Z] [CORS] Origem da requisicao: http://127.0.0.1:3000
+[2026-02-12T19:32:36.495Z] [CORS] Origem NAO permitida: http://127.0.0.1:3000
+[2026-02-12T19:32:36.496Z] [CORS] Origem da requisicao: http://127.0.0.1:3000
+[2026-02-12T19:32:36.496Z] [CORS] Origem NAO permitida: http://127.0.0.1:3000
+[2026-02-12T19:32:36.496Z] [CORS] Origem da requisicao: http://127.0.0.1:3000
+[2026-02-12T19:32:36.497Z] [CORS] Origem NAO permitida: http://127.0.0.1:3000
+[2026-02-12T19:32:36.497Z] [CORS] Origem da requisicao: http://127.0.0.1:3000
+[2026-02-12T19:32:36.498Z] [CORS] Origem NAO permitida: http://127.0.0.1:3000
+[2026-02-12T19:32:36.505Z] [CORS] Origem da requisicao: http://127.0.0.1:3000
+[2026-02-12T19:32:36.506Z] [CORS] Origem NAO permitida: http://127.0.0.1:3000
+[2026-02-12T19:32:36.507Z] [CORS] Origem da requisicao: http://127.0.0.1:3000
+[2026-02-12T19:32:36.507Z] [CORS] Origem NAO permitida: http://127.0.0.1:3000
+[2026-02-12T19:32:36.508Z] [CORS] Origem da requisicao: http://127.0.0.1:3000
+[2026-02-12T19:32:36.509Z] [CORS] Origem NAO permitida: http://127.0.0.1:3000
+[2026-02-12T19:32:37.292Z] [CORS] Origem da requisicao: http://127.0.0.1:3000
+[2026-02-12T19:32:37.293Z] [CORS] Origem NAO permitida: http://127.0.0.1:3000
+[2026-02-12T19:32:37.293Z] [CORS] Origem da requisicao: http://127.0.0.1:3000
+[2026-02-12T19:32:37.293Z] [CORS] Origem NAO permitida: http://127.0.0.1:3000
+[2026-02-12T19:32:37.294Z] [CORS] Origem da requisicao: http://127.0.0.1:3000
+[2026-02-12T19:32:37.295Z] [CORS] Origem NAO permitida: http://127.0.0.1:3000
+[2026-02-12T19:32:37.295Z] [CORS] Origem da requisicao: http://127.0.0.1:3000
+[2026-02-12T19:32:37.295Z] [CORS] Origem NAO permitida: http://127.0.0.1:3000
+[2026-02-12T19:32:37.296Z] [CORS] Origem da requisicao: http://127.0.0.1:3000
+[2026-02-12T19:32:37.296Z] [CORS] Origem NAO permitida: http://127.0.0.1:3000
+[2026-02-12T19:32:37.296Z] [CORS] Origem da requisicao: http://127.0.0.1:3000
+[2026-02-12T19:32:37.297Z] [CORS] Origem NAO permitida: http://127.0.0.1:3000
+[2026-02-12T19:32:37.449Z] [CORS] Origem da requisicao: http://127.0.0.1:3000
+[2026-02-12T19:32:37.450Z] [CORS] Origem NAO permitida: http://127.0.0.1:3000
+[2026-02-12T19:32:37.450Z] [CORS] Origem da requisicao: http://127.0.0.1:3000
+[2026-02-12T19:32:37.451Z] [CORS] Origem NAO permitida: http://127.0.0.1:3000
+[2026-02-12T19:32:37.454Z] [CORS] Origem da requisicao: http://127.0.0.1:3000
+[2026-02-12T19:32:37.454Z] [CORS] Origem NAO permitida: http://127.0.0.1:3000
+[2026-02-12T19:32:37.633Z] [CORS] Origem da requisicao: http://127.0.0.1:3000
+[2026-02-12T19:32:37.634Z] [CORS] Origem NAO permitida: http://127.0.0.1:3000
+[2026-02-12T19:32:37.635Z] [CORS] Origem da requisicao: http://127.0.0.1:3000
+[2026-02-12T19:32:37.635Z] [CORS] Origem NAO permitida: http://127.0.0.1:3000
+[2026-02-12T19:32:37.636Z] [CORS] Origem da requisicao: http://127.0.0.1:3000
+[2026-02-12T19:32:37.637Z] [CORS] Origem NAO permitida: http://127.0.0.1:3000
+[2026-02-12T19:32:37.638Z] [CORS] Origem da requisicao: http://127.0.0.1:3000
+[2026-02-12T19:32:37.638Z] [CORS] Origem NAO permitida: http://127.0.0.1:3000
+[2026-02-12T19:32:37.639Z] [CORS] Origem da requisicao: http://127.0.0.1:3000
+[2026-02-12T19:32:37.640Z] [CORS] Origem NAO permitida: http://127.0.0.1:3000
+[2026-02-12T19:32:37.640Z] [CORS] Origem da requisicao: http://127.0.0.1:3000
+[2026-02-12T19:32:37.641Z] [CORS] Origem NAO permitida: http://127.0.0.1:3000
+[2026-02-12T19:32:37.748Z] [CORS] Origem da requisicao: http://127.0.0.1:3000
+[2026-02-12T19:32:37.749Z] [CORS] Origem NAO permitida: http://127.0.0.1:3000
+[2026-02-12T19:32:37.750Z] [CORS] Origem da requisicao: http://127.0.0.1:3000
+[2026-02-12T19:32:37.750Z] [CORS] Origem NAO permitida: http://127.0.0.1:3000
+[2026-02-12T19:32:37.759Z] [CORS] Origem da requisicao: http://127.0.0.1:3000
+[2026-02-12T19:32:37.760Z] [CORS] Origem NAO permitida: http://127.0.0.1:3000
+[2026-02-12T19:32:37.762Z] [CORS] Origem da requisicao: http://127.0.0.1:3000
+[2026-02-12T19:32:37.763Z] [CORS] Origem NAO permitida: http://127.0.0.1:3000
+[2026-02-12T19:32:37.763Z] [CORS] Origem da requisicao: http://127.0.0.1:3000
+[2026-02-12T19:32:37.763Z] [CORS] Origem NAO permitida: http://127.0.0.1:3000
+[2026-02-12T19:32:37.993Z] [CORS] Origem da requisicao: http://127.0.0.1:3000

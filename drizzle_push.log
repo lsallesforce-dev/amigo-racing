@@ -1,0 +1,4 @@
+No config path provided, using default 'drizzle.config.ts'
+Reading config file 'C:\Users\lsaud\Downloads\amigo-racing\drizzle.config.ts'
+Error  No schema files found for path config ['./drizzle/schema.ts']
+Error  If path represents a file - please make sure to use .ts or other extension in the path

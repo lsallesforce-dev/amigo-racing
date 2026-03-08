@@ -1,0 +1,1002 @@
+﻿
+> amigo-racing-platform@1.0.0 server
+> tsx watch server/index.ts
+
+[OAuth] Initialized with baseURL: https://manus.im
+Server running on http://localhost:3000/
+[Auth] Validating session. {
+  hasCookieHeader: true,
+  hasAuthHeader: true,
+  parsedCookieCount: 1,
+  sessionCookieExists: true
+}
+[auth.me] ctx.user.openId: projeto@lstecnologias.com.br
+[auth.me] ctx.user.email: projeto@lstecnologias.com.br
+[auth.me] fullUser por openId: ENCONTRADO
+[auth.me] bankAccountDv: 8
+[auth.me] RETORNANDO COM OUTPUT SCHEMA: {
+  id: 303,
+  email: 'projeto@lstecnologias.com.br',
+  phone: '17996192552',
+  bankAccountDv: '8',
+  recipientId: null
+}
+[auth.me] Objeto completo do resultado: {
+  "id": 303,
+  "openId": "projeto@lstecnologias.com.br",
+  "name": "W├®liton Luiz de Oliveira",
+  "email": "projeto@lstecnologias.com.br",
+  "phone": "17996192552",
+  "loginMethod": "local",
+  "password": "8f5ce1cc9d9776a343d3a2600aaae98b:3c8202a262291e864919a8f7ae6b0d14b156396aec1011caa37472692c26876519196ffd2eef07f5cc5e12c2d56669957ec9e67d15129764e1af4a552375bc16",
+  "role": "organizer",
+  "recipientId": null,
+  "pagarmeCustomerId": null,
+  "pixKey": "17996192552",
+  "bankDocument": "82751056849",
+  "bankCode": "237",
+  "bankAgency": "2744",
+  "bankAgencyDv": "",
+  "bankAccount": "21603",
+  "bankAccountDv": "8",
+  "bankAccountType": "conta_corrente",
+  "bankHolderName": "Weliton Luiz de Oliveira",
+  "bankHolderDocument": "82751056849",
+  "createdAt": "2026-02-24T17:00:43.119Z",
+  "updatedAt": "2026-02-24T17:00:43.119Z",
+  "lastSignedIn": "2026-02-25T15:00:45.523Z"
+}
+[Auth] Validating session. {
+  hasCookieHeader: true,
+  hasAuthHeader: true,
+  parsedCookieCount: 1,
+  sessionCookieExists: true
+}
+[organizerProcedure] Verificando role: organizer email: projeto@lstecnologias.com.br
+[organizerProcedure] PERMITIDO! Role eh valido
+[organizerProcedure] Verificando role: organizer email: projeto@lstecnologias.com.br
+[organizerProcedure] PERMITIDO! Role eh valido
+[Auth] Validating session. {
+  hasCookieHeader: true,
+  hasAuthHeader: true,
+  parsedCookieCount: 1,
+  sessionCookieExists: true
+}
+[setupRecipientProcedure] ===== MIDDLEWARE INICIADO =====
+[setupRecipientProcedure] User ID: 303
+[setupRecipientProcedure] Role: organizer Email: projeto@lstecnologias.com.br RecipientId: null
+[setupRecipientProcedure] PERMITIDO! Role v├â┬ílida
+[setupRecipient] ===== MUTATION INICIADA =====
+[setupRecipient] INPUT RECEBIDO: {
+  document: '82751056849',
+  pixKey: '17996192552',
+  phone: '17991141010',
+  bankAccount: {
+    bank_code: '237',
+    agencia: '2740',
+    agencia_dv: '',
+    conta: '21603',
+    conta_dv: '8',
+    type: 'conta_corrente',
+    legal_name: 'weliton luiz de oliveira',
+    document_number: '82751056849'
+  }
+}
+[setupRecipient] ctx.user: { id: 303, email: 'projeto@lstecnologias.com.br', role: 'organizer' }
+[setupRecipient] input: {
+  "document": "82751056849",
+  "pixKey": "17996192552",
+  "phone": "17991141010",
+  "bankAccount": {
+    "bank_code": "237",
+    "agencia": "2740",
+    "agencia_dv": "",
+    "conta": "21603",
+    "conta_dv": "8",
+    "type": "conta_corrente",
+    "legal_name": "weliton luiz de oliveira",
+    "document_number": "82751056849"
+  }
+}
+[setupRecipient] Iniciando PASSO 1: Buscar organizador
+[setupRecipient] Organizador encontrado: 2
+[setupRecipient] ===== INICIANDO SALVAMENTO LOCAL =====
+[setupRecipient] Usu├â┬írio ID: 303
+[setupRecipient] Dados a salvar: {
+  document: '82751056849',
+  bankCode: '237',
+  agencia: '2740',
+  conta: '21603',
+  holderName: 'weliton luiz de oliveira',
+  holderDocument: '82751056849',
+  pixKey: '17996192552'
+}
+[setupRecipient] Telefone salvo no banco local: 17991141010
+[setupRecipient] Verificando recipient do usuario: null
+[setupRecipient] ATENCAO: Usuario NAO tem recipient! Forcando criacao...
+[setupRecipient] ===== TENTANDO CRIAR RECIPIENT NA PAGAR.ME =====
+[setupRecipient] Par├â┬ómetros enviados para Pagar.me: {
+  name: 'W├®liton Luiz de Oliveira',
+  email: 'projeto@lstecnologias.com.br',
+  document: '82751056849',
+  bank: '237',
+  agencia: '2740',
+  agencia_dv: '',
+  conta: '21603',
+  conta_dv: '8'
+}
+[setupRecipient] Telefone a enviar para Pagar.me: 17991141010
+[setupRecipient] ===== VALIDANDO DADOS BANC├â┬üRIOS =====
+[setupRecipient] DADOS ANTES DA VALIDA├âÔÇí├âãÆO: {
+  document: '82751056849',
+  bankCode: '237',
+  branchNumber: '2740',
+  branchCheckDigit: '',
+  accountNumber: '21603',
+  accountCheckDigit: '8',
+  holderName: 'weliton luiz de oliveira',
+  holderDocument: '82751056849',
+  phone: '17991141010'
+}
+
+├░┼©ÔÇ£ÔÇ╣ ===== VALIDA├âÔÇí├âãÆO DE DADOS BANC├â┬üRIOS =====
+Documento: 82751056849
+Banco: 237
+Ag├â┬¬ncia: 2740
+D├â┬¡gito Ag├â┬¬ncia: (vazio)
+Conta: 21603
+D├â┬¡gito Conta: 8
+Telefone: 17991141010
+├ó┼ôÔÇª CPF v├â┬ílido
+├ó┼ôÔÇª Banco 237 v├â┬ílido
+├ó┼ôÔÇª Ag├â┬¬ncia 2740 v├â┬ílida
+├ó┼ôÔÇª D├â┬¡gito da ag├â┬¬ncia n├â┬úo fornecido (opcional)
+├ó┼ôÔÇª Conta 21603 v├â┬ílida
+├ó┼ôÔÇª D├â┬¡gito da conta 8 v├â┬ílido
+├ó┼ôÔÇª Telefone 17991141010 v├â┬ílido
+
+├░┼©ÔÇ£┼á ===== RESULTADO DA VALIDA├âÔÇí├âãÆO =====
+Erros: 0
+Avisos: 0
+[setupRecipient] ├ó┼ôÔÇª Dados banc├â┬írios validados com sucesso
+[setupRecipient] ===== CHAMANDO PAGAR.ME =====
+[setupRecipient] PAYLOAD COMPLETO PARA PAGAR.ME: {
+  name: 'weliton luiz de oliveira',
+  email: 'projeto@lstecnologias.com.br',
+  document: '82751056849',
+  type: 'individual',
+  phone: '17991141010',
+  bankAccount: {
+    bank: '237',
+    branchNumber: '2740',
+    branchCheckDigit: '',
+    accountNumber: '0021603',
+    accountCheckDigit: '8',
+    type: 'checking',
+    holderName: 'weliton luiz de oliveira',
+    holderDocument: '82751056849'
+  }
+}
+[Pagar.me] Iniciando createOrGetRecipient para: 82751056849
+[Pagar.me] Recebedor j├â┬í existe: re_cmm15nd8w01u70l9twgmlyrj2
+[setupRecipient] Resposta do Pagar.me: {
+  "recipientId": "re_cmm15nd8w01u70l9twgmlyrj2",
+  "status": "refused"
+}
+[setupRecipient] ├ó┼ôÔÇª Recipient criado na Pagar.me: re_cmm15nd8w01u70l9twgmlyrj2
+[setupRecipient] Status do recipient: refused
+[setupRecipient] ├ó┬Ø┼Æ RECIPIENT REJEITADO!
+[setupRecipient] Recipient completo: {
+  "recipientId": "re_cmm15nd8w01u70l9twgmlyrj2",
+  "status": "refused"
+}
+[Auth] Validating session. {
+  hasCookieHeader: true,
+  hasAuthHeader: true,
+  parsedCookieCount: 1,
+  sessionCookieExists: true
+}
+[setupRecipientProcedure] ===== MIDDLEWARE INICIADO =====
+[setupRecipientProcedure] User ID: 303
+[setupRecipientProcedure] Role: organizer Email: projeto@lstecnologias.com.br RecipientId: null
+[setupRecipientProcedure] PERMITIDO! Role v├â┬ílida
+[setupRecipient] ===== MUTATION INICIADA =====
+[setupRecipient] INPUT RECEBIDO: {
+  document: '82751056849',
+  pixKey: '17996192552',
+  phone: '17991141010',
+  bankAccount: {
+    bank_code: '237',
+    agencia: '2740',
+    agencia_dv: '',
+    conta: '21603',
+    conta_dv: '8',
+    type: 'conta_corrente',
+    legal_name: 'weliton luiz de oliveira',
+    document_number: '82751056849'
+  }
+}
+[setupRecipient] ctx.user: { id: 303, email: 'projeto@lstecnologias.com.br', role: 'organizer' }
+[setupRecipient] input: {
+  "document": "82751056849",
+  "pixKey": "17996192552",
+  "phone": "17991141010",
+  "bankAccount": {
+    "bank_code": "237",
+    "agencia": "2740",
+    "agencia_dv": "",
+    "conta": "21603",
+    "conta_dv": "8",
+    "type": "conta_corrente",
+    "legal_name": "weliton luiz de oliveira",
+    "document_number": "82751056849"
+  }
+}
+[setupRecipient] Iniciando PASSO 1: Buscar organizador
+[setupRecipient] Organizador encontrado: 2
+[setupRecipient] ===== INICIANDO SALVAMENTO LOCAL =====
+[setupRecipient] Usu├â┬írio ID: 303
+[setupRecipient] Dados a salvar: {
+  document: '82751056849',
+  bankCode: '237',
+  agencia: '2740',
+  conta: '21603',
+  holderName: 'weliton luiz de oliveira',
+  holderDocument: '82751056849',
+  pixKey: '17996192552'
+}
+[setupRecipient] Telefone salvo no banco local: 17991141010
+[setupRecipient] Verificando recipient do usuario: null
+[setupRecipient] ATENCAO: Usuario NAO tem recipient! Forcando criacao...
+[setupRecipient] ===== TENTANDO CRIAR RECIPIENT NA PAGAR.ME =====
+[setupRecipient] Par├â┬ómetros enviados para Pagar.me: {
+  name: 'W├®liton Luiz de Oliveira',
+  email: 'projeto@lstecnologias.com.br',
+  document: '82751056849',
+  bank: '237',
+  agencia: '2740',
+  agencia_dv: '',
+  conta: '21603',
+  conta_dv: '8'
+}
+[setupRecipient] Telefone a enviar para Pagar.me: 17991141010
+[setupRecipient] ===== VALIDANDO DADOS BANC├â┬üRIOS =====
+[setupRecipient] DADOS ANTES DA VALIDA├âÔÇí├âãÆO: {
+  document: '82751056849',
+  bankCode: '237',
+  branchNumber: '2740',
+  branchCheckDigit: '',
+  accountNumber: '21603',
+  accountCheckDigit: '8',
+  holderName: 'weliton luiz de oliveira',
+  holderDocument: '82751056849',
+  phone: '17991141010'
+}
+
+├░┼©ÔÇ£ÔÇ╣ ===== VALIDA├âÔÇí├âãÆO DE DADOS BANC├â┬üRIOS =====
+Documento: 82751056849
+Banco: 237
+Ag├â┬¬ncia: 2740
+D├â┬¡gito Ag├â┬¬ncia: (vazio)
+Conta: 21603
+D├â┬¡gito Conta: 8
+Telefone: 17991141010
+├ó┼ôÔÇª CPF v├â┬ílido
+├ó┼ôÔÇª Banco 237 v├â┬ílido
+├ó┼ôÔÇª Ag├â┬¬ncia 2740 v├â┬ílida
+├ó┼ôÔÇª D├â┬¡gito da ag├â┬¬ncia n├â┬úo fornecido (opcional)
+├ó┼ôÔÇª Conta 21603 v├â┬ílida
+├ó┼ôÔÇª D├â┬¡gito da conta 8 v├â┬ílido
+├ó┼ôÔÇª Telefone 17991141010 v├â┬ílido
+
+├░┼©ÔÇ£┼á ===== RESULTADO DA VALIDA├âÔÇí├âãÆO =====
+Erros: 0
+Avisos: 0
+[setupRecipient] ├ó┼ôÔÇª Dados banc├â┬írios validados com sucesso
+[setupRecipient] ===== CHAMANDO PAGAR.ME =====
+[setupRecipient] PAYLOAD COMPLETO PARA PAGAR.ME: {
+  name: 'weliton luiz de oliveira',
+  email: 'projeto@lstecnologias.com.br',
+  document: '82751056849',
+  type: 'individual',
+  phone: '17991141010',
+  bankAccount: {
+    bank: '237',
+    branchNumber: '2740',
+    branchCheckDigit: '',
+    accountNumber: '0021603',
+    accountCheckDigit: '8',
+    type: 'checking',
+    holderName: 'weliton luiz de oliveira',
+    holderDocument: '82751056849'
+  }
+}
+[Pagar.me] Iniciando createOrGetRecipient para: 82751056849
+[Pagar.me] Recebedor j├â┬í existe: re_cmm15nd8w01u70l9twgmlyrj2
+[setupRecipient] Resposta do Pagar.me: {
+  "recipientId": "re_cmm15nd8w01u70l9twgmlyrj2",
+  "status": "refused"
+}
+[setupRecipient] ├ó┼ôÔÇª Recipient criado na Pagar.me: re_cmm15nd8w01u70l9twgmlyrj2
+[setupRecipient] Status do recipient: refused
+[setupRecipient] ├ó┬Ø┼Æ RECIPIENT REJEITADO!
+[setupRecipient] Recipient completo: {
+  "recipientId": "re_cmm15nd8w01u70l9twgmlyrj2",
+  "status": "refused"
+}
+[Auth] Validating session. {
+  hasCookieHeader: true,
+  hasAuthHeader: true,
+  parsedCookieCount: 1,
+  sessionCookieExists: true
+}
+[auth.me] ctx.user.openId: projeto@lstecnologias.com.br
+[auth.me] ctx.user.email: projeto@lstecnologias.com.br
+[auth.me] fullUser por openId: ENCONTRADO
+[auth.me] bankAccountDv: 8
+[auth.me] RETORNANDO COM OUTPUT SCHEMA: {
+  id: 303,
+  email: 'projeto@lstecnologias.com.br',
+  phone: '17991141010',
+  bankAccountDv: '8',
+  recipientId: null
+}
+[auth.me] Objeto completo do resultado: {
+  "id": 303,
+  "openId": "projeto@lstecnologias.com.br",
+  "name": "W├®liton Luiz de Oliveira",
+  "email": "projeto@lstecnologias.com.br",
+  "phone": "17991141010",
+  "loginMethod": "local",
+  "password": "8f5ce1cc9d9776a343d3a2600aaae98b:3c8202a262291e864919a8f7ae6b0d14b156396aec1011caa37472692c26876519196ffd2eef07f5cc5e12c2d56669957ec9e67d15129764e1af4a552375bc16",
+  "role": "organizer",
+  "recipientId": null,
+  "pagarmeCustomerId": null,
+  "pixKey": "17996192552",
+  "bankDocument": "82751056849",
+  "bankCode": "237",
+  "bankAgency": "2740",
+  "bankAgencyDv": "",
+  "bankAccount": "21603",
+  "bankAccountDv": "8",
+  "bankAccountType": "conta_corrente",
+  "bankHolderName": "weliton luiz de oliveira",
+  "bankHolderDocument": "82751056849",
+  "createdAt": "2026-02-24T17:00:43.119Z",
+  "updatedAt": "2026-02-24T17:00:43.119Z",
+  "lastSignedIn": "2026-02-25T15:02:34.448Z"
+}
+[Auth] Validating session. {
+  hasCookieHeader: true,
+  hasAuthHeader: true,
+  parsedCookieCount: 1,
+  sessionCookieExists: true
+}
+[organizerProcedure] Verificando role: organizer email: projeto@lstecnologias.com.br
+[organizerProcedure] PERMITIDO! Role eh valido
+[organizerProcedure] Verificando role: organizer email: projeto@lstecnologias.com.br
+[organizerProcedure] PERMITIDO! Role eh valido
+[Auth] Validating session. {
+  hasCookieHeader: true,
+  hasAuthHeader: true,
+  parsedCookieCount: 1,
+  sessionCookieExists: true
+}
+[auth.me] ctx.user.openId: projeto@lstecnologias.com.br
+[auth.me] ctx.user.email: projeto@lstecnologias.com.br
+[auth.me] fullUser por openId: ENCONTRADO
+[auth.me] bankAccountDv: 8
+[auth.me] RETORNANDO COM OUTPUT SCHEMA: {
+  id: 303,
+  email: 'projeto@lstecnologias.com.br',
+  phone: '17991141010',
+  bankAccountDv: '8',
+  recipientId: null
+}
+[auth.me] Objeto completo do resultado: {
+  "id": 303,
+  "openId": "projeto@lstecnologias.com.br",
+  "name": "W├®liton Luiz de Oliveira",
+  "email": "projeto@lstecnologias.com.br",
+  "phone": "17991141010",
+  "loginMethod": "local",
+  "password": "8f5ce1cc9d9776a343d3a2600aaae98b:3c8202a262291e864919a8f7ae6b0d14b156396aec1011caa37472692c26876519196ffd2eef07f5cc5e12c2d56669957ec9e67d15129764e1af4a552375bc16",
+  "role": "organizer",
+  "recipientId": null,
+  "pagarmeCustomerId": null,
+  "pixKey": "17996192552",
+  "bankDocument": "82751056849",
+  "bankCode": "237",
+  "bankAgency": "2740",
+  "bankAgencyDv": "",
+  "bankAccount": "21603",
+  "bankAccountDv": "8",
+  "bankAccountType": "conta_corrente",
+  "bankHolderName": "weliton luiz de oliveira",
+  "bankHolderDocument": "82751056849",
+  "createdAt": "2026-02-24T17:00:43.119Z",
+  "updatedAt": "2026-02-24T17:00:43.119Z",
+  "lastSignedIn": "2026-02-25T15:02:38.820Z"
+}
+[Auth] Validating session. {
+  hasCookieHeader: true,
+  hasAuthHeader: true,
+  parsedCookieCount: 1,
+  sessionCookieExists: true
+}
+[organizerProcedure] Verificando role: organizer email: projeto@lstecnologias.com.br
+[organizerProcedure] PERMITIDO! Role eh valido
+[organizerProcedure] Verificando role: organizer email: projeto@lstecnologias.com.br
+[organizerProcedure] PERMITIDO! Role eh valido
+[Auth] Validating session. {
+  hasCookieHeader: true,
+  hasAuthHeader: true,
+  parsedCookieCount: 1,
+  sessionCookieExists: true
+}
+[auth.me] ctx.user.openId: projeto@lstecnologias.com.br
+[auth.me] ctx.user.email: projeto@lstecnologias.com.br
+[auth.me] fullUser por openId: ENCONTRADO
+[auth.me] bankAccountDv: 8
+[auth.me] RETORNANDO COM OUTPUT SCHEMA: {
+  id: 303,
+  email: 'projeto@lstecnologias.com.br',
+  phone: '17991141010',
+  bankAccountDv: '8',
+  recipientId: null
+}
+[auth.me] Objeto completo do resultado: {
+  "id": 303,
+  "openId": "projeto@lstecnologias.com.br",
+  "name": "W├®liton Luiz de Oliveira",
+  "email": "projeto@lstecnologias.com.br",
+  "phone": "17991141010",
+  "loginMethod": "local",
+  "password": "8f5ce1cc9d9776a343d3a2600aaae98b:3c8202a262291e864919a8f7ae6b0d14b156396aec1011caa37472692c26876519196ffd2eef07f5cc5e12c2d56669957ec9e67d15129764e1af4a552375bc16",
+  "role": "organizer",
+  "recipientId": null,
+  "pagarmeCustomerId": null,
+  "pixKey": "17996192552",
+  "bankDocument": "82751056849",
+  "bankCode": "237",
+  "bankAgency": "2740",
+  "bankAgencyDv": "",
+  "bankAccount": "21603",
+  "bankAccountDv": "8",
+  "bankAccountType": "conta_corrente",
+  "bankHolderName": "weliton luiz de oliveira",
+  "bankHolderDocument": "82751056849",
+  "createdAt": "2026-02-24T17:00:43.119Z",
+  "updatedAt": "2026-02-24T17:00:43.119Z",
+  "lastSignedIn": "2026-02-25T15:02:50.044Z"
+}
+[Auth] Validating session. {
+  hasCookieHeader: true,
+  hasAuthHeader: true,
+  parsedCookieCount: 1,
+  sessionCookieExists: true
+}
+[organizerProcedure] Verificando role: organizer email: projeto@lstecnologias.com.br
+[organizerProcedure] PERMITIDO! Role eh valido
+[organizerProcedure] Verificando role: organizer email: projeto@lstecnologias.com.br
+[organizerProcedure] PERMITIDO! Role eh valido
+[Auth] Validating session. {
+  hasCookieHeader: true,
+  hasAuthHeader: true,
+  parsedCookieCount: 1,
+  sessionCookieExists: true
+}
+[auth.me] ctx.user.openId: projeto@lstecnologias.com.br
+[auth.me] ctx.user.email: projeto@lstecnologias.com.br
+[auth.me] fullUser por openId: ENCONTRADO
+[auth.me] bankAccountDv: 8
+[auth.me] RETORNANDO COM OUTPUT SCHEMA: {
+  id: 303,
+  email: 'projeto@lstecnologias.com.br',
+  phone: '17991141010',
+  bankAccountDv: '8',
+  recipientId: null
+}
+[auth.me] Objeto completo do resultado: {
+  "id": 303,
+  "openId": "projeto@lstecnologias.com.br",
+  "name": "W├®liton Luiz de Oliveira",
+  "email": "projeto@lstecnologias.com.br",
+  "phone": "17991141010",
+  "loginMethod": "local",
+  "password": "8f5ce1cc9d9776a343d3a2600aaae98b:3c8202a262291e864919a8f7ae6b0d14b156396aec1011caa37472692c26876519196ffd2eef07f5cc5e12c2d56669957ec9e67d15129764e1af4a552375bc16",
+  "role": "organizer",
+  "recipientId": null,
+  "pagarmeCustomerId": null,
+  "pixKey": "17996192552",
+  "bankDocument": "82751056849",
+  "bankCode": "237",
+  "bankAgency": "2740",
+  "bankAgencyDv": "",
+  "bankAccount": "21603",
+  "bankAccountDv": "8",
+  "bankAccountType": "conta_corrente",
+  "bankHolderName": "weliton luiz de oliveira",
+  "bankHolderDocument": "82751056849",
+  "createdAt": "2026-02-24T17:00:43.119Z",
+  "updatedAt": "2026-02-24T17:00:43.119Z",
+  "lastSignedIn": "2026-02-25T15:03:57.289Z"
+}
+[Auth] Validating session. {
+  hasCookieHeader: true,
+  hasAuthHeader: true,
+  parsedCookieCount: 1,
+  sessionCookieExists: true
+}
+[organizerProcedure] Verificando role: organizer email: projeto@lstecnologias.com.br
+[organizerProcedure] PERMITIDO! Role eh valido
+[organizerProcedure] Verificando role: organizer email: projeto@lstecnologias.com.br
+[organizerProcedure] PERMITIDO! Role eh valido
+[Auth] Validating session. {
+  hasCookieHeader: true,
+  hasAuthHeader: true,
+  parsedCookieCount: 1,
+  sessionCookieExists: true
+}
+[auth.me] ctx.user.openId: projeto@lstecnologias.com.br
+[auth.me] ctx.user.email: projeto@lstecnologias.com.br
+[auth.me] fullUser por openId: ENCONTRADO
+[auth.me] bankAccountDv: 8
+[auth.me] RETORNANDO COM OUTPUT SCHEMA: {
+  id: 303,
+  email: 'projeto@lstecnologias.com.br',
+  phone: '17991141010',
+  bankAccountDv: '8',
+  recipientId: null
+}
+[auth.me] Objeto completo do resultado: {
+  "id": 303,
+  "openId": "projeto@lstecnologias.com.br",
+  "name": "W├®liton Luiz de Oliveira",
+  "email": "projeto@lstecnologias.com.br",
+  "phone": "17991141010",
+  "loginMethod": "local",
+  "password": "8f5ce1cc9d9776a343d3a2600aaae98b:3c8202a262291e864919a8f7ae6b0d14b156396aec1011caa37472692c26876519196ffd2eef07f5cc5e12c2d56669957ec9e67d15129764e1af4a552375bc16",
+  "role": "organizer",
+  "recipientId": null,
+  "pagarmeCustomerId": null,
+  "pixKey": "17996192552",
+  "bankDocument": "82751056849",
+  "bankCode": "237",
+  "bankAgency": "2740",
+  "bankAgencyDv": "",
+  "bankAccount": "21603",
+  "bankAccountDv": "8",
+  "bankAccountType": "conta_corrente",
+  "bankHolderName": "weliton luiz de oliveira",
+  "bankHolderDocument": "82751056849",
+  "createdAt": "2026-02-24T17:00:43.119Z",
+  "updatedAt": "2026-02-24T17:00:43.119Z",
+  "lastSignedIn": "2026-02-25T15:04:07.362Z"
+}
+[Auth] Validating session. {
+  hasCookieHeader: true,
+  hasAuthHeader: true,
+  parsedCookieCount: 1,
+  sessionCookieExists: true
+}
+[organizerProcedure] Verificando role: organizer email: projeto@lstecnologias.com.br
+[organizerProcedure] PERMITIDO! Role eh valido
+[organizerProcedure] Verificando role: organizer email: projeto@lstecnologias.com.br
+[organizerProcedure] PERMITIDO! Role eh valido
+[Auth] Validating session. {
+  hasCookieHeader: true,
+  hasAuthHeader: true,
+  parsedCookieCount: 1,
+  sessionCookieExists: true
+}
+[auth.me] ctx.user.openId: projeto@lstecnologias.com.br
+[auth.me] ctx.user.email: projeto@lstecnologias.com.br
+[auth.me] fullUser por openId: ENCONTRADO
+[auth.me] bankAccountDv: 8
+[auth.me] RETORNANDO COM OUTPUT SCHEMA: {
+  id: 303,
+  email: 'projeto@lstecnologias.com.br',
+  phone: '17991141010',
+  bankAccountDv: '8',
+  recipientId: null
+}
+[auth.me] Objeto completo do resultado: {
+  "id": 303,
+  "openId": "projeto@lstecnologias.com.br",
+  "name": "W├®liton Luiz de Oliveira",
+  "email": "projeto@lstecnologias.com.br",
+  "phone": "17991141010",
+  "loginMethod": "local",
+  "password": "8f5ce1cc9d9776a343d3a2600aaae98b:3c8202a262291e864919a8f7ae6b0d14b156396aec1011caa37472692c26876519196ffd2eef07f5cc5e12c2d56669957ec9e67d15129764e1af4a552375bc16",
+  "role": "organizer",
+  "recipientId": null,
+  "pagarmeCustomerId": null,
+  "pixKey": "17996192552",
+  "bankDocument": "82751056849",
+  "bankCode": "237",
+  "bankAgency": "2740",
+  "bankAgencyDv": "",
+  "bankAccount": "21603",
+  "bankAccountDv": "8",
+  "bankAccountType": "conta_corrente",
+  "bankHolderName": "weliton luiz de oliveira",
+  "bankHolderDocument": "82751056849",
+  "createdAt": "2026-02-24T17:00:43.119Z",
+  "updatedAt": "2026-02-24T17:00:43.119Z",
+  "lastSignedIn": "2026-02-25T15:04:10.349Z"
+}
+[Auth] Validating session. {
+  hasCookieHeader: true,
+  hasAuthHeader: true,
+  parsedCookieCount: 1,
+  sessionCookieExists: true
+}
+[organizerProcedure] Verificando role: organizer email: projeto@lstecnologias.com.br
+[organizerProcedure] PERMITIDO! Role eh valido
+[organizerProcedure] Verificando role: organizer email: projeto@lstecnologias.com.br
+[organizerProcedure] PERMITIDO! Role eh valido
+[Auth] Validating session. {
+  hasCookieHeader: true,
+  hasAuthHeader: true,
+  parsedCookieCount: 1,
+  sessionCookieExists: true
+}
+[auth.me] ctx.user.openId: projeto@lstecnologias.com.br
+[auth.me] ctx.user.email: projeto@lstecnologias.com.br
+[auth.me] fullUser por openId: ENCONTRADO
+[auth.me] bankAccountDv: 8
+[auth.me] RETORNANDO COM OUTPUT SCHEMA: {
+  id: 303,
+  email: 'projeto@lstecnologias.com.br',
+  phone: '17991141010',
+  bankAccountDv: '8',
+  recipientId: null
+}
+[auth.me] Objeto completo do resultado: {
+  "id": 303,
+  "openId": "projeto@lstecnologias.com.br",
+  "name": "W├®liton Luiz de Oliveira",
+  "email": "projeto@lstecnologias.com.br",
+  "phone": "17991141010",
+  "loginMethod": "local",
+  "password": "8f5ce1cc9d9776a343d3a2600aaae98b:3c8202a262291e864919a8f7ae6b0d14b156396aec1011caa37472692c26876519196ffd2eef07f5cc5e12c2d56669957ec9e67d15129764e1af4a552375bc16",
+  "role": "organizer",
+  "recipientId": null,
+  "pagarmeCustomerId": null,
+  "pixKey": "17996192552",
+  "bankDocument": "82751056849",
+  "bankCode": "237",
+  "bankAgency": "2740",
+  "bankAgencyDv": "",
+  "bankAccount": "21603",
+  "bankAccountDv": "8",
+  "bankAccountType": "conta_corrente",
+  "bankHolderName": "weliton luiz de oliveira",
+  "bankHolderDocument": "82751056849",
+  "createdAt": "2026-02-24T17:00:43.119Z",
+  "updatedAt": "2026-02-24T17:00:43.119Z",
+  "lastSignedIn": "2026-02-25T15:04:13.272Z"
+}
+[Auth] Validating session. {
+  hasCookieHeader: true,
+  hasAuthHeader: true,
+  parsedCookieCount: 1,
+  sessionCookieExists: true
+}
+[organizerProcedure] Verificando role: organizer email: projeto@lstecnologias.com.br
+[organizerProcedure] PERMITIDO! Role eh valido
+[organizerProcedure] Verificando role: organizer email: projeto@lstecnologias.com.br
+[organizerProcedure] PERMITIDO! Role eh valido
+[Auth] Validating session. {
+  hasCookieHeader: true,
+  hasAuthHeader: true,
+  parsedCookieCount: 1,
+  sessionCookieExists: true
+}
+[auth.me] ctx.user.openId: projeto@lstecnologias.com.br
+[auth.me] ctx.user.email: projeto@lstecnologias.com.br
+[auth.me] fullUser por openId: ENCONTRADO
+[auth.me] bankAccountDv: 8
+[auth.me] RETORNANDO COM OUTPUT SCHEMA: {
+  id: 303,
+  email: 'projeto@lstecnologias.com.br',
+  phone: '17991141010',
+  bankAccountDv: '8',
+  recipientId: null
+}
+[auth.me] Objeto completo do resultado: {
+  "id": 303,
+  "openId": "projeto@lstecnologias.com.br",
+  "name": "W├®liton Luiz de Oliveira",
+  "email": "projeto@lstecnologias.com.br",
+  "phone": "17991141010",
+  "loginMethod": "local",
+  "password": "8f5ce1cc9d9776a343d3a2600aaae98b:3c8202a262291e864919a8f7ae6b0d14b156396aec1011caa37472692c26876519196ffd2eef07f5cc5e12c2d56669957ec9e67d15129764e1af4a552375bc16",
+  "role": "organizer",
+  "recipientId": null,
+  "pagarmeCustomerId": null,
+  "pixKey": "17996192552",
+  "bankDocument": "82751056849",
+  "bankCode": "237",
+  "bankAgency": "2740",
+  "bankAgencyDv": "",
+  "bankAccount": "21603",
+  "bankAccountDv": "8",
+  "bankAccountType": "conta_corrente",
+  "bankHolderName": "weliton luiz de oliveira",
+  "bankHolderDocument": "82751056849",
+  "createdAt": "2026-02-24T17:00:43.119Z",
+  "updatedAt": "2026-02-24T17:00:43.119Z",
+  "lastSignedIn": "2026-02-25T15:04:18.291Z"
+}
+[Auth] Validating session. {
+  hasCookieHeader: true,
+  hasAuthHeader: true,
+  parsedCookieCount: 1,
+  sessionCookieExists: true
+}
+[organizerProcedure] Verificando role: organizer email: projeto@lstecnologias.com.br
+[organizerProcedure] PERMITIDO! Role eh valido
+[organizerProcedure] Verificando role: organizer email: projeto@lstecnologias.com.br
+[organizerProcedure] PERMITIDO! Role eh valido
+[Auth] Validating session. {
+  hasCookieHeader: true,
+  hasAuthHeader: true,
+  parsedCookieCount: 1,
+  sessionCookieExists: true
+}
+[auth.me] ctx.user.openId: projeto@lstecnologias.com.br
+[auth.me] ctx.user.email: projeto@lstecnologias.com.br
+[auth.me] fullUser por openId: ENCONTRADO
+[auth.me] bankAccountDv: 8
+[auth.me] RETORNANDO COM OUTPUT SCHEMA: {
+  id: 303,
+  email: 'projeto@lstecnologias.com.br',
+  phone: '17991141010',
+  bankAccountDv: '8',
+  recipientId: null
+}
+[auth.me] Objeto completo do resultado: {
+  "id": 303,
+  "openId": "projeto@lstecnologias.com.br",
+  "name": "W├®liton Luiz de Oliveira",
+  "email": "projeto@lstecnologias.com.br",
+  "phone": "17991141010",
+  "loginMethod": "local",
+  "password": "8f5ce1cc9d9776a343d3a2600aaae98b:3c8202a262291e864919a8f7ae6b0d14b156396aec1011caa37472692c26876519196ffd2eef07f5cc5e12c2d56669957ec9e67d15129764e1af4a552375bc16",
+  "role": "organizer",
+  "recipientId": null,
+  "pagarmeCustomerId": null,
+  "pixKey": "17996192552",
+  "bankDocument": "82751056849",
+  "bankCode": "237",
+  "bankAgency": "2740",
+  "bankAgencyDv": "",
+  "bankAccount": "21603",
+  "bankAccountDv": "8",
+  "bankAccountType": "conta_corrente",
+  "bankHolderName": "weliton luiz de oliveira",
+  "bankHolderDocument": "82751056849",
+  "createdAt": "2026-02-24T17:00:43.119Z",
+  "updatedAt": "2026-02-24T17:00:43.119Z",
+  "lastSignedIn": "2026-02-25T15:04:21.361Z"
+}
+[Auth] Validating session. {
+  hasCookieHeader: true,
+  hasAuthHeader: true,
+  parsedCookieCount: 1,
+  sessionCookieExists: true
+}
+[organizerProcedure] Verificando role: organizer email: projeto@lstecnologias.com.br
+[organizerProcedure] PERMITIDO! Role eh valido
+[organizerProcedure] Verificando role: organizer email: projeto@lstecnologias.com.br
+[organizerProcedure] PERMITIDO! Role eh valido
+[Auth] Validating session. {
+  hasCookieHeader: true,
+  hasAuthHeader: true,
+  parsedCookieCount: 1,
+  sessionCookieExists: true
+}
+[auth.me] ctx.user.openId: projeto@lstecnologias.com.br
+[auth.me] ctx.user.email: projeto@lstecnologias.com.br
+[auth.me] fullUser por openId: ENCONTRADO
+[auth.me] bankAccountDv: 8
+[auth.me] RETORNANDO COM OUTPUT SCHEMA: {
+  id: 303,
+  email: 'projeto@lstecnologias.com.br',
+  phone: '17991141010',
+  bankAccountDv: '8',
+  recipientId: null
+}
+[auth.me] Objeto completo do resultado: {
+  "id": 303,
+  "openId": "projeto@lstecnologias.com.br",
+  "name": "W├®liton Luiz de Oliveira",
+  "email": "projeto@lstecnologias.com.br",
+  "phone": "17991141010",
+  "loginMethod": "local",
+  "password": "8f5ce1cc9d9776a343d3a2600aaae98b:3c8202a262291e864919a8f7ae6b0d14b156396aec1011caa37472692c26876519196ffd2eef07f5cc5e12c2d56669957ec9e67d15129764e1af4a552375bc16",
+  "role": "organizer",
+  "recipientId": null,
+  "pagarmeCustomerId": null,
+  "pixKey": "17996192552",
+  "bankDocument": "82751056849",
+  "bankCode": "237",
+  "bankAgency": "2740",
+  "bankAgencyDv": "",
+  "bankAccount": "21603",
+  "bankAccountDv": "8",
+  "bankAccountType": "conta_corrente",
+  "bankHolderName": "weliton luiz de oliveira",
+  "bankHolderDocument": "82751056849",
+  "createdAt": "2026-02-24T17:00:43.119Z",
+  "updatedAt": "2026-02-24T17:00:43.119Z",
+  "lastSignedIn": "2026-02-25T15:04:27.257Z"
+}
+[Auth] Validating session. {
+  hasCookieHeader: true,
+  hasAuthHeader: true,
+  parsedCookieCount: 1,
+  sessionCookieExists: true
+}
+[organizerProcedure] Verificando role: organizer email: projeto@lstecnologias.com.br
+[organizerProcedure] PERMITIDO! Role eh valido
+[organizerProcedure] Verificando role: organizer email: projeto@lstecnologias.com.br
+[organizerProcedure] PERMITIDO! Role eh valido
+[Auth] Validating session. {
+  hasCookieHeader: true,
+  hasAuthHeader: true,
+  parsedCookieCount: 1,
+  sessionCookieExists: true
+}
+[auth.me] ctx.user.openId: projeto@lstecnologias.com.br
+[auth.me] ctx.user.email: projeto@lstecnologias.com.br
+[auth.me] fullUser por openId: ENCONTRADO
+[auth.me] bankAccountDv: 8
+[auth.me] RETORNANDO COM OUTPUT SCHEMA: {
+  id: 303,
+  email: 'projeto@lstecnologias.com.br',
+  phone: '17991141010',
+  bankAccountDv: '8',
+  recipientId: null
+}
+[auth.me] Objeto completo do resultado: {
+  "id": 303,
+  "openId": "projeto@lstecnologias.com.br",
+  "name": "W├®liton Luiz de Oliveira",
+  "email": "projeto@lstecnologias.com.br",
+  "phone": "17991141010",
+  "loginMethod": "local",
+  "password": "8f5ce1cc9d9776a343d3a2600aaae98b:3c8202a262291e864919a8f7ae6b0d14b156396aec1011caa37472692c26876519196ffd2eef07f5cc5e12c2d56669957ec9e67d15129764e1af4a552375bc16",
+  "role": "organizer",
+  "recipientId": null,
+  "pagarmeCustomerId": null,
+  "pixKey": "17996192552",
+  "bankDocument": "82751056849",
+  "bankCode": "237",
+  "bankAgency": "2740",
+  "bankAgencyDv": "",
+  "bankAccount": "21603",
+  "bankAccountDv": "8",
+  "bankAccountType": "conta_corrente",
+  "bankHolderName": "weliton luiz de oliveira",
+  "bankHolderDocument": "82751056849",
+  "createdAt": "2026-02-24T17:00:43.119Z",
+  "updatedAt": "2026-02-24T17:00:43.119Z",
+  "lastSignedIn": "2026-02-25T15:04:35.329Z"
+}
+[Auth] Validating session. {
+  hasCookieHeader: true,
+  hasAuthHeader: true,
+  parsedCookieCount: 1,
+  sessionCookieExists: true
+}
+[organizerProcedure] Verificando role: organizer email: projeto@lstecnologias.com.br
+[organizerProcedure] PERMITIDO! Role eh valido
+[organizerProcedure] Verificando role: organizer email: projeto@lstecnologias.com.br
+[organizerProcedure] PERMITIDO! Role eh valido
+[Auth] Validating session. {
+  hasCookieHeader: true,
+  hasAuthHeader: true,
+  parsedCookieCount: 1,
+  sessionCookieExists: true
+}
+[auth.me] ctx.user.openId: projeto@lstecnologias.com.br
+[auth.me] ctx.user.email: projeto@lstecnologias.com.br
+[auth.me] fullUser por openId: ENCONTRADO
+[auth.me] bankAccountDv: 8
+[auth.me] RETORNANDO COM OUTPUT SCHEMA: {
+  id: 303,
+  email: 'projeto@lstecnologias.com.br',
+  phone: '17991141010',
+  bankAccountDv: '8',
+  recipientId: null
+}
+[auth.me] Objeto completo do resultado: {
+  "id": 303,
+  "openId": "projeto@lstecnologias.com.br",
+  "name": "W├®liton Luiz de Oliveira",
+  "email": "projeto@lstecnologias.com.br",
+  "phone": "17991141010",
+  "loginMethod": "local",
+  "password": "8f5ce1cc9d9776a343d3a2600aaae98b:3c8202a262291e864919a8f7ae6b0d14b156396aec1011caa37472692c26876519196ffd2eef07f5cc5e12c2d56669957ec9e67d15129764e1af4a552375bc16",
+  "role": "organizer",
+  "recipientId": null,
+  "pagarmeCustomerId": null,
+  "pixKey": "17996192552",
+  "bankDocument": "82751056849",
+  "bankCode": "237",
+  "bankAgency": "2740",
+  "bankAgencyDv": "",
+  "bankAccount": "21603",
+  "bankAccountDv": "8",
+  "bankAccountType": "conta_corrente",
+  "bankHolderName": "weliton luiz de oliveira",
+  "bankHolderDocument": "82751056849",
+  "createdAt": "2026-02-24T17:00:43.119Z",
+  "updatedAt": "2026-02-24T17:00:43.119Z",
+  "lastSignedIn": "2026-02-25T15:04:45.468Z"
+}
+[Auth] Validating session. {
+  hasCookieHeader: true,
+  hasAuthHeader: true,
+  parsedCookieCount: 1,
+  sessionCookieExists: true
+}
+[organizerProcedure] Verificando role: organizer email: projeto@lstecnologias.com.br
+[organizerProcedure] PERMITIDO! Role eh valido
+[organizerProcedure] Verificando role: organizer email: projeto@lstecnologias.com.br
+[organizerProcedure] PERMITIDO! Role eh valido
+[Auth] Validating session. {
+  hasCookieHeader: true,
+  hasAuthHeader: true,
+  parsedCookieCount: 1,
+  sessionCookieExists: true
+}
+[auth.me] ctx.user.openId: projeto@lstecnologias.com.br
+[auth.me] ctx.user.email: projeto@lstecnologias.com.br
+[auth.me] fullUser por openId: ENCONTRADO
+[auth.me] bankAccountDv: 8
+[auth.me] RETORNANDO COM OUTPUT SCHEMA: {
+  id: 303,
+  email: 'projeto@lstecnologias.com.br',
+  phone: '17991141010',
+  bankAccountDv: '8',
+  recipientId: null
+}
+[auth.me] Objeto completo do resultado: {
+  "id": 303,
+  "openId": "projeto@lstecnologias.com.br",
+  "name": "W├®liton Luiz de Oliveira",
+  "email": "projeto@lstecnologias.com.br",
+  "phone": "17991141010",
+  "loginMethod": "local",
+  "password": "8f5ce1cc9d9776a343d3a2600aaae98b:3c8202a262291e864919a8f7ae6b0d14b156396aec1011caa37472692c26876519196ffd2eef07f5cc5e12c2d56669957ec9e67d15129764e1af4a552375bc16",
+  "role": "organizer",
+  "recipientId": null,
+  "pagarmeCustomerId": null,
+  "pixKey": "17996192552",
+  "bankDocument": "82751056849",
+  "bankCode": "237",
+  "bankAgency": "2740",
+  "bankAgencyDv": "",
+  "bankAccount": "21603",
+  "bankAccountDv": "8",
+  "bankAccountType": "conta_corrente",
+  "bankHolderName": "weliton luiz de oliveira",
+  "bankHolderDocument": "82751056849",
+  "createdAt": "2026-02-24T17:00:43.119Z",
+  "updatedAt": "2026-02-24T17:00:43.119Z",
+  "lastSignedIn": "2026-02-25T15:04:55.262Z"
+}
+[Auth] Validating session. {
+  hasCookieHeader: true,
+  hasAuthHeader: true,
+  parsedCookieCount: 1,
+  sessionCookieExists: true
+}
+[organizerProcedure] Verificando role: organizer email: projeto@lstecnologias.com.br
+[organizerProcedure] PERMITIDO! Role eh valido
+[organizerProcedure] Verificando role: organizer email: projeto@lstecnologias.com.br
+[organizerProcedure] PERMITIDO! Role eh valido

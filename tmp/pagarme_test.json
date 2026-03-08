@@ -1,0 +1,59 @@
+{
+    "closed": true,
+    "items": [
+        {
+            "amount": 100,
+            "description": "Teste",
+            "quantity": 1,
+            "code": "test"
+        }
+    ],
+    "customer": {
+        "name": "Lucas S Oliveira",
+        "email": "isaudioevideo@hotmail.com",
+        "document": "12345678909",
+        "type": "individual",
+        "phones": {
+            "mobile_phone": {
+                "country_code": "55",
+                "area_code": "11",
+                "number": "999999999"
+            }
+        },
+        "address": {
+            "street": "Rua do Piloto",
+            "number": "123",
+            "neighborhood": "Centro",
+            "zip_code": "01001000",
+            "city": "Sao Paulo",
+            "state": "SP",
+            "country": "BR"
+        }
+    },
+    "payments": [
+        {
+            "payment_method": "credit_card",
+            "amount": 100,
+            "credit_card": {
+                "installments": 1,
+                "statement_descriptor": "AMIGO RACING",
+                "card": {
+                    "number": "4350870337511095",
+                    "holder_name": "LUCAS S OLIVEIRA",
+                    "exp_month": 7,
+                    "exp_year": 2028,
+                    "cvv": "123",
+                    "billing_address": {
+                        "street": "Rua do Piloto",
+                        "number": "123",
+                        "neighborhood": "Centro",
+                        "zip_code": "01001000",
+                        "city": "Sao Paulo",
+                        "state": "SP",
+                        "country": "BR"
+                    }
+                }
+            }
+        }
+    ]
+}

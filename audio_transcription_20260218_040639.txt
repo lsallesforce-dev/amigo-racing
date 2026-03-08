@@ -1,0 +1,6 @@
+[00:00.0 - 00:05.0] Vamos dar uma olhada aqui, a unica coisa que ficou errada na configuração do ordem de
+[00:05.0 - 00:12.2] largada, é o tempo entre categorias, fica vendo aqui, vou colocar 2, aqui em baixo está
+[00:12.2 - 00:27.6] 8h12, coloquei 2, atualizei, correge, perfeito, está perfeito, isso aqui eu salvo, salvei,
+[00:27.6 - 00:41.0] beleza, aqui está 8h11, vou dar um F5, ele apagou aqui, está vendo, tempo entre categorias
+[00:41.0 - 00:47.2] apagou, mas aqui o numero do horário inicial continua, então ele está salvando o tempo,
+[00:47.2 - 00:50.4] ele só está apagando o tempo entre categorias.

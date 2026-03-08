@@ -1,0 +1,121 @@
+  // ==================== EVENT MEMBERS ROUTES ====================
+  eventMembers: router({
+    getMembers: organizerProcedure
+      .input(z.object({ eventId: z.number() }))
+      .query(async ({ ctx, input }) => {
+        const event = await db.getEventById(input.eventId);
+        if (!event) {
+          throw new TRPCError({ code: 'NOT_FOUND', message: 'Event not found' });
+        }
+        
+        // Verificar permissão
+        const member = await db.getEventMember(input.eventId, ctx.user.id);
+        if (!member && event.organizerId !== ctx.user.id && ctx.user.role !== 'admin') {
+          throw new TRPCError({ code: 'FORBIDDEN', message: 'Not authorized' });
+        }
+        
+        return await db.getEventMembers(input.eventId);
+      }),
+    
+    inviteMember: organizerProcedure
+      .input(z.object({
+        eventId: z.number(),
+        email: z.string().email(),
+        role: z.enum(['master', 'editor', 'coordinator', 'viewer']).default('editor'),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        const event = await db.getEventById(input.eventId);
+        if (!event) {
+          throw new TRPCError({ code: 'NOT_FOUND', message: 'Event not found' });
+        }
+        
+        // Apenas master ou admin podem convidar
+        const member = await db.getEventMember(input.eventId, ctx.user.id);
+        if (member?.role !== 'master' && event.organizerId !== ctx.user.id && ctx.user.role !== 'admin') {
+          throw new TRPCError({ code: 'FORBIDDEN', message: 'Only master can invite members' });
+        }
+        
+        // Gerar token de convite
+        const inviteToken = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+        
+        // Criar convite
+        const memberId = await db.addEventMember({
+          eventId: input.eventId,
+          userId: 0, // Será preenchido quando aceitar
+          role: input.role,
+          inviteToken,
+          inviteStatus: 'pending',
+          inviteEmail: input.email,
+          inviteSentAt: new Date(),
+        });
+        
+        // TODO: Enviar email com link de convite
+        // const inviteLink = `${process.env.FRONTEND_URL}/invite/${inviteToken}`;
+        // await sendEmailNotification({ ... });
+        
+        return { memberId, inviteToken };
+      }),
+    
+    updateMemberRole: organizerProcedure
+      .input(z.object({
+        eventId: z.number(),
+        userId: z.number(),
+        role: z.enum(['editor', 'coordinator', 'viewer']), // Não pode mudar para master
+      }))
+      .mutation(async ({ ctx, input }) => {
+        const event = await db.getEventById(input.eventId);
+        if (!event) {
+          throw new TRPCError({ code: 'NOT_FOUND', message: 'Event not found' });
+        }
+        
+        // Apenas master ou admin podem editar roles
+        const member = await db.getEventMember(input.eventId, ctx.user.id);
+        if (member?.role !== 'master' && event.organizerId !== ctx.user.id && ctx.user.role !== 'admin') {
+          throw new TRPCError({ code: 'FORBIDDEN', message: 'Only master can manage members' });
+        }
+        
+        const targetMember = await db.getEventMember(input.eventId, input.userId);
+        if (!targetMember) {
+          throw new TRPCError({ code: 'NOT_FOUND', message: 'Member not found' });
+        }
+        
+        // Não permitir remover master
+        if (targetMember.role === 'master') {
+          throw new TRPCError({ code: 'BAD_REQUEST', message: 'Cannot change master role' });
+        }
+        
+        await db.updateEventMember(targetMember.id, { role: input.role });
+        return { success: true };
+      }),
+    
+    removeMember: organizerProcedure
+      .input(z.object({
+        eventId: z.number(),
+        userId: z.number(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        const event = await db.getEventById(input.eventId);
+        if (!event) {
+          throw new TRPCError({ code: 'NOT_FOUND', message: 'Event not found' });
+        }
+        
+        // Apenas master ou admin podem remover membros
+        const member = await db.getEventMember(input.eventId, ctx.user.id);
+        if (member?.role !== 'master' && event.organizerId !== ctx.user.id && ctx.user.role !== 'admin') {
+          throw new TRPCError({ code: 'FORBIDDEN', message: 'Only master can remove members' });
+        }
+        
+        const targetMember = await db.getEventMember(input.eventId, input.userId);
+        if (!targetMember) {
+          throw new TRPCError({ code: 'NOT_FOUND', message: 'Member not found' });
+        }
+        
+        // Não permitir remover master
+        if (targetMember.role === 'master') {
+          throw new TRPCError({ code: 'BAD_REQUEST', message: 'Cannot remove master' });
+        }
+        
+        await db.removeEventMember(input.eventId, input.userId);
+        return { success: true };
+      }),
+  }),

@@ -1,0 +1,15 @@
+BecomeOrganizer.tsx(49,11): error TS1005: '}' expected.
+CheckIn.tsx(15,1): error TS1005: '}' expected.
+EventDetails.tsx(1,37): error TS1161: Unterminated regular expression literal.
+EventDetails.tsx(2,35): error TS1128: Declaration or statement expected.
+EventDetails.tsx(3,35): error TS2657: JSX expressions must have one parent element.
+EventDetails.tsx(25,40): error TS17008: JSX element 'div' has no corresponding closing tag.
+EventDetails.tsx(30,78): error TS1005: '/' expected.
+EventDetails.tsx(30,78): error TS1005: '</' expected.
+EventDocumentsManager.tsx(40,3): error TS1128: Declaration or statement expected.
+OrderSelectionModal.tsx(4,11): error TS1128: Declaration or statement expected.
+OrderSelectionModal.tsx(4,13): error TS1128: Declaration or statement expected.
+OrderSelectionModal.tsx(26,12): error TS1128: Declaration or statement expected.
+OrderSelectionModal.tsx(27,9): error TS1128: Declaration or statement expected.
+OrderSelectionModal.tsx(29,10): error TS17008: JSX element 'DialogFooter' has no corresponding closing tag.
+OrderSelectionModal.tsx(30,12): error TS17008: JSX element 'Button' has no corresponding closing tag.

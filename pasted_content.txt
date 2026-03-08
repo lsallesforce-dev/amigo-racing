@@ -1,0 +1,56 @@
+index-DOfOvvlg.js:488  POST https://amigoracing.com.br/api/trpc/payments.setupRecipient?batch=1 500 (Internal Server Error)
+fetch @ index-DOfOvvlg.js:488
+LK @ index-DOfOvvlg.js:17
+await in LK
+BK @ index-DOfOvvlg.js:17
+MK @ index-DOfOvvlg.js:17
+fetch @ index-DOfOvvlg.js:17
+i @ index-DOfOvvlg.js:17
+setTimeout
+s @ index-DOfOvvlg.js:17
+(anônimo) @ index-DOfOvvlg.js:17
+subscribe @ index-DOfOvvlg.js:17
+(anônimo) @ index-DOfOvvlg.js:17
+subscribe @ index-DOfOvvlg.js:17
+i @ index-DOfOvvlg.js:17
+(anônimo) @ index-DOfOvvlg.js:17
+subscribe @ index-DOfOvvlg.js:17
+(anônimo) @ index-DOfOvvlg.js:17
+nK @ index-DOfOvvlg.js:17
+requestAsPromise @ index-DOfOvvlg.js:17
+mutation @ index-DOfOvvlg.js:17
+mutationFn @ index-DOfOvvlg.js:17
+fn @ index-DOfOvvlg.js:9
+O @ index-DOfOvvlg.js:9
+start @ index-DOfOvvlg.js:9
+execute @ index-DOfOvvlg.js:9
+await in execute
+mutate @ index-DOfOvvlg.js:9
+(anônimo) @ index-DOfOvvlg.js:17
+Ee @ index-DOfOvvlg.js:465
+qR @ index-DOfOvvlg.js:48
+(anônimo) @ index-DOfOvvlg.js:48
+Bm @ index-DOfOvvlg.js:48
+U2 @ index-DOfOvvlg.js:48
+tw @ index-DOfOvvlg.js:49
+JY @ index-DOfOvvlg.js:49Entenda o erro
+VM7:52 Erro ao configurar conta Pagar.me: {error: TRPCClientError: Erro ao criar recipient no Pagar.me: Pagar.me API error: 422
+    at jv.from (https…, details: 'Erro ao criar recipient no Pagar.me: Pagar.me API error: 422'}details: "Erro ao criar recipient no Pagar.me: Pagar.me API error: 422"error: TRPCClientError: Erro ao criar recipient no Pagar.me: Pagar.me API error: 422
+    at jv.from (https://amigoracing.com.br/assets/index-DOfOvvlg.js:17:26095)
+    at https://amigoracing.com.br/assets/index-DOfOvvlg.js:17:31272cause: undefineddata: code: "INTERNAL_SERVER_ERROR"httpStatus: 500path: "payments.setupRecipient"[[Prototype]]: Objectmeta: response: Response {type: 'basic', url: 'https://amigoracing.com.br/api/trpc/payments.setupRecipient?batch=1', redirected: false, status: 500, ok: false, …}responseJSON: [{…}][[Prototype]]: Objectname: "TRPCClientError"shape: code: -32603data: {code: 'INTERNAL_SERVER_ERROR', httpStatus: 500, path: 'payments.setupRecipient'}message: "Erro ao criar recipient no Pagar.me: Pagar.me API error: 422"[[Prototype]]: Objectmessage: "Erro ao criar recipient no Pagar.me: Pagar.me API error: 422"stack: "TRPCClientError: Erro ao criar recipient no Pagar.me: Pagar.me API error: 422\n    at jv.from (https://amigoracing.com.br/assets/index-DOfOvvlg.js:17:26095)\n    at https://amigoracing.com.br/assets/index-DOfOvvlg.js:17:31272"[[Prototype]]: Errorconstructor: class jvfrom: ƒ from(t,n={})length: 2name: "jv"prototype: Errorconstructor: class jv[[Prototype]]: Objectarguments: (…)caller: (…)[[FunctionLocation]]: index-DOfOvvlg.js:17[[Prototype]]: ƒ Error()stackTraceLimit: 10captureStackTrace: ƒ captureStackTrace()length: 2name: "captureStackTrace"arguments: (…)caller: (…)[[Prototype]]: ƒ ()[[Scopes]]: Scopes[0]isError: ƒ isError()length: 1name: "isError"arguments: (…)caller: (…)[[Prototype]]: ƒ ()[[Scopes]]: Scopes[0]length: 1name: "Error"prototype: constructor: ƒ Error()stackTraceLimit: 10captureStackTrace: ƒ captureStackTrace()isError: ƒ isError()length: 1name: "Error"prototype: {name: 'Error', message: '', toString: ƒ}arguments: (…)caller: (…)[[Prototype]]: ƒ ()[[Scopes]]: Scopes[0]Nenhuma propriedademessage: ""name: "Error"toString: ƒ toString()[[Prototype]]: Objectarguments: (…)caller: (…)[[Prototype]]: ƒ ()[[Scopes]]: Scopes[0][[Scopes]]: Scopes[4]0: Block {jv: ƒ}1: Module {Y1: ƒ, aAe: ƒ, MC: ƒ, hN: ƒ, RP: ƒ, …}2: Script {b2: 'application/proto', Ra: Array(64), Cd: Set(0), w2: {…}, lr: ƒ, …}3: Global {window: Window, self: Window, document: document, name: '', location: Location, …}[[Prototype]]: Object[[Prototype]]: Object
+console.error @ VM7:52
+onError @ index-DOfOvvlg.js:465
+execute @ index-DOfOvvlg.js:9
+await in execute
+mutate @ index-DOfOvvlg.js:9
+(anônimo) @ index-DOfOvvlg.js:17
+Ee @ index-DOfOvvlg.js:465
+qR @ index-DOfOvvlg.js:48
+(anônimo) @ index-DOfOvvlg.js:48
+Bm @ index-DOfOvvlg.js:48
+U2 @ index-DOfOvvlg.js:48
+tw @ index-DOfOvvlg.js:49
+JY @ index-DOfOvvlg.js:49Entenda o erro
+VM7:52 [API Mutation Error] TRPCClientError: Erro ao criar recipient no Pagar.me: Pagar.me API error: 422
+    at jv.from (index-DOfOvvlg.js:17:26095)
+    at index-DOfOvvlg.js:17:31272

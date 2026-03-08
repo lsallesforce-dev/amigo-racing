@@ -1,0 +1,5 @@
+node_modules
+*.zip
+*.mp4
+.AmigoRacingOriginal/
+.temp_extract_2/
