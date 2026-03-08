@@ -36,7 +36,7 @@ async function startServer() {
   const server = createServer(app);
 
   app.use(cors({
-    origin: ['http://localhost:3000', 'http://localhost:5173'],
+    origin: ENV.allowedOrigins,
     credentials: true
   }));
 
@@ -83,11 +83,13 @@ async function startServer() {
     serveStatic(app);
   }
 
-  const port = 3000;
+  const port = Number(process.env.PORT) || 3000;
   server.listen(port, "0.0.0.0", () => {
+    const protocol = ENV.isProduction ? 'https' : 'http';
+    const host = ENV.isProduction ? 'amigo-racing.vercel.app' : `localhost:${port}`;
     console.log(`--------------------------------`);
     console.log(`🚀 SERVIDOR INICIADO NA PORTA: ${port}`);
-    console.log(`URL: http://localhost:${port}`);
+    console.log(`URL: ${protocol}://${host}`);
     console.log(`--------------------------------`);
   }).on('error', (err: any) => {
     if (err.code === 'EADDRINUSE') {
