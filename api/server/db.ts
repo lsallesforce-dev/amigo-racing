@@ -36,7 +36,7 @@ import {
   championshipResults,
   InsertChampionshipResult
 } from "./drizzle/schema.js";
-import { ENV } from '../.././env.js';
+import { ENV } from './env.js';
 import postgres from "postgres";
 
 let _db: ReturnType<typeof drizzle> | null = null;

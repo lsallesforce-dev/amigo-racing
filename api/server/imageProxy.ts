@@ -7,7 +7,7 @@
  */
 
 import { Request, Response } from 'express';
-import { ENV } from '../.././env.js';
+import { ENV } from './env.js';
 
 /**
  * Busca uma imagem do S3 usando o storage API do Manus

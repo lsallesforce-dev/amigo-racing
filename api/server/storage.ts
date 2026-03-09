@@ -1,6 +1,6 @@
 ﻿// Uses the Biz-provided storage proxy (Authorization: Bearer <token>)
 
-import { ENV } from '../.././env.js';
+import { ENV } from './env.js';
 
 type StorageConfig = { baseUrl: string; apiKey: string };
 

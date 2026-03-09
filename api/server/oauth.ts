@@ -4,7 +4,7 @@ import { COOKIE_NAME, ONE_YEAR_MS } from "../../const.js";
 import { getSessionCookieOptions } from "./cookies.js";
 import { getUserByOpenId, upsertUser } from "./db.js";
 import { randomBytes, scryptSync, timingSafeEqual } from "crypto";
-import { ENV } from "../.././env.js";
+import { ENV } from "./env.js";
 
 // Local password hashing util using scrypt
 export function hashPassword(password: string): string {

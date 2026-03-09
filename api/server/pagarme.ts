@@ -1,6 +1,6 @@
 ﻿import { Router } from 'express';
 import * as db from './db.js';
-import { ENV } from '../.././env.js';
+import { ENV } from './env.js';
 import { TRPCError } from '@trpc/server';
 
 const router = Router();
