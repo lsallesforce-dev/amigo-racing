@@ -1,5 +1,5 @@
-import { getDb } from "./api/server/db.js";
-import { events } from "./api/server/drizzle/schema.js";
+import { getDb } from "./api/_server/db.js";
+import { events } from "./api/_server/drizzle/schema.js";
 
 export async function generateSitemap(baseUrl: string): Promise<string> {
   const db = await getDb();

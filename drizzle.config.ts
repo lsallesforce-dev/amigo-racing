@@ -6,8 +6,8 @@ if (!connectionString) {
 }
 
 export default defineConfig({
-  schema: "./server/drizzle/schema.ts",
-  out: "./server/drizzle",
+  schema: "./api/_server/drizzle/schema.ts",
+  out: "./api/_server/drizzle",
   dialect: "postgresql",
   dbCredentials: {
     url: connectionString,
