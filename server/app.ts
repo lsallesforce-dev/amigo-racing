@@ -1,18 +1,18 @@
 import "dotenv/config";
 import express from "express";
 import { createExpressMiddleware } from "@trpc/server/adapters/express";
-import { registerOAuthRoutes } from "./oauth.ts";
-import { appRouter } from "./routers.ts";
-import { createContext } from "./context.ts";
+import { registerOAuthRoutes } from "./oauth.js";
+import { appRouter } from "./routers.js";
+import { createContext } from "./context.js";
 import cookieParser from "cookie-parser";
 import cors from "cors";
-import { ENV } from "./env.ts";
+import { ENV } from "./env.js";
 
-import { setupSitemapRoute } from "./sitemapRoute.ts";
-import { imageProxyHandler } from "./imageProxy.ts";
-import { qrCodeProxyHandler } from "./qrCodeProxy.ts";
-import pagarmeWebhook from "./pagarme.ts";
-import uploadRoute from "./uploadRoute.ts";
+import { setupSitemapRoute } from "./sitemapRoute.js";
+import { imageProxyHandler } from "./imageProxy.js";
+import { qrCodeProxyHandler } from "./qrCodeProxy.js";
+import pagarmeWebhook from "./pagarme.js";
+import uploadRoute from "./uploadRoute.js";
 
 export async function createExpressApp() {
     const app = express();

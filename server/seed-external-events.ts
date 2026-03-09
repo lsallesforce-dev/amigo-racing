@@ -1,6 +1,6 @@
 import "dotenv/config";
-import { getDb } from "./db.ts";
-import { events, organizers, users } from "./drizzle/schema.ts";
+import { getDb } from "./db.js";
+import { events, organizers, users } from "./drizzle/schema.js";
 import { eq, and } from "drizzle-orm";
 
 const externalEventsData = [

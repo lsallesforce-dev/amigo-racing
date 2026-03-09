@@ -35,8 +35,8 @@ import {
   InsertChampionshipStage,
   championshipResults,
   InsertChampionshipResult
-} from "./drizzle/schema.ts";
-import { ENV } from './env.ts';
+} from "./drizzle/schema.js";
+import { ENV } from './env.js';
 import postgres from "postgres";
 
 let _db: ReturnType<typeof drizzle> | null = null;

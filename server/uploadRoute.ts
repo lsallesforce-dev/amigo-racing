@@ -4,8 +4,8 @@ import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
 import { dirname } from "path";
-import { sdk } from "./sdk.ts";
-import * as storage from "./storage.ts";
+import { sdk } from "./sdk.js";
+import * as storage from "./storage.js";
 
 
 const router = Router();

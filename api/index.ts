@@ -6,7 +6,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     try {
         if (!_app) {
             // Lazy load to catch any syntax or esbuild reference errors
-            const serverApp = await import("../server/app.ts");
+            // Use .js extension even though the source is .ts (ESM Requirement)
+            const serverApp = await import("../server/app.js");
             _app = await serverApp.createExpressApp();
         }
 

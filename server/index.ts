@@ -1,8 +1,8 @@
 import { createServer } from "http";
 import net from "net";
-import { serveStatic, setupVite } from "./vite.ts";
-import { ENV } from "./env.ts";
-import { createExpressApp } from "./app.ts";
+import { serveStatic, setupVite } from "./vite.js";
+import { ENV } from "./env.js";
+import { createExpressApp } from "./app.js";
 
 function isPortAvailable(port: number): Promise<boolean> {
   return new Promise(resolve => {

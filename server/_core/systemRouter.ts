@@ -1,4 +1,4 @@
-﻿import { router, publicProcedure } from "./trpc.ts";
+﻿import { router, publicProcedure } from "./trpc.js";
 import { z } from "zod";
 
 export const systemRouter = router({

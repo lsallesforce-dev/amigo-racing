@@ -1,7 +1,7 @@
 ﻿import type { CreateExpressContextOptions } from "@trpc/server/adapters/express";
-import type { User } from "./drizzle/schema.ts";
-import { sdk } from "./sdk.ts";
-import * as db from "./db.ts";
+import type { User } from "./drizzle/schema.js";
+import { sdk } from "./sdk.js";
+import * as db from "./db.js";
 
 // Definimos a interface de forma explícita para matar os erros de tipagem
 export type TrpcContext = {

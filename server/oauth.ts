@@ -1,10 +1,10 @@
 ﻿import type { Express } from "express";
-import { sdk } from "./sdk.ts";
-import { COOKIE_NAME, ONE_YEAR_MS } from "../const.ts";
-import { getSessionCookieOptions } from "./cookies.ts";
-import { getUserByOpenId, upsertUser } from "./db.ts";
+import { sdk } from "./sdk.js";
+import { COOKIE_NAME, ONE_YEAR_MS } from "../const.js";
+import { getSessionCookieOptions } from "./cookies.js";
+import { getUserByOpenId, upsertUser } from "./db.js";
 import { randomBytes, scryptSync, timingSafeEqual } from "crypto";
-import { ENV } from "./env.ts";
+import { ENV } from "./env.js";
 
 // Local password hashing util using scrypt
 export function hashPassword(password: string): string {

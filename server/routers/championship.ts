@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { router, publicProcedure, protectedProcedure } from "../_core/trpc.ts";
+import { router, publicProcedure, protectedProcedure } from "../_core/trpc.js";
 import { getDb, getOrganizerContext, getUserById } from "../db";
 import {
     championships,
