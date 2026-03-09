@@ -1124,23 +1124,29 @@ export const appRouter = router({
           let descriptionStr = "";
 
           if (input.registrationId) {
-            reg = await db.getRegistrationById(input.registrationId) as any;
-            if (!reg) throw new Error("Inscrição não encontrada");
-            category = await db.getCategoryById(reg.categoryId) as any;
-            event = await db.getEventById(reg.eventId) as any;
-            if (!event) throw new Error("Evento não encontrado");
+            // Robust lookup for registrations
+            const registration = await db.getRegistrationById(input.registrationId) as any;
+            if (!registration) throw new Error("Inscrição não encontrada");
+            reg = registration;
 
-            const organizerId = event.organizerId;
+            const registrationEvent = await db.getEventById(registration.eventId) as any;
+            if (!registrationEvent) throw new Error("Evento não encontrado");
+            event = registrationEvent;
+
+            category = await db.getCategoryById(registration.categoryId) as any;
+
+            // Navigate categories/events to find the actual owner/organizer
+            const organizerId = registrationEvent.organizerId;
             const organizer = organizerId ? await db.getOrganizerById(organizerId) as any : null;
             const organizerUser = organizer ? await db.getUserByOpenId(organizer.ownerId) as any : null;
             organizerRecipientId = organizerUser?.recipientId;
 
-            descriptionStr = `Inscrição Evento: ${event?.name || 'Evento'}`;
+            descriptionStr = `Inscrição Evento: ${registrationEvent?.name || 'Evento'}`;
 
             let productsTotal = 0;
-            if (reg.purchasedProducts) {
+            if (registration.purchasedProducts) {
               try {
-                const productsArray = typeof reg.purchasedProducts === 'string' ? JSON.parse(reg.purchasedProducts) : reg.purchasedProducts;
+                const productsArray = typeof registration.purchasedProducts === 'string' ? JSON.parse(registration.purchasedProducts) : registration.purchasedProducts;
                 if (Array.isArray(productsArray)) {
                   productsTotal = productsArray.reduce((sum, p) => sum + ((p.price || 0) * (p.quantity || 1)), 0);
                 }
@@ -1151,6 +1157,7 @@ export const appRouter = router({
 
             totalAmountCents = Math.round(((category.price || 150) + productsTotal) * 100);
           } else if (input.orderId) {
+            // Robust lookup for standalone orders
             const dbInstance = await getDb();
             if (!dbInstance) throw new Error("Falha na conexão com banco");
 
@@ -1221,7 +1228,7 @@ export const appRouter = router({
                 liable: false
               }
             });
-            console.log(`[createPayment] Configured split: Organizer (${organizerRecipientId}) 90%, Platform (${platformRecipientId}) 10%`);
+            console.log(`[createPayment] Split Configured: Event=${event?.id || 'N/A'} -> Organizer=${organizerRecipientId} (90%), Platform=${platformRecipientId} (10%)`);
           } else if (organizerRecipientId || platformRecipientId) {
             // Solo payment to whoever is available (Organizer takes priority)
             const finalRecipientId = organizerRecipientId || platformRecipientId;
@@ -1235,7 +1242,7 @@ export const appRouter = router({
                 liable: true
               }
             });
-            console.log(`[createPayment] Configured solo payment: recipient_id=${finalRecipientId}`);
+            console.log(`[createPayment] Solo Payment Configured: Event=${event?.id || 'N/A'} -> Recipient=${finalRecipientId} (100%)`);
           } else {
             // CRITICAL: No recipient found. Throw error to prevent master account leakage.
             console.error('[createPayment] Error: No valid recipient (Organizer or Platform) configured.');
