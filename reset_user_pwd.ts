@@ -1,8 +1,8 @@
 import 'dotenv/config';
-import { getDb } from './api/server/db.js';
-import { users } from './api/server/schema.js';
+import { getDb } from './api/_server/db.js';
+import { users } from './api/_server/schema.js';
 import { eq } from 'drizzle-orm';
-import { hashPassword } from './api/server/oauth.js';
+import { hashPassword } from './api/_server/oauth.js';
 
 async function resetPassword() {
     const email = 'projeto@lstecnologias.com.br';

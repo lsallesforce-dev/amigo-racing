@@ -1,5 +1,5 @@
-import { getDb } from "./api/server/db.js";
-import { registrations, events } from "./api/server/schema.js";
+import { getDb } from "./api/_server/db.js";
+import { registrations, events } from "./api/_server/schema.js";
 import { ilike, eq } from "drizzle-orm";
 import * as fs from "fs";
 

@@ -1,6 +1,6 @@
 import "dotenv/config";
-import { getDb } from "./api/server/db.js";
-import { users, organizers } from "./api/server/schema.js";
+import { getDb } from "./api/_server/db.js";
+import { users, organizers } from "./api/_server/schema.js";
 import { eq } from "drizzle-orm";
 
 async function main() {

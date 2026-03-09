@@ -18,7 +18,7 @@ function walk(dir) {
 
             // We are looking for imports that go UP beyond the 'server' root.
             // In their original home (server/), an import pointing to root would have (depth + 1) levels of '../'.
-            // Now in api/server/, it needs (depth + 2) levels of '../'.
+            // Now in api/_server/, it needs (depth + 2) levels of '../'.
 
             const newContent = content.replace(/(from\s+|import\()(['"])(\.\.?\/[^'"]+?)(['"])/g, (match, p1, p2, p3, p4) => {
                 let importPath = p3;
@@ -28,7 +28,7 @@ function walk(dir) {
                 const currentUpLevels = dotDots ? dotDots.length : 0;
 
                 // If the import path goes up matching exactly (depth + 1), it used to point to ROOT.
-                // Now it needs to point to ROOT from api/server/... so it needs an extra ../
+                // Now it needs to point to ROOT from api/_server/... so it needs an extra ../
                 if (currentUpLevels === (depth + 1)) {
                     importPath = '../' + importPath;
                 }

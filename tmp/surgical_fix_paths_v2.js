@@ -13,7 +13,7 @@ function processFile(fullPath) {
     const depthFromRoot = relToRoot === '' ? 0 : relToRoot.split(path.sep).length;
 
     // 1. Resolve 'env.js' imports
-    // On the backend (api/server/), env.js is local (same dir as it was in server/).
+    // On the backend (api/_server/), env.js is local (same dir as it was in server/).
     // If it's importing ../../env.js, it's overshooting.
     const newContent = content.replace(/(from\s+['"]|import\(['"])(\.\.?\/[^'"]+?)(['"])/g, (match, prefix, pathPart, suffix) => {
         let updatedPath = pathPart;

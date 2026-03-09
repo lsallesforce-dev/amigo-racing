@@ -1,5 +1,5 @@
-import { ENV } from '../api/server/env.js';
-import * as pagarme from '../api/server/pagarme.js';
+import { ENV } from '../api/_server/env.js';
+import * as pagarme from '../api/_server/pagarme.js';
 
 async function run() {
     try {

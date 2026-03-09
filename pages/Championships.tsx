@@ -4,7 +4,7 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { getLoginUrl } from "@/api/server/const";
+import { getLoginUrl } from "@/api/_server/const";
 import { trpc } from "@/lib/trpc";
 import { Trophy, Plus, Loader2, ArrowLeft, CalendarDays } from "lucide-react";
 import { Link, useLocation } from "wouter";

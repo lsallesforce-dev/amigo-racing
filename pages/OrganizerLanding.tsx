@@ -1,7 +1,7 @@
 import { Button } from "@/components/ui/button";
 import { useLocation } from "wouter";
 import { useAuth } from "@/_core/hooks/useAuth";
-import { getLoginUrl } from "@/api/server/const";
+import { getLoginUrl } from "@/api/_server/const";
 import { Zap, Users, Trophy, Calendar, MapPin, Shield, TrendingUp, Lock, Headphones } from "lucide-react";
 
 export default function OrganizerLanding() {

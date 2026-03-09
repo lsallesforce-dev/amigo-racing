@@ -1,4 +1,4 @@
-﻿import { getLoginUrl } from "@/api/server/const";
+﻿import { getLoginUrl } from "@/api/_server/const";
 import { trpc } from "@/lib/trpc";
 import { TRPCClientError } from "@trpc/client";
 import { useCallback, useEffect, useMemo, useRef } from "react";

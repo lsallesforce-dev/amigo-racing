@@ -30,7 +30,7 @@ function walk(dir) {
         } else if (fullPath.endsWith('.ts') || fullPath.endsWith('.tsx')) {
             let content = fs.readFileSync(fullPath, 'utf8');
 
-            // Replace imports: "../server/..." -> "../api/server/..."
+            // Replace imports: "../server/..." -> "../api/_server/..."
             // Also potentially fix extensions if they were missing (common in frontend)
             const newContent = content.replace(/(from\s+|import\()(['"])(\.\.?\/)(server\/)([^'"]+?)(['"])/g, (match, p1, p2, p3, p4, p5, p6) => {
                 let innerPath = p5;

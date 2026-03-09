@@ -1,4 +1,4 @@
-import { createRecipient } from './api/server/pagarme.js';
+import { createRecipient } from './api/_server/pagarme.js';
 
 async function run() {
     process.env.PAGARME_API_KEY = "sk_test_ZvA7G0ha0CgoYOV9";

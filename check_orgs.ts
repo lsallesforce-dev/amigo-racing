@@ -1,6 +1,6 @@
 import "dotenv/config";
-import { getDb } from "./api/server/db.js";
-import { organizers } from "./api/server/schema.js";
+import { getDb } from "./api/_server/db.js";
+import { organizers } from "./api/_server/schema.js";
 
 async function checkOrganizers() {
     const db = await getDb();

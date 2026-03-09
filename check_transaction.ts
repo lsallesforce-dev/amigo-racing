@@ -1,5 +1,5 @@
-import * as db from './api/server/db.js';
-import { registrations } from './api/server/schema.js';
+import * as db from './api/_server/db.js';
+import { registrations } from './api/_server/schema.js';
 import { desc } from 'drizzle-orm';
 
 async function main() {

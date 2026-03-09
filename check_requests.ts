@@ -1,5 +1,5 @@
 import "dotenv/config";
-import * as db from "./api/server/db.js";
+import * as db from "./api/_server/db.js";
 
 async function run() {
     try {

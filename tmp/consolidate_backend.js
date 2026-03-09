@@ -35,7 +35,7 @@ if (fs.existsSync(indexPath)) {
 
 // 4. Fix specific TypeScript path errors from logs
 
-// A. api/server/_core/trpc.ts (now api/_server/_core/trpc.ts) 
+// A. api/_server/_core/trpc.ts (now api/_server/_core/trpc.ts) 
 // Error: Cannot find module '../../../const.js'
 const trpcPath = path.join(serverDir, '_core', 'trpc.ts');
 if (fs.existsSync(trpcPath)) {

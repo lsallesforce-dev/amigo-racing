@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
-import { getLoginUrl } from "@/api/server/const";
+import { getLoginUrl } from "@/api/_server/const";
 import { trpc } from "@/lib/trpc";
 import { Calendar, MapPin, ArrowLeft, Users, DollarSign, Car, Trash2, Pencil, ShoppingBag, Trophy, Plus, Loader2, ArrowRight } from "lucide-react";
 import { Link, useParams } from "wouter";

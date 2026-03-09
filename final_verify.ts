@@ -1,6 +1,6 @@
 
-import { getDb } from "./api/server/db.js";
-import { users, events, organizers } from "./api/server/schema.js";
+import { getDb } from "./api/_server/db.js";
+import { users, events, organizers } from "./api/_server/schema.js";
 import { eq, inArray } from "drizzle-orm";
 
 async function verify() {

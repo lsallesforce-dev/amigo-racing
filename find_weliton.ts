@@ -1,6 +1,6 @@
 import "dotenv/config";
-import { getDb } from "./api/server/db.js";
-import { users, registrations } from "./api/server/schema.js";
+import { getDb } from "./api/_server/db.js";
+import { users, registrations } from "./api/_server/schema.js";
 import { ilike, or } from "drizzle-orm";
 
 async function findWeliton() {

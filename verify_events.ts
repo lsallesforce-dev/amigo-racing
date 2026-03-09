@@ -1,6 +1,6 @@
 import 'dotenv/config';
-import { getDb } from './api/server/db.js';
-import { events } from './api/server/schema.js';
+import { getDb } from './api/_server/db.js';
+import { events } from './api/_server/schema.js';
 
 async function checkEvents() {
     const db = await getDb();

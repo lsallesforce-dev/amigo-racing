@@ -2,7 +2,7 @@ import { useAuth } from "@/_core/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { getLoginUrl } from "@/api/server/const";
+import { getLoginUrl } from "@/api/_server/const";
 import { trpc } from "@/lib/trpc";
 import { Calendar, MapPin, Users, ArrowRight, Filter, Globe, Trophy, Info } from "lucide-react";
 import { Link } from "wouter";

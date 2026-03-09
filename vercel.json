@@ -1,7 +1,7 @@
 {
     "functions": {
         "api/index.ts": {
-            "includeFiles": "api/server/**"
+            "includeFiles": "api/_server/**"
         }
     },
     "routes": [
