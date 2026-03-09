@@ -1190,11 +1190,12 @@ export const appRouter = router({
           }
 
           const split = [];
+          const platformRecipientId = ENV.pagarmePlatformRecipientId;
 
-          // Se tivermos o recipient do organizador e o ID da plataforma, configuramos o split
-          // Aqui assumimos uma taxa fixa ou configurável. Se não houver config, 100% vai para o organizador ou plataforma.
-          if (organizerRecipientId && ENV.pagarmePlatformRecipientId) {
-            // Exemplo: 90% Organizador, 10% Plataforma (ajuste conforme a regra de negócio)
+          // Split logic: Prioritize Organizer, fallback to Platform, or throw error.
+          // This prevents unintended payments to the master account associated with the API Key.
+          if (organizerRecipientId && platformRecipientId && organizerRecipientId !== platformRecipientId) {
+            // Split: 90% Organizer, 10% Platform
             const platformFeePercentage = 10;
             const platformAmount = Math.round(totalAmountCents * (platformFeePercentage / 100));
             const organizerAmount = totalAmountCents - platformAmount;
@@ -1212,7 +1213,7 @@ export const appRouter = router({
 
             split.push({
               amount: platformAmount,
-              recipient_id: ENV.pagarmePlatformRecipientId,
+              recipient_id: platformRecipientId,
               type: "flat",
               options: {
                 charge_processing_fee: false,
@@ -1220,6 +1221,25 @@ export const appRouter = router({
                 liable: false
               }
             });
+            console.log(`[createPayment] Configured split: Organizer (${organizerRecipientId}) 90%, Platform (${platformRecipientId}) 10%`);
+          } else if (organizerRecipientId || platformRecipientId) {
+            // Solo payment to whoever is available (Organizer takes priority)
+            const finalRecipientId = organizerRecipientId || platformRecipientId;
+            split.push({
+              amount: totalAmountCents,
+              recipient_id: finalRecipientId as string,
+              type: "flat",
+              options: {
+                charge_processing_fee: true,
+                charge_remainder_fee: true,
+                liable: true
+              }
+            });
+            console.log(`[createPayment] Configured solo payment: recipient_id=${finalRecipientId}`);
+          } else {
+            // CRITICAL: No recipient found. Throw error to prevent master account leakage.
+            console.error('[createPayment] Error: No valid recipient (Organizer or Platform) configured.');
+            throw new Error("Transação não permitida: O organizador do evento não possui dados de pagamento configurados e não há recebedor de plataforma definido.");
           }
 
           const paymentPayload: any = {
