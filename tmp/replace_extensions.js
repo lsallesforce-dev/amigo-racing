@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 
-const dirs = ['server', 'api'];
+const baseDir = 'api/server';
 
 function walk(dir) {
     const files = fs.readdirSync(dir);
@@ -12,20 +12,40 @@ function walk(dir) {
         } else if (fullPath.endsWith('.ts')) {
             let content = fs.readFileSync(fullPath, 'utf8');
 
+            // Calculate depth relative to api/server
+            const relativePath = path.relative(baseDir, dir);
+            const depth = relativePath === '' ? 0 : relativePath.split(path.sep).length;
+
+            // We are looking for imports that go UP beyond the 'server' root.
+            // In their original home (server/), an import pointing to root would have (depth + 1) levels of '../'.
+            // Now in api/server/, it needs (depth + 2) levels of '../'.
+
             const newContent = content.replace(/(from\s+|import\()(['"])(\.\.?\/[^'"]+?)(['"])/g, (match, p1, p2, p3, p4) => {
-                // If it ends in a known extension that is NOT .ts, leave it
+                let importPath = p3;
+
+                // Count how many '../' are at the start of the import path
+                const dotDots = importPath.match(/^\.\.\//g);
+                const currentUpLevels = dotDots ? dotDots.length : 0;
+
+                // If the import path goes up matching exactly (depth + 1), it used to point to ROOT.
+                // Now it needs to point to ROOT from api/server/... so it needs an extra ../
+                if (currentUpLevels === (depth + 1)) {
+                    importPath = '../' + importPath;
+                }
+
+                // Also Ensure .js extension (same as before)
                 const knownExtensions = ['.js', '.css', '.json', '.png', '.jpg', '.svg', '.mjs', '.cjs'];
-                if (knownExtensions.some(ext => p3.endsWith(ext))) {
-                    return match;
+                if (!knownExtensions.some(ext => importPath.endsWith(ext))) {
+                    if (importPath.endsWith('.ts')) {
+                        importPath = importPath.slice(0, -3);
+                    }
+                    importPath += '.js';
                 }
 
-                let cleanPath = p3;
-                if (cleanPath.endsWith('.ts')) {
-                    cleanPath = cleanPath.slice(0, -3);
+                const replacement = `${p1}${p2}${importPath}${p4}`;
+                if (match !== replacement) {
+                    console.log(`  Updated in ${fullPath}: ${match} -> ${replacement}`);
                 }
-
-                const replacement = `${p1}${p2}${cleanPath}.js${p4}`;
-                console.log(`  Updated in ${fullPath}: ${match} -> ${replacement}`);
                 return replacement;
             });
 
@@ -37,8 +57,8 @@ function walk(dir) {
     }
 }
 
-for (const dir of dirs) {
-    if (fs.existsSync(dir)) {
-        walk(dir);
-    }
+if (fs.existsSync(baseDir)) {
+    walk(baseDir);
+} else {
+    console.log(`Error: ${baseDir} not found`);
 }

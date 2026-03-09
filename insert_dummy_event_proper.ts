@@ -1,6 +1,6 @@
 import "dotenv/config";
-import { getDb } from "./server/db.ts";
-import { events } from "./server/drizzle/schema.ts";
+import { getDb } from "./api/server/db.js";
+import { events } from "./api/server/drizzle/schema.js";
 
 async function main() {
     try {

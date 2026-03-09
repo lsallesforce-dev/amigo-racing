@@ -1,4 +1,4 @@
-import { getDb } from './server/db';
+import { getDb } from './api/server/db.js';
 
 async function verify() {
   const db = await getDb();

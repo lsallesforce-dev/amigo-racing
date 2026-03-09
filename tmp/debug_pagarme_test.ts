@@ -1,4 +1,4 @@
-import { ENV } from '../server/env';
+import { ENV } from '../api/server/env.js';
 
 async function testPagarme() {
     const apiKey = process.env.PAGARME_API_KEY || 'sk_test_...'; // I'll need to read env or assume it's there

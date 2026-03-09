@@ -1,4 +1,4 @@
-import createExpressApp from '../server/app.js';
+import createExpressApp from './server/app.js';
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 
 let _app: any;

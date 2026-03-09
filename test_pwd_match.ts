@@ -1,8 +1,8 @@
 import 'dotenv/config';
-import { getDb } from './server/db.ts';
-import { users } from './server/drizzle/schema.ts';
+import { getDb } from './api/server/db.js';
+import { users } from './api/server/drizzle/schema.js';
 import { eq } from 'drizzle-orm';
-import { verifyPassword } from './server/oauth.ts';
+import { verifyPassword } from './api/server/oauth.js';
 
 async function testPassword() {
     const email = 'projeto@lstecnologias.com.br';

@@ -6,7 +6,7 @@ import { appRouter } from "./routers.js";
 import { createContext } from "./context.js";
 import cookieParser from "cookie-parser";
 import cors from "cors";
-import { ENV } from "./env.js";
+import { ENV } from "../.././env.js";
 
 import { setupSitemapRoute } from "./sitemapRoute.js";
 import { imageProxyHandler } from "./imageProxy.js";

@@ -1,6 +1,6 @@
 import "dotenv/config";
-import { getDb } from "./server/db.ts";
-import { events, championshipStages, championshipResults } from "./server/drizzle/schema.ts";
+import { getDb } from "./api/server/db.js";
+import { events, championshipStages, championshipResults } from "./api/server/drizzle/schema.js";
 import { eq, inArray } from "drizzle-orm";
 
 async function main() {

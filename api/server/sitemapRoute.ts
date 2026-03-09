@@ -1,5 +1,5 @@
 ﻿import { Express } from "express";
-import { generateSitemap } from "../sitemap.js";
+import { generateSitemap } from "../../sitemap.js";
 
 export function setupSitemapRoute(app: Express) {
   app.get("/sitemap.xml", async (req, res) => {

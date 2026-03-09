@@ -1,6 +1,6 @@
 
-import { getDb } from "./server/db.ts";
-import { users } from "./server/drizzle/schema.ts";
+import { getDb } from "./api/server/db.js";
+import { users } from "./api/server/drizzle/schema.js";
 import { eq } from "drizzle-orm";
 
 async function checkUser() {

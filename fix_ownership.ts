@@ -1,6 +1,6 @@
 
-import { getDb } from "./server/db.ts";
-import { users, events, organizers } from "./server/drizzle/schema.ts";
+import { getDb } from "./api/server/db.js";
+import { users, events, organizers } from "./api/server/drizzle/schema.js";
 import { eq, inArray } from "drizzle-orm";
 
 async function fixOwnership() {

@@ -1,5 +1,5 @@
-import { getDb } from './server/db';
-import { events } from './server/drizzle/schema';
+import { getDb } from './api/server/db.js';
+import { events } from './api/server/drizzle/schema.js';
 import { eq } from 'drizzle-orm';
 
 async function testUpdate() {
