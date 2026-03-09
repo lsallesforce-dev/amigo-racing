@@ -1,4 +1,3 @@
-import { createExpressApp } from "../server/app.ts";
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 
 let _app: any;
@@ -6,7 +5,9 @@ let _app: any;
 export default async function handler(req: VercelRequest, res: VercelResponse) {
     try {
         if (!_app) {
-            _app = await createExpressApp();
+            // Lazy load to catch any syntax or esbuild reference errors
+            const serverApp = await import("../server/app.ts");
+            _app = await serverApp.createExpressApp();
         }
 
         // Vercel routes all /api/(.*) over to this handler
@@ -16,7 +17,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         return res.status(500).json({
             error: "API Initialization Error",
             message: error?.message || String(error),
-            stack: error?.stack
+            stack: error?.stack,
+            name: error?.name
         });
     }
 }
