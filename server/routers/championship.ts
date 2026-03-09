@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { router, publicProcedure, protectedProcedure } from "../_core/trpc.js";
-import { getDb, getOrganizerContext, getUserById } from "../db";
+import { getDb, getOrganizerContext, getUserById } from "../db.js";
 import {
     championships,
     championshipStages,
@@ -9,10 +9,10 @@ import {
     events,
     organizers,
     users
-} from "../drizzle/schema";
+} from "../drizzle/schema.js";
 import { eq, and, desc, sql, inArray, not, ne } from "drizzle-orm";
 import { TRPCError } from "@trpc/server";
-import { calculateCbaPoints } from "../utils/cbaRules";
+import { calculateCbaPoints } from "../utils/cbaRules.js";
 
 export type CompetitorStandings = {
     name: string;

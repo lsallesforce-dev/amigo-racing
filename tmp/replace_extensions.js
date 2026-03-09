@@ -12,15 +12,26 @@ function walk(dir) {
         } else if (fullPath.endsWith('.ts')) {
             let content = fs.readFileSync(fullPath, 'utf8');
 
-            // Replace static imports: from "./foo.ts" -> from "./foo.js"
-            const newContent = content
-                .replace(/from\s+(['"])(.*)\.ts(['"])/g, 'from $1$2.js$3')
-                // Replace dynamic imports: import("./foo.ts") -> import("./foo.js")
-                .replace(/import\((['"])(.*)\.ts(['"])\)/g, 'import($1$2.js$3)');
+            const newContent = content.replace(/(from\s+|import\()(['"])(\.\.?\/[^'"]+?)(['"])/g, (match, p1, p2, p3, p4) => {
+                // If it ends in a known extension that is NOT .ts, leave it
+                const knownExtensions = ['.js', '.css', '.json', '.png', '.jpg', '.svg', '.mjs', '.cjs'];
+                if (knownExtensions.some(ext => p3.endsWith(ext))) {
+                    return match;
+                }
+
+                let cleanPath = p3;
+                if (cleanPath.endsWith('.ts')) {
+                    cleanPath = cleanPath.slice(0, -3);
+                }
+
+                const replacement = `${p1}${p2}${cleanPath}.js${p4}`;
+                console.log(`  Updated in ${fullPath}: ${match} -> ${replacement}`);
+                return replacement;
+            });
 
             if (content !== newContent) {
                 fs.writeFileSync(fullPath, newContent);
-                console.log(`Updated: ${fullPath}`);
+                console.log(`Updated file: ${fullPath}`);
             }
         }
     }
