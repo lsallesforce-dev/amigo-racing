@@ -494,7 +494,16 @@ export const appRouter = router({
   }),
   events: router({
     list: publicProcedure.query(async () => await db.getAllEvents() || []),
-    listAll: publicProcedure.query(async () => await db.getAllEvents() || []),
+    listAll: publicProcedure.query(async () => {
+      try {
+        const result = await db.getAllEvents();
+        return result || [];
+      } catch (err: any) {
+        console.error("[events.listAll] Database Error Details:", err);
+        console.error(JSON.stringify(err, Object.getOwnPropertyNames(err)));
+        throw err;
+      }
+    }),
     listOpen: publicProcedure.query(async () => await db.getOpenEvents() || []),
     get: publicProcedure
       .input(z.object({ id: z.number() }))
