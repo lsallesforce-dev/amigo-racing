@@ -8,6 +8,12 @@ import cookieParser from "cookie-parser";
 import cors from "cors";
 import { ENV } from "./env.ts";
 
+import { setupSitemapRoute } from "./sitemapRoute.ts";
+import { imageProxyHandler } from "./imageProxy.ts";
+import { qrCodeProxyHandler } from "./qrCodeProxy.ts";
+import pagarmeWebhook from "./pagarme.ts";
+import uploadRoute from "./uploadRoute.ts";
+
 export async function createExpressApp() {
     const app = express();
 
@@ -32,20 +38,11 @@ export async function createExpressApp() {
 
     registerOAuthRoutes(app);
 
-    const sitemapRoute = await import('./sitemapRoute.ts');
-    sitemapRoute.setupSitemapRoute(app);
-
-    const { imageProxyHandler } = await import('./imageProxy.ts');
+    setupSitemapRoute(app);
     app.get('/api/images/:key(*)', imageProxyHandler);
-
-    const { qrCodeProxyHandler } = await import('./qrCodeProxy.ts');
     app.get('/api/qr-code', qrCodeProxyHandler);
-
-    const pagarmeWebhook = await import('./pagarme.ts');
-    app.use('/api/webhooks', pagarmeWebhook.default);
-
-    const uploadRoute = await import('./uploadRoute.ts');
-    app.use('/api', uploadRoute.default);
+    app.use('/api/webhooks', pagarmeWebhook);
+    app.use('/api', uploadRoute);
 
     app.use(
         "/api/trpc",
