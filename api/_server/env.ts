@@ -4,6 +4,8 @@ import path from "path";
 // Carrega o arquivo .env da raiz do projeto
 dotenv.config({ path: path.resolve(process.cwd(), ".env") });
 
+console.log("[Env] Loading configuration...");
+
 export const ENV = {
   // Configurações do App
   appId: process.env.VITE_APP_ID || "amigo-racing",
@@ -36,10 +38,16 @@ export const ENV = {
     : ['http://localhost:3000', 'http://localhost:5173', 'https://amigo-racing.vercel.app'],
 };
 
-console.log("[Env] Variables loaded:", {
-  hasCookieSecret: !!ENV.cookieSecret,
-  hasDatabaseUrl: !!ENV.databaseUrl,
-  secretLength: ENV.cookieSecret?.length ?? 0,
+const mask = (str: string | undefined) => {
+  if (!str || str.length < 8) return "MISSING";
+  return `${str.substring(0, 4)}...${str.substring(str.length - 4)}`;
+};
+
+console.log("[Env] Status Check:", {
+  NODE_ENV: process.env.NODE_ENV,
+  isProd: ENV.isProduction,
+  dbUrl: mask(ENV.databaseUrl),
+  jwtSecret: ENV.cookieSecret === "uma-senha-muito-segura-e-longa-de-32-caracteres" ? "FALLBACK_DETECTED" : "LOADED_OK",
   oAuthUrl: ENV.oAuthServerUrl,
-  isProd: ENV.isProduction
+  allowedOrigins: ENV.allowedOrigins
 });
