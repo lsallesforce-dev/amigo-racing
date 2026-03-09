@@ -44,21 +44,34 @@ let _db: ReturnType<typeof drizzle> | null = null;
 export async function getDb() {
   if (_db) return _db;
 
-  const connectionString = ENV.databaseUrl;
+  let connectionString = ENV.databaseUrl;
   if (!connectionString) {
     console.error("[Database] ERROR: DATABASE_URL is missing in ENV!");
     return null;
   }
 
+  // Remove pgbouncer=true (it's a Prisma-only flag that breaks this driver)
+  let cleanConnectionString = connectionString;
   try {
-    console.log("[Database] Connecting to:", connectionString.split('@')[1] || "unknown");
-    const isLocal = connectionString.includes('localhost') || connectionString.includes('127.0.0.1');
+    const url = new URL(connectionString);
+    if (url.searchParams.has("pgbouncer")) {
+      url.searchParams.delete("pgbouncer");
+      cleanConnectionString = url.toString();
+    }
+  } catch (e) {
+    // If not a valid URL, fallback to simple replace
+    cleanConnectionString = connectionString.replace(/[\?&]pgbouncer=true/g, "");
+  }
 
-    _db = drizzle(postgres(connectionString, {
-      max: 10, // Increased from 1 for better stability
+  try {
+    console.log("[Database] Connecting to:", cleanConnectionString.split('@')[1]?.split('?')[0] || "unknown");
+    const isLocal = cleanConnectionString.includes('localhost') || cleanConnectionString.includes('127.0.0.1');
+
+    _db = drizzle(postgres(cleanConnectionString, {
+      max: 10,
       idle_timeout: 20,
-      connect_timeout: 5, // 5s to throw error before Vercel 10s timeout kills the function
-      ssl: isLocal ? false : 'require', // Supabase requires SSL
+      connect_timeout: 10,
+      ssl: isLocal ? false : 'require',
     }));
   } catch (error) {
     console.warn("[Database] Failed to connect:", error);
