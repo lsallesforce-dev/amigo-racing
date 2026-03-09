@@ -40,8 +40,11 @@ export async function createContext(
         }
       }
     }
-  } catch (error) {
-    console.error('[Context] Erro na autenticação:', error);
+  } catch (error: any) {
+    // Somente loga erros reais (não erros de "sem cookie")
+    if (error?.message !== "Invalid session cookie") {
+      console.error('[Context] Erro crítico na autenticação:', error);
+    }
     user = null;
   }
 

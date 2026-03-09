@@ -13,7 +13,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         }
 
         // Vercel routes all /api/(.*) over to this handler
-        return _app(req, res);
+        _app(req, res);
+        return;
     } catch (error: any) {
         console.error("Vercel API Error:", error);
         return res.status(500).json({
