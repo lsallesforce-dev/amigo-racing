@@ -44,8 +44,18 @@ model User {
   vehicles       Vehicle[]
   registrations  Registration[]
   organizers     Organizer[]
-
+  sessions       Session[]
   createdAt DateTime @default(now())
+}
+
+model Session {
+  id           String   @id @default(uuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
 }
 
 model Vehicle {
