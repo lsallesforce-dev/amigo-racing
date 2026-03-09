@@ -5,19 +5,23 @@ let _app: any;
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
     try {
+        console.log(`[API] Request: ${req.method} ${req.url}`);
         if (!_app) {
+            console.log("[API] Initializing Express app...");
             _app = await createExpressApp();
+            console.log("[API] Express app initialized.");
         }
 
         // Vercel routes all /api/(.*) over to this handler
         return _app(req, res);
     } catch (error: any) {
-        console.error("Vercel API Initialization Error:", error);
+        console.error("Vercel API Error:", error);
         return res.status(500).json({
-            error: "API Initialization Error",
+            error: "API Runtime Error",
             message: error?.message || String(error),
             stack: error?.stack,
-            name: error?.name
+            path: req.url,
+            method: req.method
         });
     }
 }
