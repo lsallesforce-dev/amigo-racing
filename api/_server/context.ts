@@ -1,4 +1,4 @@
-﻿import type { CreateExpressContextOptions } from "@trpc/_server/adapters/express";
+﻿import type { CreateExpressContextOptions } from "@trpc/server/adapters/express";
 import type { User } from "./drizzle/schema.js";
 import { sdk } from "./sdk.js";
 import * as db from "./db.js";

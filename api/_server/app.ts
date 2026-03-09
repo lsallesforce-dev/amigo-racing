@@ -1,6 +1,6 @@
 import "dotenv/config";
 import express from "express";
-import { createExpressMiddleware } from "@trpc/_server/adapters/express";
+import { createExpressMiddleware } from "@trpc/server/adapters/express";
 import { registerOAuthRoutes } from "./oauth.js";
 import { appRouter } from "./routers.js";
 import { createContext } from "./context.js";
