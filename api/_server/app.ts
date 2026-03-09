@@ -32,6 +32,23 @@ export async function createExpressApp() {
         next();
     });
 
+    app.use(express.static(path.join(process.cwd(), "public")));
+
+    // Raw DB Test Route to bypass TRPC and see exact postgres.js error
+    app.get('/api/raw-test', async (req, res) => {
+        try {
+            const dbInstance = await getDb();
+            if (!dbInstance) return res.status(500).json({ error: "No DB Connection" });
+            const events = await dbInstance.select().from(require('./schema.js').events);
+            res.json(events);
+        } catch (err: any) {
+            console.error("RAW DB ERROR", err);
+            res.status(500).json({
+                raw_error: JSON.parse(JSON.stringify(err, Object.getOwnPropertyNames(err)))
+            });
+        }
+    });
+
     app.use(express.json({ limit: "50mb" }));
     app.use(express.urlencoded({ limit: "50mb", extended: true }));
     app.use(cookieParser(ENV.cookieSecret));
