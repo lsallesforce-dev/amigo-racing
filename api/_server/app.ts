@@ -41,7 +41,8 @@ export async function createExpressApp() {
         try {
             const dbInstance = await getDb();
             if (!dbInstance) return res.status(500).json({ error: "No DB Connection" });
-            const events = await dbInstance.select().from(require('./schema.js').events);
+            const schema = await import('./schema.js');
+            const events = await dbInstance.select().from(schema.events);
             res.json(events);
         } catch (err: any) {
             console.error("RAW DB ERROR", err);
