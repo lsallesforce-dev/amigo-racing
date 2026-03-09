@@ -1480,6 +1480,7 @@ export const appRouter = router({
           bankHolderName: input.bankAccount.legal_name,
           bankHolderDocument: input.document,
           pixKey: input.pixKey,
+          phone: input.phone,
           recipientId: recipientId
         };
 
