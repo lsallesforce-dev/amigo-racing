@@ -1,3 +1,4 @@
+import createExpressApp from '../server/app.js';
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 
 let _app: any;
@@ -5,10 +6,7 @@ let _app: any;
 export default async function handler(req: VercelRequest, res: VercelResponse) {
     try {
         if (!_app) {
-            // Lazy load to catch any syntax or esbuild reference errors
-            // Use .js extension even though the source is .ts (ESM Requirement)
-            const serverApp = await import("../server/app.js");
-            _app = await serverApp.createExpressApp();
+            _app = await createExpressApp();
         }
 
         // Vercel routes all /api/(.*) over to this handler

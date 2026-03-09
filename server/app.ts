@@ -54,3 +54,5 @@ export async function createExpressApp() {
 
     return app;
 }
+
+export default createExpressApp;
