@@ -1429,6 +1429,7 @@ export const appRouter = router({
       }),
     setupRecipient: protectedProcedure.input(z.any()).mutation(async ({ ctx, input }) => {
       try {
+        console.log('[setupRecipient] Input:', JSON.stringify(input, null, 2));
         const user = ctx.user;
 
         // 1. Verificar se já existe um recipient com este documento no Pagar.me
@@ -1484,7 +1485,10 @@ export const appRouter = router({
           recipientId: recipientId
         };
 
-        return await db.updateUserBankData(ctx.user.id, dbData);
+        console.log('[setupRecipient] Final dbData to save:', JSON.stringify(dbData, null, 2));
+        const result = await db.updateUserBankData(ctx.user.id, dbData);
+        console.log('[setupRecipient] DB Result:', JSON.stringify(result, null, 2));
+        return result;
       } catch (err: any) {
         console.error('[setupRecipient] Erro:', err.message);
         throw new TRPCError({

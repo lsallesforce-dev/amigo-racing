@@ -1193,12 +1193,14 @@ export async function updateUserBankData(userId: number, data: {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
 
-  await db
+  const result = await db
     .update(users)
     .set(data)
-    .where(eq(users.id, userId));
+    .where(eq(users.id, userId))
+    .returning();
 
-  return { success: true };
+  console.log(`[Database] updateUserBankData for userId ${userId}: updated ${result.length} rows`);
+  return { success: true, updatedRows: result.length };
 }
 
 /**

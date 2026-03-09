@@ -229,6 +229,7 @@ export default function OrganizerPanel() {
     onSuccess: () => {
       toast.success("Configuração bancária salva com sucesso!");
       utils.organizers.myOrganizers.invalidate();
+      utils.auth.me.invalidate(); // Garante que o usuário local receba o novo telefone/recipientId
       setIsBankConfigured(true);
       setIsEditingBank(false);
       // Não limpa o formulário para mostrar os dados cadastrados
