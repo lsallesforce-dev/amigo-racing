@@ -1,0 +1,43 @@
+﻿[Env] Loading configuration...
+[Env] Status Check: {
+  NODE_ENV: undefined,
+  isProd: false,
+  dbUrl: 'post...uire',
+  jwtSecret: 'LOADED_OK',
+  oAuthUrl: 'https://amigo-racing.vercel.app',
+  allowedOrigins: [
+    'http://localhost:3000',
+    'http://localhost:5173',
+    'https://amigo-racing.vercel.app'
+  ]
+}
+Columns in 'events' table:
+[
+  'id',
+  'showRegistrations',
+  'organizerId',
+  'notifyOnNewRegistration',
+  'allowCancellation',
+  'cancellationDeadlineDays',
+  'refundEnabled',
+  'sponsors',
+  'gallery',
+  'navigationFiles',
+  'createdAt',
+  'updatedAt',
+  'startDate',
+  'endDate',
+  'isExternal',
+  'showInListing',
+  'name',
+  'description',
+  'imageUrl',
+  'documents',
+  'location',
+  'city',
+  'state',
+  'status',
+  'terms',
+  'notificationEmail',
+  'externalUrl'
+]

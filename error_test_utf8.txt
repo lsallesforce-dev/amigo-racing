@@ -1,0 +1,47 @@
+﻿node.exe : C:\Users\lsau
+d\Downloads\amigo-racing
+\test_events_fetch.ts:1
+No linha:1 caractere:1
++ & "C:\Program 
+Files\nodejs/node.exe" 
+"C:\Program 
+Files\nodejs/node_mo ...
++ ~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo      
+        : NotSpecified  
+  : (C:\Users\lsaud\.   
+ ..ents_fetch.ts:1:S    
+tring) [], RemoteEx    
+ception
+    + FullyQualifiedErr 
+   orId : NativeComman  
+  dError
+ 
+import { db } from 
+'./api/_server/db.js';
+         ^
+SyntaxError: The 
+requested module 
+'./api/_server/db.js' 
+does not provide an 
+export named 'db'
+    at 
+#asyncInstantiate (node:
+internal/modules/esm/mod
+ule_job:302:21)
+    at async 
+ModuleJob.run (node:inte
+rnal/modules/esm/module_
+job:405:5)
+    at async onImport.tr
+acePromise.__proto__ (no
+de:internal/modules/esm/
+loader:660:26)
+    at async asyncRunEnt
+ryPointWithESMLoader (no
+de:internal/modules/run_
+main:101:5)
+
+Node.js v24.13.0

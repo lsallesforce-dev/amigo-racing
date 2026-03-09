@@ -1,0 +1,10 @@
+﻿Error details:
+{
+  "message": "Failed query: select \"id\", \"name\", \"description\", \"startDate\", \"endDate\", \"location\", \"city\", \"state\", \"status\", \"isExternal\", \"showInListing\", \"showRegistrations\", \"imageUrl\", \"documents\", \"terms\", \"organizerId\", \"notifyOnNewRegistration\", \"notificationEmail\", \"allowCancellation\", \"cancellationDeadlineDays\", \"refundEnabled\", \"sponsors\", \"gallery\", \"navigationFiles\", \"externalUrl\", \"createdAt\", \"updatedAt\" from \"events\" order by \"events\".\"startDate\" desc\nparams: ",
+  "code": -32603,
+  "data": {
+    "code": "INTERNAL_SERVER_ERROR",
+    "httpStatus": 500,
+    "path": "events.listAll"
+  }
+}

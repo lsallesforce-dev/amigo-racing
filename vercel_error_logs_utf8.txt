@@ -1,0 +1,150 @@
+﻿node.exe : Retrieving 
+projectÔÇª
+No linha:1 caractere:1
++ & "C:\Program 
+Files\nodejs/node.exe" 
+"C:\Program 
+Files\nodejs/node_mo ...
++ ~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo      
+        : NotSpecified  
+  : (Retrieving proje   
+ ctÔÇª:String) [], R    
+emoteException
+    + FullyQualifiedErr 
+   orId : NativeComman  
+  dError
+ 
+Fetching logs...
+TIME         HOST       
+              LEVEL     
+                        
+                STATUS  
+MESSAGE                 
+14:51:25.33  
+amigo-racing.vercel.app 
+ info   ╬╗ POST 
+/api/auth/register      
+            500     
+[API] Request: POST 
+/apÔÇª
+14:51:07.71  
+amigo-racing.vercel.app 
+ info   ╬╗ GET /api/trpc
+/events.listAll         
+    500     [API] 
+Request: GET /apiÔÇª
+14:51:06.49  
+amigo-racing.vercel.app 
+ info   ╬╗ GET /api/trpc
+/events.listAll         
+    500     [API] 
+Request: GET /apiÔÇª
+14:48:30.81  
+amigo-racing.vercel.app 
+ info   ╬╗ GET /api/trpc
+/events.listAll         
+    500     [API] 
+Request: GET /apiÔÇª
+14:48:26.52  
+amigo-racing.vercel.app 
+ info   ╬╗ GET /api/trpc
+/events.listAll         
+    500     [API] 
+Request: GET /apiÔÇª
+14:48:24.30  
+amigo-racing.vercel.app 
+ info   ╬╗ GET /api/trpc
+/events.listAll         
+    500     [API] 
+Request: GET /apiÔÇª
+14:48:23.05  
+amigo-racing.vercel.app 
+ info   ╬╗ GET /api/trpc
+/auth.me,events.listAll 
+    207     [API] 
+Request: GET /apiÔÇª
+14:48:20.20  
+amigo-racing.vercel.app 
+ info   ╬╗ GET /api/trpc
+/events.listAll         
+    500     [API] 
+Request: GET /apiÔÇª
+14:48:15.95  
+amigo-racing.vercel.app 
+ info   ╬╗ GET /api/trpc
+/events.listAll         
+    500     [API] 
+Request: GET /apiÔÇª
+14:48:13.65  
+amigo-racing.vercel.app 
+ info   ╬╗ GET /api/trpc
+/events.listAll         
+    500     [API] 
+Request: GET /apiÔÇª
+14:48:12.44  
+amigo-racing.vercel.app 
+ info   ╬╗ GET /api/trpc
+/events.listAll         
+    500     [API] 
+Request: GET /apiÔÇª
+14:46:33.39  
+amigo-racing.vercel.app 
+ info   ╬╗ GET /api/trpc
+/events.listAll         
+    500     [API] 
+Request: GET /apiÔÇª
+14:46:29.18  
+amigo-racing.vercel.app 
+ info   ╬╗ GET /api/trpc
+/events.listAll         
+    500     [API] 
+Request: GET /apiÔÇª
+14:46:27.00  
+amigo-racing.vercel.app 
+ info   ╬╗ GET /api/trpc
+/events.listAll         
+    500     [API] 
+Request: GET /apiÔÇª
+14:46:25.79  
+amigo-racing.vercel.app 
+ info   ╬╗ GET /api/trpc
+/auth.me,events.listAll 
+    207     [API] 
+Request: GET /apiÔÇª
+14:46:18.25  
+amigo-racing.vercel.app 
+ info   ╬╗ GET /api/trpc
+/events.listAll         
+    500     [API] 
+Request: GET /apiÔÇª
+14:46:13.98  
+amigo-racing.vercel.app 
+ info   ╬╗ GET /api/trpc
+/events.listAll         
+    500     [API] 
+Request: GET /apiÔÇª
+14:46:11.75  
+amigo-racing.vercel.app 
+ info   ╬╗ GET /api/trpc
+/events.listAll         
+    500     [API] 
+Request: GET /apiÔÇª
+14:46:10.53  
+amigo-racing.vercel.app 
+ info   ╬╗ GET /api/trpc
+/events.listAll         
+    500     [API] 
+Request: GET /apiÔÇª
+14:43:38.30  
+amigo-racing.vercel.app 
+ info   ╬╗ GET /api/trpc
+/events.listAll         
+    500     [API] 
+Request: GET /apiÔÇª
+Fetched 20 logs for lsal
+lesforce-devs-projects/a
+migo-racing on branch 
+main

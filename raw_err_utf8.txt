@@ -1,0 +1,2 @@
+﻿Status: 500
+Body: {"error":"API Runtime Error","message":"path is not defined","stack":"ReferenceError: path is not defined\n    at createExpressApp (/vercel/path0/api/_server/app.ts:35:28)\n    at Object.handler (/vercel/path0/api/index.ts:11:26)\n    at r (/opt/rust/nodejs.js:2:15580)\n    at Server.<anonymous> (/opt/rust/nodejs.js:2:11600)\n    at process.processTicksAndRejections (node:internal/process/task_queues:103:5)\n    at async Server.<anonymous> (/opt/rust/nodejs.js:17:10190)","path":"/api/raw-test?path=raw-test","method":"GET"}

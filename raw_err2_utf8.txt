@@ -1,0 +1,2 @@
+﻿Status: 500
+Body: {"raw_error":{"stack":"ReferenceError: require is not defined\n    at <anonymous> (/vercel/path0/api/_server/app.ts:44:53)\n    at process.processTicksAndRejections (node:internal/process/task_queues:103:5)","message":"require is not defined"}}

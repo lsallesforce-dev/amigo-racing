@@ -3,3 +3,5 @@ node_modules
 *.mp4
 .AmigoRacingOriginal/
 .temp_extract_2/
+.vercel
+.env*.local
