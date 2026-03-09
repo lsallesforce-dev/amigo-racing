@@ -72,6 +72,7 @@ export async function getDb() {
       idle_timeout: 20,
       connect_timeout: 10,
       ssl: isLocal ? false : 'require',
+      prepare: false,
     }));
   } catch (error) {
     console.warn("[Database] Failed to connect:", error);
