@@ -1,5 +1,5 @@
 import { getDb } from "./api/server/db.js";
-import { users } from "./api/server/drizzle/schema.js";
+import { users } from "./api/server/schema.js";
 import { eq } from "drizzle-orm";
 import { scryptSync, randomBytes } from "crypto";
 import "dotenv/config";

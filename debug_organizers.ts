@@ -1,6 +1,6 @@
 import "dotenv/config";
 import { getDb } from "./api/server/db.js";
-import { organizers } from "./api/server/drizzle/schema.js";
+import { organizers } from "./api/server/schema.js";
 
 async function debug() {
     const db = await getDb();

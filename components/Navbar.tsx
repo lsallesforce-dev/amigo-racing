@@ -2,7 +2,7 @@ import { useAuth } from "@/_core/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { Link } from "wouter";
 import { Menu, X, Home, LayoutDashboard, Settings, User, LogOut, Shield } from "lucide-react";
-import { getLoginUrl } from "@/const";
+import { getLoginUrl } from "@/api/server/const";
 import {
     Sheet,
     SheetContent,

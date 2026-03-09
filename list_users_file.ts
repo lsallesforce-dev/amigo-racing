@@ -1,6 +1,6 @@
 import "dotenv/config";
 import { getDb } from "./api/server/db.js";
-import { users } from "./api/server/drizzle/schema.js";
+import { users } from "./api/server/schema.js";
 import fs from "fs";
 import { desc } from "drizzle-orm";
 

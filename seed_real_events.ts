@@ -1,6 +1,6 @@
 
 import { getDb } from "./api/server/db.js";
-import { events, users, organizers } from "./api/server/drizzle/schema.js";
+import { events, users, organizers } from "./api/server/schema.js";
 import { eq, and } from "drizzle-orm";
 
 async function seed() {

@@ -4,7 +4,7 @@ import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
 import { dirname } from "path";
-import { COOKIE_NAME } from "../const.js";
+import { COOKIE_NAME } from "./const.js";
 import { getSessionCookieOptions } from "./cookies.js";
 import { systemRouter } from "./_core/systemRouter.js";
 import { publicProcedure, protectedProcedure, router } from "./_core/trpc.js";
