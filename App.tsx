@@ -55,7 +55,7 @@ function Router() {
 
 function App() {
   return (
-    <ThemeProvider defaultTheme="system">
+    <ThemeProvider defaultTheme="dark">
       <TooltipProvider>
         <Toaster />
         <Router />

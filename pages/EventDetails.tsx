@@ -719,7 +719,7 @@ export default function EventDetails() {
                   <div className="space-y-4">
                     <h3 className="font-semibold text-lg">Dados do Piloto *</h3>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                      鼓                      <div className="space-y-2">
+                      <div className="space-y-2">
                         <Label htmlFor="pilot_name">Nome Completo *</Label>
                         <Input
                           id="pilot_name"
