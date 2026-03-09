@@ -1707,7 +1707,7 @@ export const appRouter = router({
 
           // Fallback Plan B: Save locally to public/uploads if possible
           try {
-            const publicUploadsDir = path.resolve(__dirname, "..", "public", "uploads");
+            const publicUploadsDir = path.resolve(process.cwd(), "public", "uploads");
             if (!fs.existsSync(publicUploadsDir)) {
               fs.mkdirSync(publicUploadsDir, { recursive: true });
             }

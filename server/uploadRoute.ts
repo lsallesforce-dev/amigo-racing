@@ -7,8 +7,6 @@ import { dirname } from "path";
 import { sdk } from "./sdk.ts";
 import * as storage from "./storage.ts";
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
 
 const router = Router();
 const upload = multer({
@@ -44,7 +42,7 @@ router.post("/upload", upload.single("file"), async (req, res) => {
 
             // Fallback Plan B: Save locally to public/uploads if possible
             try {
-                const publicUploadsDir = path.resolve(__dirname, "..", "public", "uploads");
+                const publicUploadsDir = path.resolve(process.cwd(), "public", "uploads");
                 if (!fs.existsSync(publicUploadsDir)) {
                     fs.mkdirSync(publicUploadsDir, { recursive: true });
                 }
