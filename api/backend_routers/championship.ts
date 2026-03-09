@@ -9,7 +9,7 @@ import {
     events,
     organizers,
     users
-} from "../drizzle/schema.js";
+} from "../schema.js";
 import { eq, and, desc, sql, inArray, not, ne } from "drizzle-orm";
 import { TRPCError } from "@trpc/server";
 import { calculateCbaPoints } from "../utils/cbaRules.js";

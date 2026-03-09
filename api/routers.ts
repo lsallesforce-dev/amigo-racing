@@ -4,7 +4,7 @@ import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
 import { dirname } from "path";
-import { COOKIE_NAME } from "../../const.js";
+import { COOKIE_NAME } from "../const.js";
 import { getSessionCookieOptions } from "./cookies.js";
 import { systemRouter } from "./_core/systemRouter.js";
 import { publicProcedure, protectedProcedure, router } from "./_core/trpc.js";
@@ -12,11 +12,11 @@ import { TRPCError } from '@trpc/server';
 import { z } from "zod";
 import * as db from "./db.js";
 import { getDb } from "./db.js";
-import { products, productOrders, organizerMembers, registrations, events, payments, championshipStages, championshipRequests, users, championships } from "./drizzle/schema.js";
+import { products, productOrders, organizerMembers, registrations, events, payments, championshipStages, championshipRequests, users, championships } from "./schema.js";
 import { eq, sql, and, inArray, ne } from "drizzle-orm";
 import { ENV } from "./env.js";
 import { adminProcedure as baseAdminProcedure } from "./_core/trpc.js";
-import { championshipRouter, calculateChampionshipStandings } from "./routers/championship.js";
+import { championshipRouter, calculateChampionshipStandings } from "./backend_routers/championship.js";
 
 
 const integerSchema = z.number().int();

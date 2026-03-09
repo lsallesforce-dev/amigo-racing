@@ -35,7 +35,7 @@ import {
   InsertChampionshipStage,
   championshipResults,
   InsertChampionshipResult
-} from "./drizzle/schema.js";
+} from "./schema.js";
 import { ENV } from './env.js';
 import postgres from "postgres";
 

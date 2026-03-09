@@ -1,6 +1,6 @@
 ﻿import type { Express } from "express";
 import { sdk } from "./sdk.js";
-import { COOKIE_NAME, ONE_YEAR_MS } from "../../const.js";
+import { COOKIE_NAME, ONE_YEAR_MS } from "../const.js";
 import { getSessionCookieOptions } from "./cookies.js";
 import { getUserByOpenId, upsertUser } from "./db.js";
 import { randomBytes, scryptSync, timingSafeEqual } from "crypto";

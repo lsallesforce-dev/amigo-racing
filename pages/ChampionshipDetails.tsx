@@ -22,7 +22,7 @@ import { ptBR } from "date-fns/locale";
 import Navbar from "@/components/Navbar";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
-import { calculateCbaPoints } from "@/api/_server/utils/cbaRules.js";
+import { calculateCbaPoints } from "@/api/utils/cbaRules.js";
 import { PerformanceChart } from "@/components/PerformanceChart";
 import { Switch } from "@/components/ui/switch";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
