@@ -499,9 +499,12 @@ export const appRouter = router({
         const result = await db.getAllEvents();
         return result || [];
       } catch (err: any) {
-        console.error("[events.listAll] Database Error Details:", err);
-        console.error(JSON.stringify(err, Object.getOwnPropertyNames(err)));
-        throw err;
+        const errDetails = err.message + ' | stack: ' + err.stack + ' | json: ' + JSON.stringify(err, Object.getOwnPropertyNames(err));
+        console.error("[events.listAll] Error:", errDetails);
+        throw new TRPCError({
+          code: 'INTERNAL_SERVER_ERROR',
+          message: errDetails
+        });
       }
     }),
     listOpen: publicProcedure.query(async () => await db.getOpenEvents() || []),
