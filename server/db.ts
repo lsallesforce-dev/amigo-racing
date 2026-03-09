@@ -52,10 +52,13 @@ export async function getDb() {
 
   try {
     console.log("[Database] Connecting to:", connectionString.split('@')[1] || "unknown");
+    const isLocal = connectionString.includes('localhost') || connectionString.includes('127.0.0.1');
+
     _db = drizzle(postgres(connectionString, {
       max: 10, // Increased from 1 for better stability
       idle_timeout: 20,
-      connect_timeout: 10,
+      connect_timeout: 5, // 5s to throw error before Vercel 10s timeout kills the function
+      ssl: isLocal ? false : 'require', // Supabase requires SSL
     }));
   } catch (error) {
     console.warn("[Database] Failed to connect:", error);
