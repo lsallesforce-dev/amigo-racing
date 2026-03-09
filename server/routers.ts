@@ -18,8 +18,6 @@ import { ENV } from "./env.ts";
 import { adminProcedure as baseAdminProcedure } from "./_core/trpc.ts";
 import { championshipRouter, calculateChampionshipStandings } from "./routers/championship.ts";
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
 
 const integerSchema = z.number().int();
 
