@@ -1136,11 +1136,31 @@ export const appRouter = router({
 
             category = await db.getCategoryById(registration.categoryId) as any;
 
-            // Navigate categories/events to find the actual owner/organizer
+            // Navigate event → organizer → user to get the recipientId
             organizerId = registrationEvent.organizerId;
+            console.log(`[Split Debug] eventId=${registration.eventId}, organizerId=${organizerId}`);
+
             const organizer = organizerId ? await db.getOrganizerById(organizerId) as any : null;
-            const organizerUser = organizer ? await db.getUserByOpenId(organizer.ownerId) as any : null;
-            organizerRecipientId = organizerUser?.recipientId;
+            console.log(`[Split Debug] Organizer found:`, organizer ? `id=${organizer.id}, ownerId="${organizer.ownerId}"` : 'NULL ⚠️');
+
+            if (organizer?.ownerId) {
+              // Primary: lookup by openId (which is the email used at login)
+              const organizerUser = await db.getUserByOpenId(organizer.ownerId) as any;
+              console.log(`[Split Debug] OrganizerUser (by openId):`, organizerUser ? `id=${organizerUser.id}, email="${organizerUser.email}", recipientId="${organizerUser.recipientId || 'NULL'}"` : 'NOT FOUND ⚠️');
+              organizerRecipientId = organizerUser?.recipientId || undefined;
+
+              // Fallback: if openId lookup found user but no recipientId, try by numeric id if ownerId is numeric
+              if (!organizerRecipientId && !isNaN(Number(organizer.ownerId))) {
+                const userById = await db.getUserById(Number(organizer.ownerId)) as any;
+                console.log(`[Split Debug] OrganizerUser (by numeric id fallback):`, userById ? `recipientId="${userById.recipientId || 'NULL'}"` : 'NOT FOUND');
+                organizerRecipientId = userById?.recipientId || undefined;
+              }
+            }
+
+            console.log(`[Split Debug] Final organizerRecipientId: "${organizerRecipientId || 'UNDEFINED — will use platform fallback'}"`);
+            if (!organizerRecipientId) {
+              console.warn(`[Split Debug] ⚠️ No recipientId for organizer. Fallback to platform ID. urgentFix: run setupRecipient for organizer ownerId="${organizer?.ownerId}"`);
+            }
 
             descriptionStr = `Inscrição Evento: ${registrationEvent?.name || 'Evento'}`;
 
@@ -1176,8 +1196,10 @@ export const appRouter = router({
 
             const productOwnerId = product.userId;
             organizerId = productOwnerId;
+            console.log(`[Split Debug] Standalone order. productOwnerId=${productOwnerId}`);
             const organizerUser = await db.getUserById(productOwnerId) as any;
-            organizerRecipientId = organizerUser?.recipientId;
+            console.log(`[Split Debug] OrganizerUser (standalone):`, organizerUser ? `email="${organizerUser.email}", recipientId="${organizerUser.recipientId || 'NULL ⚠️'}"` : 'NOT FOUND ⚠️');
+            organizerRecipientId = organizerUser?.recipientId || undefined;
 
             event = standaloneOrder.eventId ? await db.getEventById(standaloneOrder.eventId) : null;
             descriptionStr = `Pedido Avulso: ${product.name} (Qtd: ${standaloneOrder.quantity})`;
@@ -1199,9 +1221,13 @@ export const appRouter = router({
           }
 
           const platformRecipientId = ENV.pagarmePlatformRecipientId;
-          const split = [];
+          const split: any[] = [];
 
-          console.log(`[createPayment] Recipient Search: OrganizerUID=${organizerId || 'N/A'}, OrganizerRecipientID=${organizerRecipientId || 'NULL'}, PlatformRecipientID=${platformRecipientId || 'NULL'}`);
+          console.log(`[createPayment] ========== SPLIT DECISION ==========`);
+          console.log(`[createPayment] organizerRecipientId = "${organizerRecipientId || 'NULL'}"`);
+          console.log(`[createPayment] platformRecipientId  = "${platformRecipientId || 'NULL'}"`);
+          console.log(`[createPayment] totalAmountCents     = ${totalAmountCents}`);
+          console.log(`[createPayment] ====================================`);
 
           // Split logic: Prioritize Organizer (90%), fallback to Platform (10%), or throw error.
           if (organizerRecipientId && platformRecipientId && organizerRecipientId !== platformRecipientId) {
