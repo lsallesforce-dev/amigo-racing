@@ -1198,8 +1198,8 @@ export const appRouter = router({
             };
           }
 
-          const split = [];
           const platformRecipientId = ENV.pagarmePlatformRecipientId;
+          const split = [];
 
           console.log(`[createPayment] Recipient Search: OrganizerUID=${organizerId || 'N/A'}, OrganizerRecipientID=${organizerRecipientId || 'NULL'}, PlatformRecipientID=${platformRecipientId || 'NULL'}`);
 
