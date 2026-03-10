@@ -1121,6 +1121,7 @@ export const appRouter = router({
           let product: any = null;
           let totalAmountCents = 0;
           let organizerRecipientId: string | undefined;
+          let organizerId: any = null;
           let descriptionStr = "";
 
           if (input.registrationId) {
@@ -1136,7 +1137,7 @@ export const appRouter = router({
             category = await db.getCategoryById(registration.categoryId) as any;
 
             // Navigate categories/events to find the actual owner/organizer
-            const organizerId = registrationEvent.organizerId;
+            organizerId = registrationEvent.organizerId;
             const organizer = organizerId ? await db.getOrganizerById(organizerId) as any : null;
             const organizerUser = organizer ? await db.getUserByOpenId(organizer.ownerId) as any : null;
             organizerRecipientId = organizerUser?.recipientId;
@@ -1174,6 +1175,7 @@ export const appRouter = router({
             product = results[0].product;
 
             const productOwnerId = product.userId;
+            organizerId = productOwnerId;
             const organizerUser = await db.getUserById(productOwnerId) as any;
             organizerRecipientId = organizerUser?.recipientId;
 
@@ -1199,8 +1201,9 @@ export const appRouter = router({
           const split = [];
           const platformRecipientId = ENV.pagarmePlatformRecipientId;
 
-          // Split logic: Prioritize Organizer, fallback to Platform, or throw error.
-          // This prevents unintended payments to the master account associated with the API Key.
+          console.log(`[createPayment] Recipient Search: OrganizerUID=${organizerId || 'N/A'}, OrganizerRecipientID=${organizerRecipientId || 'NULL'}, PlatformRecipientID=${platformRecipientId || 'NULL'}`);
+
+          // Split logic: Prioritize Organizer (90%), fallback to Platform (10%), or throw error.
           if (organizerRecipientId && platformRecipientId && organizerRecipientId !== platformRecipientId) {
             // Split: 90% Organizer, 10% Platform
             const platformFeePercentage = 10;
@@ -1228,7 +1231,7 @@ export const appRouter = router({
                 liable: false
               }
             });
-            console.log(`[createPayment] Split Configured: Event=${event?.id || 'N/A'} -> Organizer=${organizerRecipientId} (90%), Platform=${platformRecipientId} (10%)`);
+            console.log(`[createPayment] DYNAMIC SPLIT CONFIGURED: 90% -> ${organizerRecipientId}, 10% -> ${platformRecipientId}`);
           } else if (organizerRecipientId || platformRecipientId) {
             // Solo payment to whoever is available (Organizer takes priority)
             const finalRecipientId = organizerRecipientId || platformRecipientId;
@@ -1242,11 +1245,10 @@ export const appRouter = router({
                 liable: true
               }
             });
-            console.log(`[createPayment] Solo Payment Configured: Event=${event?.id || 'N/A'} -> Recipient=${finalRecipientId} (100%)`);
+            console.log(`[createPayment] SOLO PAYMENT CONFIGURED: 100% -> ${finalRecipientId}`);
           } else {
-            // CRITICAL: No recipient found. Throw error to prevent master account leakage.
-            console.error('[createPayment] Error: No valid recipient (Organizer or Platform) configured.');
-            throw new Error("Transação não permitida: O organizador do evento não possui dados de pagamento configurados e não há recebedor de plataforma definido.");
+            console.error('[createPayment] CRITICAL ERROR: No valid recipient (Organizer or Platform) found.');
+            throw new Error("Transação interrompida: Organizador sem dados de pagamento e sem recebedor de plataforma configurado.");
           }
 
           const paymentPayload: any = {
@@ -1429,71 +1431,77 @@ export const appRouter = router({
       }),
     setupRecipient: protectedProcedure.input(z.any()).mutation(async ({ ctx, input }) => {
       try {
-        console.log('[setupRecipient] Input:', JSON.stringify(input, null, 2));
+        console.log('[setupRecipient] Initiating for User:', ctx.user.id, 'Email:', ctx.user.email);
+        console.log('[setupRecipient] Input Data:', JSON.stringify(input, null, 2));
         const user = ctx.user;
 
-        // 1. Verificar se já existe um recipient com este documento no Pagar.me
+        // 1. Check for existing recipient by document to avoid duplicates
         let recipientId = "";
-        const existingRecipient = await pagarme.getRecipientByDocument(input.document);
+        const cleanDoc = String(input.document).replace(/\D/g, '');
+        console.log('[setupRecipient] Searching Pagar.me for document:', cleanDoc);
+        const existingRecipient = await pagarme.getRecipientByDocument(cleanDoc);
 
         if (existingRecipient && existingRecipient.status !== 'refused') {
-          console.log('[Pagar.me] Recipient já existe e está ativo:', existingRecipient.id, '- Status:', existingRecipient.status);
+          console.log('[setupRecipient] Active recipient found in Pagar.me:', existingRecipient.id, '- Status:', existingRecipient.status);
           recipientId = existingRecipient.id;
         } else {
           if (existingRecipient?.status === 'refused') {
-            console.log('[Pagar.me] Recipient existente está com status refused, criando novo...');
+            console.log('[setupRecipient] Existing recipient is "refused". Creating a fresh one...');
           } else {
-            console.log('[Pagar.me] Criando novo recipient para:', input.document);
+            console.log('[setupRecipient] No existing active recipient found. Creating new one...');
           }
 
           const recipientData = {
             name: input.bankAccount.legal_name || user.name || 'Organizador',
             email: user.email,
-            document: input.document,
-            type: input.document.length > 11 ? 'company' : 'individual',
-            phone: input.phone || '11999999999',
+            document: cleanDoc,
+            type: cleanDoc.length > 11 ? 'corporation' : 'individual',
+            phone: String(input.phone || '11999999999').replace(/\D/g, ''),
             bankAccount: {
               holderName: input.bankAccount.legal_name || user.name || 'Organizador',
-              holderType: input.document.length > 11 ? 'company' : 'individual',
-              holderDocument: input.document,
+              holderType: cleanDoc.length > 11 ? 'corporation' : 'individual',
+              holderDocument: cleanDoc,
               bank: input.bankAccount.bank_code,
               branchNumber: input.bankAccount.agencia,
-              branchCheckDigit: input.bankAccount.agencia_dv,
+              branchCheckDigit: input.bankAccount.agencia_dv || '',
               accountNumber: input.bankAccount.conta,
-              accountCheckDigit: input.bankAccount.conta_dv,
-              type: input.bankAccount.type === 'conta_corrente' ? 'checking' : 'savings'
+              accountCheckDigit: input.bankAccount.conta_dv || '',
+              type: (input.bankAccount.type === 'conta_corrente' || input.bankAccount.type === 'checking') ? 'checking' : 'savings'
             }
           };
 
+          console.log('[setupRecipient] Pagar.me Payload Draft:', JSON.stringify(recipientData, null, 2));
           const result = await pagarme.createRecipient(recipientData as any);
           recipientId = result.recipientId;
+          console.log('[setupRecipient] New Recipient Created Successfully:', recipientId);
         }
 
-        // 3. Salvar no banco de dados local
+        // 3. Persist to Local Database
         const dbData = {
-          bankDocument: input.document,
+          bankDocument: cleanDoc,
           bankCode: input.bankAccount.bank_code,
           bankAgency: input.bankAccount.agencia,
-          bankAgencyDv: input.bankAccount.agencia_dv,
+          bankAgencyDv: input.bankAccount.agencia_dv || '',
           bankAccount: input.bankAccount.conta,
-          bankAccountDv: input.bankAccount.conta_dv,
+          bankAccountDv: input.bankAccount.conta_dv || '',
           bankAccountType: input.bankAccount.type,
           bankHolderName: input.bankAccount.legal_name,
-          bankHolderDocument: input.document,
+          bankHolderDocument: cleanDoc,
           pixKey: input.pixKey,
           phone: input.phone,
           recipientId: recipientId
         };
 
-        console.log('[setupRecipient] Final dbData to save:', JSON.stringify(dbData, null, 2));
-        const result = await db.updateUserBankData(ctx.user.id, dbData);
-        console.log('[setupRecipient] DB Result:', JSON.stringify(result, null, 2));
-        return result;
+        console.log('[setupRecipient] Saving to Database for User ID:', ctx.user.id);
+        const updateResult = await db.updateUserBankData(ctx.user.id, dbData);
+        console.log('[setupRecipient] Database Update Result:', JSON.stringify(updateResult, null, 2));
+
+        return { success: true, recipientId };
       } catch (err: any) {
-        console.error('[setupRecipient] Erro:', err.message);
+        console.error('[setupRecipient] CRITICAL ERROR:', err.message);
         throw new TRPCError({
           code: 'INTERNAL_SERVER_ERROR',
-          message: err.message || 'Erro ao sincronizar com Pagar.me'
+          message: err.message || 'Erro ao sincronizar dados bancários com Pagar.me'
         });
       }
     }),
