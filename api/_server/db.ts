@@ -1209,35 +1209,6 @@ export async function updateUserRecipientId(userId: number, recipientId: string,
 }
 
 
-/**
- * Update user bank and contact data for Pagar.me recipients
- */
-export async function updateUserBankData(userId: number, data: {
-  bankDocument?: string;
-  bankCode?: string;
-  bankAgency?: string;
-  bankAgencyDv?: string;
-  bankAccount?: string;
-  bankAccountDv?: string;
-  bankAccountType?: string;
-  bankHolderName?: string;
-  bankHolderDocument?: string;
-  pixKey?: string;
-  phone?: string;
-  recipientId?: string;
-}) {
-  const db = await getDb();
-  if (!db) throw new Error("Database not available");
-
-  const result = await db
-    .update(users)
-    .set(data)
-    .where(eq(users.id, userId))
-    .returning();
-
-  console.log(`[Database] updateUserBankData for userId ${userId}: updated ${result.length} rows`);
-  return { success: true, updatedRows: result.length };
-}
 
 /**
  * Update registration transactionId (Pagar.me transaction ID)
@@ -1270,21 +1241,6 @@ export async function getUserByRecipientId(recipientId: string) {
   return result[0] || null;
 }
 
-/**
- * Get registration by transactionId
- */
-export async function getRegistrationByTransactionId(transactionId: string) {
-  const db = await getDb();
-  if (!db) return null;
-
-  const result = await db
-    .select()
-    .from(registrations)
-    .where(eq(registrations.transactionId, transactionId))
-    .limit(1);
-
-  return result[0] || null;
-}
 
 /**
  * Update user role by openId
