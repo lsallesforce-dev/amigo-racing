@@ -374,21 +374,45 @@ export async function getPayables(params: {
 router.post('/pagarme', async (req, res) => {
   try {
     const event = req.body;
-    console.log('[Webhook Pagar.me] Evento recebido:', event.type);
+    console.log('[Webhook Pagar.me] Evento recebido:', event.type, 'ID:', event.id);
 
-    if (event.type === 'transaction.paid') {
-      const transaction = event.data;
-      const registration = await db.getRegistrationByTransactionId(transaction.id);
+    // No Pagar.me v5, 'charge.paid' e 'order.paid' são os eventos principais de sucesso
+    if (event.type === 'charge.paid' || event.type === 'order.paid' || event.type === 'transaction.paid') {
+      const data = event.data;
+      // O ID que salvamos no banco (transactionId) é o charge.id ou order.id
+      const id = data.id;
 
+      console.log(`[Webhook Pagar.me] Processando pagamento aprovado para ID: ${id}`);
+
+      // 1. Tentar encontrar uma inscrição (Event Registration)
+      const registration = await db.getRegistrationByTransactionId(id);
       if (registration) {
         await db.updateRegistration(registration.id, { status: 'paid' });
-        console.log('[Webhook Pagar.me] InscriÃ§Ã£o atualizada para paga:', registration.id);
+
+        // Se houver um registro na tabela payments, marcar como confirmado também
+        const payment = await db.getPaymentByRegistrationId(registration.id);
+        if (payment) {
+          await db.updatePaymentStatus(payment.id, 'confirmed');
+        }
+
+        console.log('[Webhook Pagar.me] Inscrição atualizada para PAGA:', registration.id);
+        return res.status(200).json({ received: true, type: 'registration', id: registration.id });
       }
+
+      // 2. Tentar encontrar um pedido da loja (Standalone Order)
+      const order = await db.getOrderByTransactionId(id);
+      if (order) {
+        await db.updateOrderStatus(order.id, 'PAID');
+        console.log('[Webhook Pagar.me] Pedido da loja atualizado para PAGO:', order.id);
+        return res.status(200).json({ received: true, type: 'order', id: order.id });
+      }
+
+      console.warn(`[Webhook Pagar.me] Nenhum registro encontrado para o ID: ${id}`);
     }
 
     return res.status(200).json({ received: true });
   } catch (error) {
-    console.error('[Webhook Pagar.me] Erro:', error);
+    console.error('[Webhook Pagar.me] Erro crítico no processamento:', error);
     return res.status(500).json({ error: 'Internal server error' });
   }
 });

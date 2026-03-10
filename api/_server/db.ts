@@ -572,6 +572,29 @@ export async function updateRegistration(id: number, data: Partial<InsertRegistr
   return await db.update(registrations).set(data).where(eq(registrations.id, id));
 }
 
+export async function getRegistrationByTransactionId(transactionId: string) {
+  const db = await getDb();
+  if (!db) return undefined;
+
+  const result = await db.select().from(registrations).where(eq(registrations.transactionId, transactionId)).limit(1);
+  return result.length > 0 ? result[0] : undefined;
+}
+
+export async function getOrderByTransactionId(transactionId: string) {
+  const db = await getDb();
+  if (!db) return undefined;
+
+  const result = await db.select().from(productOrders).where(eq(productOrders.transactionId, transactionId)).limit(1);
+  return result.length > 0 ? result[0] : undefined;
+}
+
+export async function updateOrderStatus(id: string, status: string) {
+  const db = await getDb();
+  if (!db) throw new Error("Database available");
+
+  return await db.update(productOrders).set({ status, updatedAt: new Date() }).where(eq(productOrders.id, id));
+}
+
 export async function deleteRegistration(id: number) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
@@ -768,7 +791,20 @@ export async function updateUserPagarmeCustomerId(userId: number, pagarmeCustome
   const db = await getDb();
   if (!db) throw new Error("Database not available");
 
-  await db.update(users).set({ pagarmeCustomerId }).where(eq(users.id, userId));
+  await db.update(users).set({ pagarmeCustomerId, updatedAt: new Date() }).where(eq(users.id, userId));
+}
+
+export async function updateUserBankData(userId: number, data: any) {
+  const dbClient = await getDb();
+  if (!dbClient) throw new Error("Database not available");
+
+  return await dbClient.update(users)
+    .set({
+      ...data,
+      updatedAt: new Date()
+    })
+    .where(eq(users.id, userId))
+    .returning();
 }
 
 
