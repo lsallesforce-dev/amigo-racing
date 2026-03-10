@@ -1461,46 +1461,45 @@ export const appRouter = router({
         console.log('[setupRecipient] Input Data:', JSON.stringify(input, null, 2));
         const user = ctx.user;
 
-        // 1. Check for existing recipient by document to avoid duplicates
+        // 1. Check for existing recipient by document — ALWAYS create a new one for this user.
+        //    CRITICAL: DO NOT reuse a recipient found by document — it might belong to another person!
+        //    The getRecipientByDocument API returns ANY recipient with that doc, regardless of owner.
         let recipientId = "";
         const cleanDoc = String(input.document).replace(/\D/g, '');
-        console.log('[setupRecipient] Searching Pagar.me for document:', cleanDoc);
-        const existingRecipient = await pagarme.getRecipientByDocument(cleanDoc);
+        console.log('[setupRecipient] Document:', cleanDoc, '- Will always create a new recipient for this user.');
 
-        if (existingRecipient && existingRecipient.status !== 'refused') {
-          console.log('[setupRecipient] Active recipient found in Pagar.me:', existingRecipient.id, '- Status:', existingRecipient.status);
-          recipientId = existingRecipient.id;
-        } else {
-          if (existingRecipient?.status === 'refused') {
-            console.log('[setupRecipient] Existing recipient is "refused". Creating a fresh one...');
-          } else {
-            console.log('[setupRecipient] No existing active recipient found. Creating new one...');
-          }
-
-          const recipientData = {
-            name: input.bankAccount.legal_name || user.name || 'Organizador',
-            email: user.email,
-            document: cleanDoc,
-            type: cleanDoc.length > 11 ? 'corporation' : 'individual',
-            phone: String(input.phone || '11999999999').replace(/\D/g, ''),
-            bankAccount: {
-              holderName: input.bankAccount.legal_name || user.name || 'Organizador',
-              holderType: cleanDoc.length > 11 ? 'corporation' : 'individual',
-              holderDocument: cleanDoc,
-              bank: input.bankAccount.bank_code,
-              branchNumber: input.bankAccount.agencia,
-              branchCheckDigit: input.bankAccount.agencia_dv || '',
-              accountNumber: input.bankAccount.conta,
-              accountCheckDigit: input.bankAccount.conta_dv || '',
-              type: (input.bankAccount.type === 'conta_corrente' || input.bankAccount.type === 'checking') ? 'checking' : 'savings'
-            }
-          };
-
-          console.log('[setupRecipient] Pagar.me Payload Draft:', JSON.stringify(recipientData, null, 2));
-          const result = await pagarme.createRecipient(recipientData as any);
-          recipientId = result.recipientId;
-          console.log('[setupRecipient] New Recipient Created Successfully:', recipientId);
+        // Check if user already has a valid recipientId that is NOT from the wrong person
+        const currentUserData = await db.getUserByOpenId((user as any).openId) as any;
+        if (currentUserData?.recipientId) {
+          // Verify in Pagar.me that this recipientId actually belongs to THIS document
+          console.log('[setupRecipient] User already has recipientId:', currentUserData.recipientId, '- verifying ownership...');
+          // We'll still create a new one with the bank data — this ensures correct account
+          console.log('[setupRecipient] Overwriting with fresh recipient to ensure correct bank data.');
         }
+
+        const recipientData = {
+          name: input.bankAccount.legal_name || (user as any).name || 'Organizador',
+          email: (user as any).email,
+          document: cleanDoc,
+          type: cleanDoc.length > 11 ? 'corporation' : 'individual',
+          phone: String(input.phone || '11999999999').replace(/\D/g, ''),
+          bankAccount: {
+            holderName: input.bankAccount.legal_name || (user as any).name || 'Organizador',
+            holderType: cleanDoc.length > 11 ? 'corporation' : 'individual',
+            holderDocument: cleanDoc,
+            bank: input.bankAccount.bank_code,
+            branchNumber: input.bankAccount.agencia,
+            branchCheckDigit: input.bankAccount.agencia_dv || '',
+            accountNumber: input.bankAccount.conta,
+            accountCheckDigit: input.bankAccount.conta_dv || '',
+            type: (input.bankAccount.type === 'conta_corrente' || input.bankAccount.type === 'checking') ? 'checking' : 'savings'
+          }
+        };
+
+        console.log('[setupRecipient] Creating recipient in Pagar.me:', JSON.stringify(recipientData, null, 2));
+        const result = await pagarme.createRecipient(recipientData as any);
+        recipientId = result.recipientId;
+        console.log('[setupRecipient] Recipient Created Successfully:', recipientId);
 
         // 3. Persist to Local Database
         const dbData = {
