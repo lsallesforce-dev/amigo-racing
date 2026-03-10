@@ -105,7 +105,94 @@ const financeRouter = router({
         throw new TRPCError({ code: 'FORBIDDEN', message: 'Sem permissão para financeiro' });
       }
       return await db.updateTransactionStatus(input.id, "COMPLETED");
-    })
+    }),
+
+  // Retorna o saldo Pagar.me do organizador logado
+  getPagarmeBalance: organizerProcedure
+    .query(async ({ ctx }) => {
+      const user = ctx.user as any;
+      const recipientId = user.recipientId;
+
+      if (!recipientId) {
+        return { totalBalance: 0, availableBalance: 0, waitingBalance: 0, hasRecipient: false };
+      }
+
+      try {
+        const now = new Date();
+        const result = await pagarme.getPayables({ recipientId, size: 100 });
+        const payables = result.data || [];
+
+        // Saldo total = soma de todos os payables com status 'waiting_funds' ou 'prepaid'
+        const totalBalance = payables
+          .filter((p: any) => p.status === 'waiting_funds' || p.status === 'prepaid' || p.status === 'paid')
+          .reduce((sum: number, p: any) => sum + (p.net_amount || 0), 0);
+
+        // Disponível para saque = payables que já passaram da data de liquidação
+        const availableBalance = payables
+          .filter((p: any) => {
+            const paymentDate = p.payment_date ? new Date(p.payment_date) : null;
+            return (p.status === 'waiting_funds' || p.status === 'prepaid') && paymentDate && paymentDate <= now;
+          })
+          .reduce((sum: number, p: any) => sum + (p.net_amount || 0), 0);
+
+        const waitingBalance = totalBalance - availableBalance;
+
+        return {
+          totalBalance: Math.round(totalBalance) / 100, // centavos -> reais
+          availableBalance: Math.round(availableBalance) / 100,
+          waitingBalance: Math.round(waitingBalance) / 100,
+          hasRecipient: true,
+        };
+      } catch (err: any) {
+        console.error('[finance.getPagarmeBalance] Erro:', err.message);
+        return { totalBalance: 0, availableBalance: 0, waitingBalance: 0, hasRecipient: true, error: err.message };
+      }
+    }),
+
+  // Solicita transferência (payout) para o organizador
+  requestPayout: organizerProcedure
+    .input(z.object({
+      amount: z.number().positive('Valor deve ser positivo').optional(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const user = ctx.user as any;
+      const recipientId = user.recipientId;
+
+      if (!recipientId) {
+        throw new TRPCError({ code: 'BAD_REQUEST', message: 'Você precisa configurar seus dados bancários antes de solicitar uma transferência.' });
+      }
+
+      try {
+        const apiKey = ENV.pagarmeApiKey;
+        const apiUrl = ENV.pagarmeApiUrl;
+        const authHeader = `Basic ${Buffer.from(`${apiKey}:`).toString('base64')}`;
+
+        const withdrawBody: any = { type: 'ted' };
+        if (input.amount) {
+          withdrawBody.amount = Math.round(input.amount * 100); // reais -> centavos
+        }
+
+        const response = await fetch(`${apiUrl}/recipients/${recipientId}/withdrawals`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: authHeader },
+          body: JSON.stringify(withdrawBody),
+        });
+
+        const result = await response.json() as any;
+
+        if (!response.ok) {
+          throw new Error(result?.message || `Erro ${response.status} ao solicitar transferência`);
+        }
+
+        return { success: true, withdrawal: result };
+      } catch (err: any) {
+        console.error('[finance.requestPayout] Erro:', err.message);
+        throw new TRPCError({
+          code: 'INTERNAL_SERVER_ERROR',
+          message: err.message || 'Erro ao solicitar transferência',
+        });
+      }
+    }),
 });
 
 const storeRouter = router({

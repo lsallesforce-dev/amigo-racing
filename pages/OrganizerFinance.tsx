@@ -8,7 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { trpc } from "@/lib/trpc";
 import { Link } from "wouter";
-import { DollarSign, Plus, ArrowUpRight, ArrowDownRight, TrendingUp, Loader2, Clock, Check, Download, ShoppingBag, ArrowLeft, Trophy } from "lucide-react";
+import { DollarSign, Plus, ArrowUpRight, ArrowDownRight, TrendingUp, Loader2, Clock, Check, Download, ShoppingBag, ArrowLeft, Trophy, Send, Wallet, Banknote } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 import { format } from "date-fns";
@@ -68,6 +68,23 @@ export default function OrganizerFinance() {
             toast.error(error.message || "Erro ao dar baixa na transação");
         }
     });
+
+    const { data: pagarmeBalance, isLoading: isLoadingBalance } = trpc.finance.getPagarmeBalance.useQuery(undefined, {
+        enabled: isAuthenticated && (user?.role === 'organizer' || user?.role === 'admin'),
+        refetchInterval: 60_000, // refresh every 60s
+    });
+
+    const payoutMutation = trpc.finance.requestPayout.useMutation({
+        onSuccess: () => {
+            toast.success('Transferência solicitada com sucesso! O valor será creditado em até 1 dia útil.');
+            setIsPayoutOpen(false);
+        },
+        onError: (err) => {
+            toast.error(err.message || 'Erro ao solicitar transferência');
+        },
+    });
+
+    const [isPayoutOpen, setIsPayoutOpen] = useState(false);
 
     const handleCreate = () => {
         if (!form.description || !form.amount || !form.date) {
@@ -390,6 +407,88 @@ export default function OrganizerFinance() {
                         </Dialog>
                     </div>
                 </div>
+
+                {/* ===== PAGAR.ME BALANCE CARDS ===== */}
+                {pagarmeBalance?.hasRecipient && (
+                    <div className="mb-8">
+                        <h2 className="text-lg font-semibold mb-4 text-foreground/80 flex items-center gap-2">
+                            <Wallet className="h-4 w-4 text-[#00a19c]" /> Saldo Pagar.me
+                        </h2>
+                        <div className="grid gap-4 grid-cols-1 sm:grid-cols-3">
+                            {/* Card 1: Saldo Total */}
+                            <Card className="border-[#00a19c]/30 bg-gradient-to-br from-[#00a19c]/5 to-[#00a19c]/10">
+                                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                                    <CardTitle className="text-sm font-medium text-[#00695c]">Saldo Pagar.me</CardTitle>
+                                    <Wallet className="h-4 w-4 text-[#00a19c]" />
+                                </CardHeader>
+                                <CardContent>
+                                    <div className="text-2xl font-bold text-[#00695c]">
+                                        {isLoadingBalance ? <Loader2 className="h-5 w-5 animate-spin" /> : formatCurrency(pagarmeBalance?.totalBalance || 0)}
+                                    </div>
+                                    <p className="text-xs text-muted-foreground mt-1">Total acumulado (90% das inscrições)</p>
+                                </CardContent>
+                            </Card>
+
+                            {/* Card 2: Disponível para Saque */}
+                            <Card className="border-green-300/50 bg-gradient-to-br from-green-50/50 to-green-100/30 dark:from-green-950/20 dark:to-green-900/10">
+                                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                                    <CardTitle className="text-sm font-medium text-green-700 dark:text-green-400">Disponível para Saque</CardTitle>
+                                    <Banknote className="h-4 w-4 text-green-600" />
+                                </CardHeader>
+                                <CardContent>
+                                    <div className="text-2xl font-bold text-green-700 dark:text-green-400">
+                                        {isLoadingBalance ? <Loader2 className="h-5 w-5 animate-spin" /> : formatCurrency(pagarmeBalance?.availableBalance || 0)}
+                                    </div>
+                                    <p className="text-xs text-muted-foreground mt-1">Liquidado e pronto para transferência</p>
+                                </CardContent>
+                            </Card>
+
+                            {/* Card 3: Botão Transferir */}
+                            <Card className="border-blue-200/50 flex flex-col justify-between">
+                                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                                    <CardTitle className="text-sm font-medium">Transferência</CardTitle>
+                                    <Send className="h-4 w-4 text-blue-500" />
+                                </CardHeader>
+                                <CardContent className="flex flex-col gap-3">
+                                    <p className="text-xs text-muted-foreground">
+                                        Transfira o saldo disponível para sua conta bancária cadastrada.
+                                    </p>
+                                    <Dialog open={isPayoutOpen} onOpenChange={setIsPayoutOpen}>
+                                        <DialogTrigger asChild>
+                                            <Button
+                                                id="btn-transferir-pagarme"
+                                                className="w-full bg-[#00a19c] hover:bg-[#00695c] text-white gap-2"
+                                                disabled={(pagarmeBalance?.availableBalance || 0) <= 0}
+                                            >
+                                                <Send className="h-4 w-4" />
+                                                Transferir
+                                            </Button>
+                                        </DialogTrigger>
+                                        <DialogContent>
+                                            <DialogHeader>
+                                                <DialogTitle>Confirmar Transferência</DialogTitle>
+                                                <DialogDescription>
+                                                    Será solicitada a transferência de todo o saldo disponível ({formatCurrency(pagarmeBalance?.availableBalance || 0)}) para sua conta bancária cadastrada no Pagar.me.
+                                                </DialogDescription>
+                                            </DialogHeader>
+                                            <DialogFooter>
+                                                <Button variant="outline" onClick={() => setIsPayoutOpen(false)}>Cancelar</Button>
+                                                <Button
+                                                    className="bg-[#00a19c] hover:bg-[#00695c] text-white"
+                                                    onClick={() => payoutMutation.mutate({})}
+                                                    disabled={payoutMutation.isPending}
+                                                >
+                                                    {payoutMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+                                                    Confirmar Transferência
+                                                </Button>
+                                            </DialogFooter>
+                                        </DialogContent>
+                                    </Dialog>
+                                </CardContent>
+                            </Card>
+                        </div>
+                    </div>
+                )}
 
                 {/* Cenário Atual (Realizado) */}
                 <h2 className="text-lg font-semibold mb-4 text-foreground/80 flex items-center gap-2">

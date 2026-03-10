@@ -52,16 +52,21 @@ export async function createExpressApp() {
         }
     });
 
+    // --- IMPORTANT: Body parsers MUST be registered BEFORE route handlers ---
+    // The webhook route needs JSON parsing available, so it comes first.
     app.use(express.json({ limit: "50mb" }));
     app.use(express.urlencoded({ limit: "50mb", extended: true }));
     app.use(cookieParser(ENV.cookieSecret));
+
+    // --- PUBLIC ROUTES (no auth required) - Webhook must be explicitly public ---
+    // Pagar.me sends webhook events unauthenticated; route is registered before TRPC middleware.
+    app.use('/api/webhooks', pagarmeWebhook);
 
     registerOAuthRoutes(app);
 
     setupSitemapRoute(app);
     app.get('/api/images/:key(*)', imageProxyHandler);
     app.get('/api/qr-code', qrCodeProxyHandler);
-    app.use('/api/webhooks', pagarmeWebhook);
     app.use('/api', uploadRoute);
 
     app.use(
