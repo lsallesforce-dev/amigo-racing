@@ -376,26 +376,25 @@ router.post('/pagarme', async (req, res) => {
     const event = req.body;
     console.log('[Webhook Pagar.me] Evento recebido:', event.type, 'ID:', event.id);
 
-    // No Pagar.me v5, 'charge.paid' e 'order.paid' são os eventos principais de sucesso
-    if (event.type === 'charge.paid' || event.type === 'order.paid' || event.type === 'transaction.paid') {
-      const data = event.data;
-      // O ID que salvamos no banco (transactionId) é o charge.id ou order.id
-      const id = data.id;
+    const data = event.data;
+    const id = data.id; // ID do pedido no Pagar.me (ord_...) ou charge (ch_...)
 
+    // Eventos de Sucesso: Pagamento Aprovado
+    if (event.type === 'charge.paid' || event.type === 'order.paid' || event.type === 'transaction.paid') {
       console.log(`[Webhook Pagar.me] Processando pagamento aprovado para ID: ${id}`);
 
-      // 1. Tentar encontrar uma inscrição (Event Registration)
+      // 1. Tentar encontrar uma inscriÃ§Ã£o (Event Registration)
       const registration = await db.getRegistrationByTransactionId(id);
       if (registration) {
         await db.updateRegistration(registration.id, { status: 'paid' });
 
-        // Se houver um registro na tabela payments, marcar como confirmado também
+        // Se houver um registro na tabela payments, marcar como confirmado tambÃ©m
         const payment = await db.getPaymentByRegistrationId(registration.id);
         if (payment) {
           await db.updatePaymentStatus(payment.id, 'confirmed');
         }
 
-        console.log('[Webhook Pagar.me] Inscrição atualizada para PAGA:', registration.id);
+        console.log('[Webhook Pagar.me] InscriÃ§Ã£o atualizada para PAGA:', registration.id);
         return res.status(200).json({ received: true, type: 'registration', id: registration.id });
       }
 
@@ -407,12 +406,38 @@ router.post('/pagarme', async (req, res) => {
         return res.status(200).json({ received: true, type: 'order', id: order.id });
       }
 
-      console.warn(`[Webhook Pagar.me] Nenhum registro encontrado para o ID: ${id}`);
+      console.warn(`[Webhook Pagar.me] Nenhum registro encontrado para o ID de sucesso: ${id}`);
+    }
+
+    // Eventos de Falha: Pagamento Recusado
+    else if (event.type === 'order.payment_failed' || event.type === 'charge.payment_failed') {
+      console.log(`[Webhook Pagar.me] Processando falha de pagamento para ID: ${id}`);
+
+      // 1. Tentar encontrar uma inscriÃ§Ã£o (Event Registration)
+      const registration = await db.getRegistrationByTransactionId(id);
+      if (registration) {
+        const payment = await db.getPaymentByRegistrationId(registration.id);
+        if (payment) {
+          await db.updatePaymentStatus(payment.id, 'failed');
+        }
+        console.log('[Webhook Pagar.me] Pagamento de inscriÃ§Ã£o marcado como FALHO:', registration.id);
+        return res.status(200).json({ received: true, type: 'registration_failed', id: registration.id });
+      }
+
+      // 2. Tentar encontrar um pedido da loja (Standalone Order)
+      const order = await db.getOrderByTransactionId(id);
+      if (order) {
+        await db.updateOrderStatus(order.id, 'CANCELLED');
+        console.log('[Webhook Pagar.me] Pedido da loja marcado como CANCELADO por falha:', order.id);
+        return res.status(200).json({ received: true, type: 'order_failed', id: order.id });
+      }
+
+      console.warn(`[Webhook Pagar.me] Nenhum registro encontrado para o ID de falha: ${id}`);
     }
 
     return res.status(200).json({ received: true });
   } catch (error) {
-    console.error('[Webhook Pagar.me] Erro crítico no processamento:', error);
+    console.error('[Webhook Pagar.me] Erro crÃ­tico no processamento:', error);
     return res.status(500).json({ error: 'Internal server error' });
   }
 });
