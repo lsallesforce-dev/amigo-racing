@@ -1505,18 +1505,29 @@ export const appRouter = router({
           }
 
           if (charge) {
+            // Para cartão de crédito, o Pagar.me aprova na hora (status 'paid' ou 'authorized').
+            // Não esperamos o webhook — marcamos a inscrição como paga imediatamente.
+            const isPaidNow = charge.status === 'paid' || charge.status === 'authorized';
+
             if (input.registrationId) {
-              await db.updateRegistration(input.registrationId, {
-                transactionId: charge.id,
-                qrCode: transaction?.qr_code_url || null,
-              });
+              const regUpdate: any = { transactionId: charge.id, qrCode: transaction?.qr_code_url || null };
+              if (isPaidNow) {
+                regUpdate.status = 'paid';
+                console.log('[createPayment] Cartão aprovado sincronamente. Marcando inscrição', input.registrationId, 'como PAGA diretamente.');
+              }
+              await db.updateRegistration(input.registrationId, regUpdate);
+
+              // Atualiza também o registro de pagamento local se existir
+              if (isPaidNow) {
+                const payment = await db.getPaymentByRegistrationId(input.registrationId);
+                if (payment) await db.updatePaymentStatus(payment.id, 'confirmed');
+              }
             } else if (input.orderId && standaloneOrder) {
               const dbInstance = await getDb();
               if (dbInstance) {
-                await dbInstance.update(productOrders).set({
-                  transactionId: charge.id,
-                  qrCode: transaction?.qr_code_url || null
-                }).where(eq(productOrders.id, standaloneOrder.id));
+                const orderUpdate: any = { transactionId: charge.id, qrCode: transaction?.qr_code_url || null };
+                if (isPaidNow) orderUpdate.status = 'PAID';
+                await dbInstance.update(productOrders).set(orderUpdate).where(eq(productOrders.id, standaloneOrder.id));
               }
             }
 
