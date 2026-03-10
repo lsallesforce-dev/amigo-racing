@@ -1,7 +1,7 @@
 import { useAuth } from "@/_core/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { Link } from "wouter";
-import { Menu, X, Home, LayoutDashboard, Settings, User, LogOut, Shield } from "lucide-react";
+import { Menu, X, Home, LayoutDashboard, Settings, User, LogOut, Shield, BarChart2 } from "lucide-react";
 import { getLoginUrl } from "@/api/_server/const";
 import {
     Sheet,
@@ -38,6 +38,14 @@ export default function Navbar() {
                             Painel Organizador
                         </Button>
                     </Link>
+                    {(user?.role === 'organizer' || user?.role === 'admin') && (
+                        <Link href="/organizer/finance">
+                            <Button variant="ghost" className="justify-start gap-2 w-full md:w-auto text-emerald-500" onClick={() => setIsOpen(false)}>
+                                <BarChart2 className="h-4 w-4 md:hidden" />
+                                Financeiro
+                            </Button>
+                        </Link>
+                    )}
                     {user?.role === 'admin' && (
                         <Link href="/admin">
                             <Button variant="ghost" className="justify-start gap-2 w-full md:w-auto text-primary" onClick={() => setIsOpen(false)}>
