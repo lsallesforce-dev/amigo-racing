@@ -1152,10 +1152,35 @@ export default function OrganizerPanel() {
                       Informe sua chave PIX para facilitar transferências futuras
                     </p>
                   </div>
+                  {/* Recipient ID - somente leitura */}
+                  <div className="space-y-2">
+                    <Label>ID do Recebedor Pagar.me</Label>
+                    <div className="flex items-center gap-2">
+                      <Input
+                        readOnly
+                        value={user?.recipientId || ''}
+                        placeholder="Ainda não configurado — salve os dados acima para gerar"
+                        className="bg-muted text-muted-foreground font-mono text-xs cursor-default"
+                      />
+                      {user?.recipientId ? (
+                        <span className="shrink-0 inline-flex items-center gap-1 rounded-full bg-green-500/15 px-2 py-0.5 text-xs font-medium text-green-400 border border-green-500/30">
+                          ✓ Ativo
+                        </span>
+                      ) : (
+                        <span className="shrink-0 inline-flex items-center gap-1 rounded-full bg-yellow-500/15 px-2 py-0.5 text-xs font-medium text-yellow-400 border border-yellow-500/30">
+                          ⏳ Pendente
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      ID gerado automaticamente pelo Pagar.me após salvar os dados bancários
+                    </p>
+                  </div>
                   <p className="text-sm text-muted-foreground">
                     Estes dados serão usados para criar sua conta de recebedor no Pagar.me. Você receberá automaticamente 90% do valor de cada inscrição.
                     Os 10% restantes ficam com a plataforma como taxa administrativa.
                   </p>
+
                   <Button
                     onClick={handleSaveBankConfig}
                     disabled={setupRecipient.isPending || !bankConfigForm.document || !bankConfigForm.bank || !bankConfigForm.agency || !bankConfigForm.account || !bankConfigForm.accountDigit || !bankConfigForm.accountType}
