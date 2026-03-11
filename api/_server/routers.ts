@@ -12,7 +12,7 @@ import { TRPCError } from '@trpc/server';
 import { z } from "zod";
 import * as db from "./db.js";
 import { getDb } from "./db.js";
-import { products, productOrders, organizerMembers, registrations, events, payments, championshipStages, championshipRequests, users, championships } from "./schema.js";
+import { products, productOrders, organizerMembers, registrations, events, payments, championshipStages, championshipRequests, users, championships, organizers } from "./schema.js";
 import { eq, sql, and, inArray, ne } from "drizzle-orm";
 import { ENV } from "./env.js";
 import { adminProcedure as baseAdminProcedure } from "./_core/trpc.js";
@@ -686,19 +686,44 @@ export const appRouter = router({
       .mutation(async ({ ctx, input }) => {
         const user = ctx.user as any;
         const context = await db.getOrganizerContext(user);
-        if (context.type === 'MEMBER' && !context.permissions.includes('events')) {
-          throw new TRPCError({ code: 'FORBIDDEN', message: 'Sem permissão para eventos' });
-        }
 
-        const principal = await db.getUserById(context.principalUserId) as any;
-        const organizer = principal ? await db.getOrganizerByOwnerId(principal.openId) as any : null;
-        if (!organizer) throw new TRPCError({ code: 'FORBIDDEN', message: 'Usuário não é um organizador' });
+        let targetOrganizerId = 0;
+
+        if (user.role === 'admin') {
+          // Admin bypass
+          const principal = await db.getUserById(context.principalUserId) as any;
+          let organizer = principal ? await db.getOrganizerByOwnerId(principal.openId) as any : null;
+
+          if (!organizer) {
+            // Fallback for admin: pick any organizer or create a dummy one later if needed
+            const drizzleDb = await db.getDb();
+            const anyOrg = drizzleDb ? await drizzleDb.select().from(organizers).limit(1) : [];
+            if (anyOrg.length > 0) {
+              organizer = anyOrg[0];
+            }
+          }
+          if (organizer) {
+            targetOrganizerId = organizer.id;
+          } else {
+            throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Nenhum organizador no banco para vincular ao evento externo.' });
+          }
+        } else {
+          // Normal Organizer check
+          if (context.type === 'MEMBER' && !context.permissions.includes('events')) {
+            throw new TRPCError({ code: 'FORBIDDEN', message: 'Sem permissão para eventos' });
+          }
+
+          const principal = await db.getUserById(context.principalUserId) as any;
+          const organizer = principal ? await db.getOrganizerByOwnerId(principal.openId) as any : null;
+          if (!organizer) throw new TRPCError({ code: 'FORBIDDEN', message: 'Usuário não é um organizador' });
+          targetOrganizerId = organizer.id;
+        }
 
         return await db.createEvent({
           ...input,
           startDate: new Date(input.startDate),
           endDate: new Date(input.endDate),
-          organizerId: organizer.id,
+          organizerId: targetOrganizerId,
           status: 'open',
           isExternal: true,
         } as any);
