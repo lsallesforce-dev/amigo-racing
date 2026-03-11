@@ -1443,15 +1443,16 @@ export default function OrganizerPanel() {
                         <Plus className="mr-2 h-4 w-4" />
                         Adicionar Categoria
                       </Button>
-                      <Button size="sm" variant="outline" onClick={() => handleEditClick(event)}>
-                        <Pencil className="h-4 w-4 mr-2" />
-                        Editar
-                      </Button>
                       <Link href={`/events/${event.id}`}>
                         <Button size="sm" variant="outline">
-                          Ver Detalhes
+                          <Pencil className="h-4 w-4 mr-2" />
+                          Editar Categorias
                         </Button>
                       </Link>
+                      <Button size="sm" variant="outline" onClick={() => handleEditClick(event)}>
+                        <Pencil className="h-4 w-4 mr-2" />
+                        Editar Evento
+                      </Button>
                       <Link href={`/organizer/events/${event.id}/start-order`}>
                         <Button size="sm" variant="outline">
                           <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
