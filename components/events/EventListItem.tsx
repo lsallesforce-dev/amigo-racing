@@ -1,4 +1,4 @@
-import { format } from "date-fns";
+import { format, isToday, isTomorrow, differenceInDays } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { MapPin, ArrowRight, Trophy } from "lucide-react";
 import { Link } from "wouter";
@@ -23,6 +23,16 @@ export function EventListItem({ event }: EventListItemProps) {
     const startDate = event.startDate ? new Date(event.startDate) : new Date();
     const day = event.startDate ? format(startDate, "dd") : "--";
     const month = event.startDate ? format(startDate, "MMM", { locale: ptBR }).toUpperCase() : "---";
+
+    let timeBadge = null;
+    if (event.startDate) {
+        if (isToday(startDate)) timeBadge = "HOJE";
+        else if (isTomorrow(startDate)) timeBadge = "AMANHÃ";
+        else {
+            const daysUntil = differenceInDays(startDate, new Date());
+            if (daysUntil > 0 && daysUntil <= 15) timeBadge = "PRÓXIMO";
+        }
+    }
 
     return (
         <div className="group relative bg-[#111] border border-white/5 hover:border-primary/40 transition-all duration-500 rounded-3xl overflow-hidden shadow-2xl hover:shadow-primary/5 mb-4">
@@ -51,6 +61,11 @@ export function EventListItem({ event }: EventListItemProps) {
                 {/* Center: Info */}
                 <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 mb-1">
+                        {timeBadge && (
+                            <Badge className="text-[9px] uppercase tracking-tighter font-black border-green-500/50 text-green-400 px-2 py-0 bg-green-500/10 shadow-sm shadow-green-500/10 animate-pulse">
+                                ⏳ {timeBadge}
+                            </Badge>
+                        )}
                         <Badge variant="outline" className="text-[9px] uppercase tracking-tighter font-black border-primary/20 text-primary px-2 py-0 bg-primary/5">
                             {event.isExternal ? "Evento Externo" : "PRO Platform"}
                         </Badge>

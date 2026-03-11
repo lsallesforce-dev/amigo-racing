@@ -1,4 +1,4 @@
-﻿import { eq, and, or, gte, lte, desc, sql } from "drizzle-orm";
+﻿import { eq, and, or, gte, lte, asc, desc, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/postgres-js";
 import {
   User,
@@ -365,19 +365,32 @@ export async function getOpenEvents() {
   const db = await getDb();
   if (!db) return [];
 
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
   return await db.select().from(events)
-    .where(and(eq(events.status, 'open'), eq(events.showInListing, true)))
-    .orderBy(events.startDate);
+    .where(and(
+      eq(events.status, 'open'),
+      eq(events.showInListing, true),
+      gte(events.startDate, today)
+    ))
+    .orderBy(asc(events.startDate));
 }
 
 export async function getAllOpenEvents() {
   const db = await getDb();
   if (!db) return [];
 
-  // Retorna TODOS os eventos abertos, independente de showInListing (para calendÃ¡rio)
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  // Retorna TODOS os eventos abertos, independente de showInListing (para calendário)
   return await db.select().from(events)
-    .where(eq(events.status, 'open'))
-    .orderBy(events.startDate);
+    .where(and(
+      eq(events.status, 'open'),
+      gte(events.startDate, today)
+    ))
+    .orderBy(asc(events.startDate));
 }
 
 export async function getEventsByOrganizerId(organizerId: number) {

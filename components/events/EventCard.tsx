@@ -1,4 +1,4 @@
-import { format } from "date-fns";
+import { format, isToday, isTomorrow, differenceInDays } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { Calendar, MapPin, ArrowRight, ExternalLink } from "lucide-react";
 import { Link } from "wouter";
@@ -22,6 +22,14 @@ interface EventCardProps {
 
 export function EventCard({ event }: EventCardProps) {
     const startDate = new Date(event.startDate);
+
+    let timeBadge = null;
+    if (isToday(startDate)) timeBadge = "Hoje";
+    else if (isTomorrow(startDate)) timeBadge = "Amanhã";
+    else {
+        const daysUntil = differenceInDays(startDate, new Date());
+        if (daysUntil > 0 && daysUntil <= 15) timeBadge = "Próximo";
+    }
 
     return (
         <div className="group rounded-xl shadow-md border border-gray-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 overflow-hidden flex flex-col transition-all hover:shadow-lg hover:border-primary/50">
@@ -50,7 +58,12 @@ export function EventCard({ event }: EventCardProps) {
                 </div>
 
                 {/* Badge */}
-                <div className="absolute top-4 right-4">
+                <div className="absolute top-4 right-4 flex flex-col gap-2 items-end">
+                    {timeBadge && (
+                        <Badge className="bg-green-500/90 hover:bg-green-600 text-white shadow-lg transition-transform hover:scale-105 border-transparent font-bold">
+                            ⏳ {timeBadge}
+                        </Badge>
+                    )}
                     <Badge
                         variant={event.isExternal ? "outline" : "default"}
                         className={event.isExternal
