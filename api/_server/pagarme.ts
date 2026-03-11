@@ -14,7 +14,7 @@ export interface BankAccount {
   accountCheckDigit: string;
   type: 'checking' | 'savings';
   holderName: string;
-  holderType: 'individual' | 'corporation';
+  holderType: 'individual' | 'company';
   holderDocument: string;
 }
 
@@ -22,7 +22,7 @@ export interface RecipientData {
   name: string;
   email: string;
   document: string;
-  type: 'individual' | 'corporation';
+  type: 'individual' | 'company';
   phone: string;
   bankAccount: BankAccount;
 }

@@ -1606,11 +1606,11 @@ export const appRouter = router({
           name: input.bankAccount.legal_name || (user as any).name || 'Organizador',
           email: (user as any).email,
           document: cleanDoc,
-          type: cleanDoc.length > 11 ? 'corporation' : 'individual',
+          type: cleanDoc.length > 11 ? 'company' : 'individual',
           phone: String(input.phone || '11999999999').replace(/\D/g, ''),
           bankAccount: {
             holderName: input.bankAccount.legal_name || (user as any).name || 'Organizador',
-            holderType: cleanDoc.length > 11 ? 'corporation' : 'individual',
+            holderType: cleanDoc.length > 11 ? 'company' : 'individual',
             holderDocument: cleanDoc,
             bank: input.bankAccount.bank_code,
             branchNumber: input.bankAccount.agencia,
