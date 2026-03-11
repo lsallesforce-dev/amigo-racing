@@ -140,7 +140,7 @@ export async function upsertUser(user: InsertUser): Promise<User | undefined> {
     };
     const updateSet: Record<string, unknown> = {};
 
-    const textFields = ["name", "email", "loginMethod", "phone", "password"] as const;
+    const textFields = ["name", "email", "loginMethod", "phone", "password", "resetToken"] as const;
     type TextField = (typeof textFields)[number];
 
     const assignNullable = (field: TextField) => {
@@ -156,6 +156,11 @@ export async function upsertUser(user: InsertUser): Promise<User | undefined> {
     if (user.lastSignedIn !== undefined) {
       values.lastSignedIn = user.lastSignedIn;
       updateSet.lastSignedIn = user.lastSignedIn;
+    }
+
+    if (user.resetTokenExpires !== undefined) {
+      values.resetTokenExpires = user.resetTokenExpires;
+      updateSet.resetTokenExpires = user.resetTokenExpires;
     }
 
     // Buscar role existente no banco
