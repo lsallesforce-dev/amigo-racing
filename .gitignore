@@ -4,4 +4,8 @@ node_modules
 .AmigoRacingOriginal/
 .temp_extract_2/
 .vercel
+.env
 .env*.local
+temp_api_extract/
+tmp/
+tmp_*

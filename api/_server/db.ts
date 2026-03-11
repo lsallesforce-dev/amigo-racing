@@ -588,7 +588,7 @@ export async function getOrderByTransactionId(transactionId: string) {
   return result.length > 0 ? result[0] : undefined;
 }
 
-export async function updateOrderStatus(id: string, status: string) {
+export async function updateOrderStatus(id: string, status: "PENDING" | "PAID" | "SHIPPED" | "CANCELLED") {
   const db = await getDb();
   if (!db) throw new Error("Database available");
 

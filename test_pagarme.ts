@@ -1,7 +1,7 @@
 import { createRecipient } from './api/_server/pagarme.js';
 
 async function run() {
-    process.env.PAGARME_API_KEY = "sk_test_ZvA7G0ha0CgoYOV9";
+    // PAGARME_API_KEY deve estar no .env — nunca hardcode chaves aqui
     process.env.PAGARME_API_URL = "https://api.pagar.me/core/v5";
 
     try {
