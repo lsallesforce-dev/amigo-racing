@@ -915,6 +915,22 @@ export const appRouter = router({
       .mutation(async ({ input }) => {
         return await db.deleteCategory(input.id);
       }),
+    update: protectedProcedure
+      .input(z.object({
+        id: z.number(),
+        name: z.string().optional(),
+        description: z.string().optional(),
+        price: z.number().optional(),
+        slots: z.number().optional()
+      }))
+      .mutation(async ({ input }) => {
+        return await db.updateCategory(input.id, {
+          name: input.name,
+          description: input.description,
+          price: input.price,
+          slots: input.slots
+        });
+      }),
     listCategories: publicProcedure.input(z.any()).query(async () => []),
   }),
   registrations: router({
