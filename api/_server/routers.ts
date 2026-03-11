@@ -628,6 +628,7 @@ export const appRouter = router({
         showInListing: z.boolean().optional(),
         showRegistrations: z.boolean().optional(),
         allowCancellation: z.boolean().optional(),
+        hasShirts: z.boolean().optional(),
         notificationEmail: z.string().email().optional(),
         externalUrl: z.string().url().optional().nullable(),
       }))
@@ -659,6 +660,7 @@ export const appRouter = router({
             organizerId: organizer.id,
             status: 'open',
             isExternal: input.isExternal || false,
+            hasShirts: input.hasShirts !== false, // Defaults to true
           } as any);
 
           console.log(`[Events.create] Evento criado com sucesso. ID extraído de:`, result);
@@ -749,6 +751,7 @@ export const appRouter = router({
         notifyOnNewRegistration: z.boolean().optional().nullable(),
         notificationEmail: z.string().email().optional().nullable(),
         allowCancellation: z.boolean().optional().nullable(),
+        hasShirts: z.boolean().optional().nullable(),
         cancellationDeadlineDays: z.number().optional().nullable(),
         refundEnabled: z.boolean().optional().nullable(),
         terms: z.string().optional().nullable(),
@@ -769,6 +772,7 @@ export const appRouter = router({
         if (data.externalUrl !== undefined) updateData.externalUrl = data.externalUrl;
         if (data.showInListing !== undefined) updateData.showInListing = data.showInListing;
         if (data.showRegistrations !== undefined) updateData.showRegistrations = data.showRegistrations;
+        if (data.hasShirts !== undefined && data.hasShirts !== null) updateData.hasShirts = data.hasShirts;
 
         const result = await db.updateEvent(id, updateData);
 

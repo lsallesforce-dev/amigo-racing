@@ -409,6 +409,18 @@ export function EventEditDialog({ open, onOpenChange, event, onSuccess }: EventE
                                 Permitir que competidores solicitem cancelamento da inscrição
                             </Label>
                         </div>
+                        <div className="flex items-center space-x-2">
+                            <input
+                                type="checkbox"
+                                id="edit-has-shirts"
+                                checked={editingEvent.hasShirts ?? true}
+                                onChange={(e) => setEditingEvent({ ...editingEvent, hasShirts: e.target.checked })}
+                                className="h-4 w-4 rounded border-gray-300"
+                            />
+                            <Label htmlFor="edit-has-shirts" className="text-sm font-normal cursor-pointer">
+                                Evento possui camiseta (Habilita a escolha de tamanhos na inscrição)
+                            </Label>
+                        </div>
                         <div className="border-t pt-4 mt-4 space-y-4">
                             <div className="flex items-center space-x-2">
                                 <input

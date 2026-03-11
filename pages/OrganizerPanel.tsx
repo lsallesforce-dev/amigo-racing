@@ -37,6 +37,7 @@ type EventWithCategories = {
   state: string | null;
   status: "open" | "closed" | "cancelled";
   isExternal: boolean;
+  hasShirts: boolean;
   imageUrl: string | null;
   organizerId: number;
   createdAt: Date;
@@ -105,6 +106,7 @@ export default function OrganizerPanel() {
     imageUrl: "",
     showRegistrations: true,
     allowCancellation: false,
+    hasShirts: true,
   });
 
   const [externalEventForm, setExternalEventForm] = useState({
@@ -207,6 +209,7 @@ export default function OrganizerPanel() {
         imageUrl: "",
         showRegistrations: true,
         allowCancellation: false,
+        hasShirts: true,
       });
       utils.events.myEvents.invalidate();
       utils.events.listOpen.invalidate();
@@ -999,6 +1002,18 @@ export default function OrganizerPanel() {
                     />
                     <Label htmlFor="allow-cancellation" className="text-sm font-normal cursor-pointer">
                       Permitir que competidores solicitem cancelamento da inscrição
+                    </Label>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <input
+                      type="checkbox"
+                      id="has-shirts"
+                      checked={eventForm.hasShirts ?? true}
+                      onChange={(e) => setEventForm({ ...eventForm, hasShirts: e.target.checked })}
+                      className="h-4 w-4 rounded border-gray-300"
+                    />
+                    <Label htmlFor="has-shirts" className="text-sm font-normal cursor-pointer">
+                      Evento possui camiseta (Habilita a escolha de tamanhos na inscrição)
                     </Label>
                   </div>
                 </div>

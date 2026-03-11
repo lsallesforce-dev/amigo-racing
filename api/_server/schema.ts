@@ -107,6 +107,7 @@ export const events = pgTable("events", {
   notifyOnNewRegistration: boolean("notifyOnNewRegistration").default(false).notNull(),
   notificationEmail: varchar("notificationEmail", { length: 320 }),
   allowCancellation: boolean("allowCancellation").default(false),
+  hasShirts: boolean("hasShirts").default(true).notNull(),
   cancellationDeadlineDays: integer("cancellationDeadlineDays").default(0),
   refundEnabled: boolean("refundEnabled").default(false),
   sponsors: json("sponsors"), // Array of strings (image URLs)

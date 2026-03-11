@@ -274,15 +274,18 @@ export default function EventDetails() {
       return;
     }
 
-    if (!formData.pilot_shirt) {
-      toast.error("Selecione o tamanho da camiseta do piloto");
-      return;
-    }
+    // Validar camisetas apenas se o evento possuir camisetas
+    if ((event as any)?.hasShirts !== false) {
+      if (!formData.pilot_shirt) {
+        toast.error("Selecione o tamanho da camiseta do piloto");
+        return;
+      }
 
-    // Validar camiseta navegador apenas se não for Motos
-    if (!isMotosCategory && !formData.navigator_shirt) {
-      toast.error("Selecione o tamanho da camiseta do navegador");
-      return;
+      // Validar camiseta navegador apenas se não for Motos
+      if (!isMotosCategory && !formData.navigator_shirt) {
+        toast.error("Selecione o tamanho da camiseta do navegador");
+        return;
+      }
     }
 
     if ((event as any).terms && !formData.termsAccepted) {
@@ -300,14 +303,14 @@ export default function EventDetails() {
       pilotCpf: formData.pilot_cpf,
       pilotCity: formData.pilot_city,
       pilotState: formData.pilot_state,
-      pilotShirtSize: formData.pilot_shirt,
+      pilotShirtSize: (event as any)?.hasShirts !== false ? formData.pilot_shirt : "p", // Enviamo 'p' como fallback pois DB exige não-nulo para piloto
       phone: formData.pilot_phone,
       navigatorName: formData.navigator_name,
       navigatorEmail: formData.navigator_email,
       navigatorCpf: formData.navigator_cpf,
       navigatorCity: formData.navigator_city,
       navigatorState: formData.navigator_state,
-      navigatorShirtSize: formData.navigator_shirt,
+      navigatorShirtSize: (event as any)?.hasShirts !== false ? formData.navigator_shirt : null,
       team: formData.team,
       notes: formData.notes,
       termsAccepted: formData.termsAccepted,
@@ -883,54 +886,58 @@ export default function EventDetails() {
                           placeholder="Nome da equipe"
                         />
                       </div>
-                      <div className="space-y-2">
-                        <Label htmlFor="pilot_shirt_trigger">Camiseta Piloto *</Label>
-                        <Select
-                          value={formData.pilot_shirt}
-                          onValueChange={(value) => setFormData({ ...formData, pilot_shirt: value })}
-                        >
-                          <SelectTrigger id="pilot_shirt_trigger">
-                            <SelectValue placeholder="Selecione" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="pp">PP</SelectItem>
-                            <SelectItem value="p">P</SelectItem>
-                            <SelectItem value="m">M</SelectItem>
-                            <SelectItem value="g">G</SelectItem>
-                            <SelectItem value="gg">GG</SelectItem>
-                            <SelectItem value="g1">G1</SelectItem>
-                            <SelectItem value="g2">G2</SelectItem>
-                            <SelectItem value="g3">G3</SelectItem>
-                            <SelectItem value="g4">G4</SelectItem>
-                            <SelectItem value="infantil">Infantil</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      {/* Campo Camiseta Navegador - ocultar para Motos */}
-                      {!isMotosCategory && (
-                        <div className="space-y-2">
-                          <Label htmlFor="navigator_shirt_trigger">Camiseta Navegador*</Label>
-                          <Select
-                            value={formData.navigator_shirt}
-                            onValueChange={(value) => setFormData({ ...formData, navigator_shirt: value })}
-                          >
-                            <SelectTrigger id="navigator_shirt_trigger">
-                              <SelectValue placeholder="Selecione" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="pp">PP</SelectItem>
-                              <SelectItem value="p">P</SelectItem>
-                              <SelectItem value="m">M</SelectItem>
-                              <SelectItem value="g">G</SelectItem>
-                              <SelectItem value="gg">GG</SelectItem>
-                              <SelectItem value="g1">G1</SelectItem>
-                              <SelectItem value="g2">G2</SelectItem>
-                              <SelectItem value="g3">G3</SelectItem>
-                              <SelectItem value="g4">G4</SelectItem>
-                              <SelectItem value="infantil">Infantil</SelectItem>
-                            </SelectContent>
-                          </Select>
-                        </div>
+                      {(event as any)?.hasShirts !== false && (
+                        <>
+                          <div className="space-y-2">
+                            <Label htmlFor="pilot_shirt_trigger">Camiseta Piloto *</Label>
+                            <Select
+                              value={formData.pilot_shirt}
+                              onValueChange={(value) => setFormData({ ...formData, pilot_shirt: value })}
+                            >
+                              <SelectTrigger id="pilot_shirt_trigger">
+                                <SelectValue placeholder="Selecione" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="pp">PP</SelectItem>
+                                <SelectItem value="p">P</SelectItem>
+                                <SelectItem value="m">M</SelectItem>
+                                <SelectItem value="g">G</SelectItem>
+                                <SelectItem value="gg">GG</SelectItem>
+                                <SelectItem value="g1">G1</SelectItem>
+                                <SelectItem value="g2">G2</SelectItem>
+                                <SelectItem value="g3">G3</SelectItem>
+                                <SelectItem value="g4">G4</SelectItem>
+                                <SelectItem value="infantil">Infantil</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </div>
+                          {/* Campo Camiseta Navegador - ocultar para Motos */}
+                          {!isMotosCategory && (
+                            <div className="space-y-2">
+                              <Label htmlFor="navigator_shirt_trigger">Camiseta Navegador*</Label>
+                              <Select
+                                value={formData.navigator_shirt}
+                                onValueChange={(value) => setFormData({ ...formData, navigator_shirt: value })}
+                              >
+                                <SelectTrigger id="navigator_shirt_trigger">
+                                  <SelectValue placeholder="Selecione" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="pp">PP</SelectItem>
+                                  <SelectItem value="p">P</SelectItem>
+                                  <SelectItem value="m">M</SelectItem>
+                                  <SelectItem value="g">G</SelectItem>
+                                  <SelectItem value="gg">GG</SelectItem>
+                                  <SelectItem value="g1">G1</SelectItem>
+                                  <SelectItem value="g2">G2</SelectItem>
+                                  <SelectItem value="g3">G3</SelectItem>
+                                  <SelectItem value="g4">G4</SelectItem>
+                                  <SelectItem value="infantil">Infantil</SelectItem>
+                                </SelectContent>
+                              </Select>
+                            </div>
+                          )}
+                        </>
                       )}
                     </div>
                   </div>
