@@ -24,6 +24,8 @@ import ChampionshipDetails from "./pages/ChampionshipDetails";
 import Secretariat from "./pages/Secretariat";
 import Passport from "./pages/Passport";
 import ChampionshipShowcase from "./pages/ChampionshipShowcase";
+import ResetPassword from "./pages/ResetPassword";
+import UpdatePassword from "./pages/UpdatePassword";
 
 function Router() {
   return (
@@ -48,6 +50,8 @@ function Router() {
       <Route path="/passport/:accessHash" component={Passport} />
       <Route path="/championship/:id" component={ChampionshipShowcase} />
       <Route path="/login" component={Login} />
+      <Route path="/auth/reset-password" component={ResetPassword} />
+      <Route path="/auth/update-password" component={UpdatePassword} />
       <Route component={NotFound} />
     </Switch>
   );

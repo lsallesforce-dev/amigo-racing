@@ -1,4 +1,4 @@
-﻿import type { Express } from "express";
+import type { Express } from "express";
 import { sdk } from "./sdk.js";
 import { COOKIE_NAME, ONE_YEAR_MS } from "./const.js";
 import { getSessionCookieOptions } from "./cookies.js";
@@ -107,12 +107,92 @@ export function registerOAuthRoutes(app: Express) {
       });
 
       const cookieOptions = getSessionCookieOptions(req);
-      console.log("[Auth] Setting session cookie:", COOKIE_NAME, "Options:", cookieOptions);
       res.cookie(COOKIE_NAME, sessionToken, { ...cookieOptions, maxAge: ONE_YEAR_MS });
 
       res.json({ message: "Logged in successfully", user: updatedUser, token: sessionToken });
     } catch (error: any) {
       console.error("[Auth] Login failed", error);
+      res.status(500).json({ error: error.message || "Internal server error" });
+    }
+  });
+
+  app.post("/api/auth/request-reset", async (req, res) => {
+    try {
+      const { email } = req.body;
+      if (!email) return res.status(400).json({ error: "Missing email" });
+
+      const user = await getUserByOpenId(email);
+      if (!user) {
+        // Return success anyway, to prevent email enumeration (security best practice)
+        return res.json({ message: "If the email is valid, a link was sent." });
+      }
+
+      const resetToken = randomBytes(32).toString('hex');
+      const resetTokenExpires = new Date(Date.now() + 3600000); // 1 hour token
+
+      await upsertUser({
+        openId: user.openId,
+        resetToken,
+        resetTokenExpires,
+      });
+
+      const rootUrl = ENV.oAuthServerUrl || `https://${req.get("host")}` || "http://localhost:5173";
+      const resetLink = `${rootUrl}/auth/update-password?token=${resetToken}`;
+
+      console.log(`\n================================`);
+      console.log(`[Auth] Password Reset Link:`);
+      console.log(`${resetLink}`);
+      console.log(`================================\n`);
+      
+      // Here usually we'd call an email sending service.
+      // Since instructed to only mock/console.log, we stop here.
+
+      res.json({ message: "If the email is valid, a link was sent." });
+    } catch (error: any) {
+      console.error("[Auth] Request reset failed", error);
+      res.status(500).json({ error: error.message || "Internal server error" });
+    }
+  });
+
+  app.post("/api/auth/update-password", async (req, res) => {
+    try {
+      const { token, password } = req.body;
+      if (!token || !password) {
+        return res.status(400).json({ error: "Missing token or password" });
+      }
+
+      // Check for user with this token
+      const db = await import("./db.js").then(m => m.getDb());
+      if (!db) return res.status(500).json({ error: "Database not available" });
+      
+      const { users } = await import("./schema.js");
+      const { eq, and, gt } = await import("drizzle-orm");
+      
+      const result = await db.select().from(users).where(
+        and(
+           eq(users.resetToken, token),
+           gt(users.resetTokenExpires, new Date())
+        )
+      ).limit(1);
+
+      const user = result[0];
+
+      if (!user) {
+        return res.status(400).json({ error: "Token invalid or expired" });
+      }
+
+      const hashedPassword = hashPassword(password);
+
+      await upsertUser({
+        openId: user.openId,
+        password: hashedPassword,
+        resetToken: null,
+        resetTokenExpires: null,
+      });
+
+      res.json({ message: "Password updated successfully" });
+    } catch (error: any) {
+      console.error("[Auth] Update password failed", error);
       res.status(500).json({ error: error.message || "Internal server error" });
     }
   });

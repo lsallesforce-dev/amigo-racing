@@ -1,4 +1,4 @@
-﻿import { integer, pgTable, text, timestamp, varchar, doublePrecision, boolean, json, serial, uuid } from "drizzle-orm/pg-core";
+import { integer, pgTable, text, timestamp, varchar, doublePrecision, boolean, json, serial, uuid } from "drizzle-orm/pg-core";
 
 /**
  * Core user table backing auth flow.
@@ -12,6 +12,8 @@ export const users = pgTable("users", {
   phone: varchar("phone", { length: 20 }),
   loginMethod: varchar("loginMethod", { length: 64 }),
   password: varchar("password", { length: 255 }), // Hash da senha para login local
+  resetToken: varchar("resetToken", { length: 255 }), // Token para reset de senha
+  resetTokenExpires: timestamp("resetTokenExpires"), // Expiração do token de reset de senha
   role: varchar("role", { length: 50 }).$type<"user" | "admin" | "participant" | "organizer">().default("participant").notNull(),
   recipientId: varchar("recipientId", { length: 64 }), // ID do recipient no Pagar.me
   pagarmeCustomerId: varchar("pagarmeCustomerId", { length: 64 }), // ID do customer no Pagar.me
