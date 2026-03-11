@@ -15,15 +15,13 @@ import { EventListItem } from "@/components/events/EventListItem";
 
 export default function Home() {
   const { user, isAuthenticated } = useAuth();
-  const { data: serverEvents, isLoading: isLoadingAll } = trpc.events.listAll.useQuery();
+  const { data: serverEvents, isLoading: isLoadingAll } = trpc.events.listOpen.useQuery();
 
   const [lightboxImage, setLightboxImage] = useState<{ url: string; alt: string } | null>(null);
   const [filter, setFilter] = useState<'all' | 'internal' | 'external'>('all');
 
   const allEvents = useMemo(() => {
-    const combined = [...(serverEvents || [])];
-    // Sort by date
-    return combined.sort((a, b) => new Date(a.startDate).getTime() - new Date(b.startDate).getTime());
+    return serverEvents || [];
   }, [serverEvents]);
 
   const filteredEvents = useMemo(() => {

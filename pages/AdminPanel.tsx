@@ -6,15 +6,16 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
-import { Shield, Users, Calendar, Trash2, Edit, TrendingUp, DollarSign, FileText, ArrowLeft, Check, X, Building, Mail, Phone, Loader2 } from "lucide-react";
+import { Shield, Users, Calendar, Trash2, Edit, TrendingUp, DollarSign, FileText, ArrowLeft, Check, X, Building, Mail, Phone, Loader2, Plus } from "lucide-react";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { Redirect } from "wouter";
 import { EventEditDialog } from "@/components/events/EventEditDialog";
+import { compressImage } from "@/lib/imageCompression";
 
 export default function AdminPanel() {
   const { user, loading } = useAuth();
@@ -32,6 +33,22 @@ export default function AdminPanel() {
 
   const [newRole, setNewRole] = useState<"user" | "admin" | "participant" | "organizer">("user");
   const [rejectionReason, setRejectionReason] = useState("");
+
+  const [externalEventDialogOpen, setExternalEventDialogOpen] = useState(false);
+  const [externalEventForm, setExternalEventForm] = useState({
+    name: "",
+    description: "",
+    startDate: "",
+    startTime: "08:00",
+    endDate: "",
+    endTime: "18:00",
+    location: "",
+    city: "",
+    state: "",
+    showInListing: true,
+    imageUrl: "",
+    allowCancellation: false,
+  });
 
   // Queries
   const isEnabled = user?.role === 'admin';
@@ -78,9 +95,51 @@ export default function AdminPanel() {
     onError: (e) => toast.error(`Erro: ${e.message}`),
   });
 
+  const createExternalEvent = trpc.events.createExternal.useMutation({
+    onSuccess: () => {
+      toast.success("Evento externo adicionado com sucesso!");
+      setExternalEventDialogOpen(false);
+      setExternalEventForm({
+        name: "",
+        description: "",
+        startDate: "",
+        startTime: "08:00",
+        endDate: "",
+        endTime: "18:00",
+        location: "",
+        city: "",
+        state: "",
+        showInListing: true,
+        imageUrl: "",
+        allowCancellation: false,
+      });
+      refetchEvents();
+    },
+    onError: (error) => {
+      toast.error(error.message || "Erro ao adicionar evento externo");
+    },
+  });
+
   // Handlers
   const handleApprove = () => selectedRequest && approveRequestMutation.mutate({ requestId: selectedRequest.id });
   const handleReject = () => selectedRequest && rejectRequestMutation.mutate({ requestId: selectedRequest.id, reason: rejectionReason });
+
+  const handleCreateExternalEvent = async () => {
+    if (!externalEventForm.name || !externalEventForm.startDate || !externalEventForm.endDate || !externalEventForm.location || !externalEventForm.city) {
+      toast.error("Preencha todos os campos obrigatórios");
+      return;
+    }
+
+    const startDateTime = `${externalEventForm.startDate}T${externalEventForm.startTime || "00:00"}`;
+    const endDateTime = `${externalEventForm.endDate}T${externalEventForm.endTime || "23:59"}`;
+
+    createExternalEvent.mutate({
+      ...externalEventForm,
+      imageUrl: externalEventForm.imageUrl || undefined,
+      startDate: startDateTime,
+      endDate: endDateTime,
+    });
+  };
 
   if (loading) return (
     <div className="min-h-screen flex items-center justify-center bg-black">
@@ -302,8 +361,169 @@ export default function AdminPanel() {
           {/* EVENTS TAB */}
           <TabsContent value="events" className="animate-in fade-in duration-500">
             <Card className="bg-white/5 border-white/10 backdrop-blur-xl shadow-2xl rounded-3xl overflow-hidden">
-              <CardHeader className="bg-white/[0.02] border-b border-white/5">
+              <CardHeader className="bg-white/[0.02] border-b border-white/5 flex flex-col md:flex-row md:items-center justify-between gap-4">
                 <CardTitle className="text-white flex items-center gap-3 text-xl"><Calendar className="w-6 h-6 text-primary" /> Eventos Ativos</CardTitle>
+                <Dialog open={externalEventDialogOpen} onOpenChange={setExternalEventDialogOpen}>
+                  <DialogTrigger asChild>
+                    <Button variant="outline" className="border-primary/50 text-white hover:bg-white/10 shrink-0">
+                      <Plus className="mr-2 h-4 w-4" />
+                      Adicionar Evento Externo
+                    </Button>
+                  </DialogTrigger>
+                  <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto bg-neutral-900 border-white/10 text-white">
+                    <DialogHeader>
+                      <DialogTitle className="text-2xl font-bold">Adicionar Evento Externo</DialogTitle>
+                      <DialogDescription className="text-neutral-400">
+                        Adicione eventos externos ao calendário (sem inscrição pelo site)
+                      </DialogDescription>
+                    </DialogHeader>
+                    <div className="space-y-4 py-4">
+                      <div>
+                        <Label htmlFor="ext-name">Nome do Evento *</Label>
+                        <Input
+                          id="ext-name"
+                          className="bg-black border-white/10"
+                          value={externalEventForm.name}
+                          onChange={(e) => setExternalEventForm({ ...externalEventForm, name: e.target.value })}
+                          placeholder="Ex: Rally dos Sertões"
+                        />
+                      </div>
+                      <div>
+                        <Label htmlFor="ext-description">Descrição</Label>
+                        <Textarea
+                          id="ext-description"
+                          className="bg-black border-white/10"
+                          value={externalEventForm.description}
+                          onChange={(e) => setExternalEventForm({ ...externalEventForm, description: e.target.value })}
+                          placeholder="Descrição do evento"
+                          rows={4}
+                        />
+                      </div>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                          <Label htmlFor="ext-startDate">Data de Início *</Label>
+                          <div className="flex gap-2">
+                            <Input
+                              id="ext-startDate"
+                              type="date"
+                              className="bg-black border-white/10 flex-1"
+                              value={externalEventForm.startDate}
+                              onChange={(e) => setExternalEventForm({ ...externalEventForm, startDate: e.target.value })}
+                            />
+                            <Input
+                              type="time"
+                              className="bg-black border-white/10 w-[100px]"
+                              value={externalEventForm.startTime}
+                              onChange={(e) => setExternalEventForm({ ...externalEventForm, startTime: e.target.value })}
+                            />
+                          </div>
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="ext-endDate">Data de Término *</Label>
+                          <div className="flex gap-2">
+                            <Input
+                              id="ext-endDate"
+                              type="date"
+                              className="bg-black border-white/10 flex-1"
+                              value={externalEventForm.endDate}
+                              onChange={(e) => setExternalEventForm({ ...externalEventForm, endDate: e.target.value })}
+                            />
+                            <Input
+                              type="time"
+                              className="bg-black border-white/10 w-[100px]"
+                              value={externalEventForm.endTime}
+                              onChange={(e) => setExternalEventForm({ ...externalEventForm, endTime: e.target.value })}
+                            />
+                          </div>
+                        </div>
+                      </div>
+                      <div>
+                        <Label htmlFor="ext-location">Local *</Label>
+                        <Input
+                          id="ext-location"
+                          className="bg-black border-white/10"
+                          value={externalEventForm.location}
+                          onChange={(e) => setExternalEventForm({ ...externalEventForm, location: e.target.value })}
+                          placeholder="Ex: Região Norte do Brasil"
+                        />
+                      </div>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <Label htmlFor="ext-city">Cidade *</Label>
+                          <Input
+                            id="ext-city"
+                            className="bg-black border-white/10"
+                            value={externalEventForm.city}
+                            onChange={(e) => setExternalEventForm({ ...externalEventForm, city: e.target.value })}
+                            placeholder="Ex: Brasília"
+                          />
+                        </div>
+                        <div>
+                          <Label htmlFor="ext-state">Estado</Label>
+                          <Input
+                            id="ext-state"
+                            className="bg-black border-white/10"
+                            value={externalEventForm.state}
+                            onChange={(e) => setExternalEventForm({ ...externalEventForm, state: e.target.value })}
+                            placeholder="Ex: DF"
+                            maxLength={2}
+                          />
+                        </div>
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Visibilidade</Label>
+                        <div className="flex items-center space-x-6 text-sm text-neutral-300">
+                          <label className="flex items-center space-x-2 cursor-pointer">
+                            <input
+                              type="radio"
+                              name="showInListingAdmin"
+                              checked={externalEventForm.showInListing === true}
+                              onChange={() => setExternalEventForm({ ...externalEventForm, showInListing: true })}
+                              className="w-4 h-4 accent-primary"
+                            />
+                            <span>Ver no Calendário e Home</span>
+                          </label>
+                          <label className="flex items-center space-x-2 cursor-pointer">
+                            <input
+                              type="radio"
+                              name="showInListingAdmin"
+                              checked={externalEventForm.showInListing === false}
+                              onChange={() => setExternalEventForm({ ...externalEventForm, showInListing: false })}
+                              className="w-4 h-4 accent-primary"
+                            />
+                            <span>Ocultar da Home (Apenas Calendário)</span>
+                          </label>
+                        </div>
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="ext-image">Imagem do Evento</Label>
+                        <Input
+                          id="ext-image"
+                          type="file"
+                          accept="image/*"
+                          className="bg-black border-white/10"
+                          onChange={async (e) => {
+                            const file = e.target.files?.[0];
+                            if (file) {
+                              try {
+                                const compressedBase64 = await compressImage(file);
+                                setExternalEventForm({ ...externalEventForm, imageUrl: compressedBase64 });
+                              } catch (error) {
+                                toast.error('Erro ao processar imagem');
+                              }
+                            }
+                          }}
+                        />
+                      </div>
+                    </div>
+                    <DialogFooter>
+                      <Button variant="ghost" className="text-neutral-400 hover:text-white" onClick={() => setExternalEventDialogOpen(false)}>Cancelar</Button>
+                      <Button onClick={handleCreateExternalEvent} disabled={createExternalEvent.isPending} className="font-bold bg-primary hover:bg-primary/90 text-white">
+                        {createExternalEvent.isPending ? "Adicionando..." : "Criar Evento Externo"}
+                      </Button>
+                    </DialogFooter>
+                  </DialogContent>
+                </Dialog>
               </CardHeader>
               <CardContent className="p-0">
                 <Table>

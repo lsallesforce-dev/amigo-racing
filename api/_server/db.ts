@@ -401,7 +401,7 @@ export async function getEventsByOrganizerId(organizerId: number) {
     .where(
       eq(events.organizerId, organizerId)
     )
-    .orderBy(desc(events.startDate));
+    .orderBy(asc(events.startDate));
 }
 
 export async function updateEvent(id: number, data: Partial<InsertEvent>) {
