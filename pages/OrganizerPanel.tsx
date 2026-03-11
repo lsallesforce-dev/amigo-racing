@@ -1251,42 +1251,46 @@ export default function OrganizerPanel() {
                   .filter((event) => showExternal ? true : !event.isExternal)
                   .map((event) => (
                   <Card key={event.id} className="overflow-hidden">
-                    {event.imageUrl && (
-                      <div className="w-full h-48 overflow-hidden">
-                        <img
-                          src={encodeURI(event.imageUrl)}
-                          alt={event.name}
-                          className="w-full h-full object-cover"
-                        />
-                      </div>
-                    )}
-                    <CardHeader>
-                      <div className="flex items-start justify-between mb-2">
-                        <CardTitle className="text-xl">{event.name}</CardTitle>
-                        <Badge variant={event.status === 'open' ? 'default' : 'secondary'}>
-                          {event.status === 'open' ? 'Aberto' : event.status === 'closed' ? 'Fechado' : 'Cancelado'}
-                        </Badge>
-                      </div>
-                      <div className="text-sm text-muted-foreground space-y-1">
-                        <div className="flex items-center gap-1">
-                          <Calendar className="h-4 w-4" />
-                          {(() => {
-                            // @ts-ignore
-                            const dateStr = event.startDate instanceof Date
-                              ? event.startDate.toISOString().split('T')[0]
-                              : (event as any).startDate;
-                            const parts = String(dateStr).split('T')[0].split('-');
-                            if (parts.length < 3) return "Data Inválida";
-                            const [year, month, day] = parts;
-                            const localDate = new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
-                            return format(localDate, "dd/MM/yyyy", { locale: ptBR });
-                          })()}
+                    <CardHeader className="flex flex-row items-center justify-between gap-2">
+                      <div className="flex-1 min-w-0">
+                        <div className="mb-2 w-full">
+                          <CardTitle className="text-xl truncate">{event.name}</CardTitle>
                         </div>
-                        <div className="flex items-center gap-1">
-                          <MapPin className="h-4 w-4" />
-                          {event.city}, {event.state || 'SP'}
+                        <div className="text-sm text-muted-foreground space-y-1">
+                          <div className="flex items-center gap-1">
+                            <Calendar className="h-4 w-4 shrink-0" />
+                            {(() => {
+                              // @ts-ignore
+                              const dateStr = event.startDate instanceof Date
+                                ? event.startDate.toISOString().split('T')[0]
+                                : (event as any).startDate;
+                              const parts = String(dateStr).split('T')[0].split('-');
+                              if (parts.length < 3) return "Data Inválida";
+                              const [year, month, day] = parts;
+                              const localDate = new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
+                              return format(localDate, "dd/MM/yyyy", { locale: ptBR });
+                            })()}
+                          </div>
+                          <div className="flex items-center gap-1">
+                            <MapPin className="h-4 w-4 shrink-0" />
+                            <span className="truncate">{event.city}, {event.state || 'SP'}</span>
+                          </div>
                         </div>
                       </div>
+
+                      {event.imageUrl && (
+                        <div className="shrink-0 flex items-center justify-center px-2">
+                          <img
+                            src={encodeURI(event.imageUrl)}
+                            alt={event.name}
+                            className="h-16 w-16 md:h-20 md:w-20 rounded-full object-cover border border-border shadow-sm"
+                          />
+                        </div>
+                      )}
+
+                      <Badge variant={event.status === 'open' ? 'default' : 'secondary'} className="shrink-0 self-start mt-1">
+                        {event.status === 'open' ? 'Aberto' : event.status === 'closed' ? 'Fechado' : 'Cancelado'}
+                      </Badge>
                     </CardHeader>
                     <CardContent>
                       {event.description && (
