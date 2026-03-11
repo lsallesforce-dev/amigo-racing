@@ -1,7 +1,8 @@
-﻿import { Router } from 'express';
+import { Router } from 'express';
 import * as db from './db.js';
 import { ENV } from './env.js';
 import { TRPCError } from '@trpc/server';
+import { sendEmail } from './email.js';
 
 const router = Router();
 
@@ -395,6 +396,27 @@ router.post('/pagarme', async (req, res) => {
         }
 
         console.log('[Webhook Pagar.me] InscriÃ§Ã£o atualizada para PAGA:', registration.id);
+
+        const eventData = await db.getEventById(registration.eventId);
+        const eventName = eventData ? eventData.name : "Evento Amigo Racing";
+        
+        const emailHtml = `
+          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; color: #333;">
+            <h2 style="color: #00a19c;">Pagamento Confirmado! 🎉</h2>
+            <p>Olá, <strong>${registration.pilotName || 'Piloto'}</strong>,</p>
+            <p>Seu pagamento foi aprovado e sua inscrição para o evento <strong>${eventName}</strong> está oficialmente confirmada.</p>
+            <p>Estamos ansiosos para vê-lo no grid de largada!</p>
+            <div style="text-align: center; margin: 30px 0;">
+              <a href="${ENV.oAuthServerUrl}/panel" style="background-color: #00a19c; color: white; padding: 12px 24px; text-decoration: none; border-radius: 4px; font-weight: bold;">Acessar Meu Painel</a>
+            </div>
+            <hr style="border: none; border-top: 1px solid #eee; margin: 20px 0;" />
+            <p style="color: #999; font-size: 12px; text-align: center;">🏁 Equipe Amigo Racing</p>
+          </div>
+        `;
+        if (registration.pilotEmail) {
+          await sendEmail(registration.pilotEmail, "Inscrição Confirmada - Amigo Racing", emailHtml);
+        }
+
         return res.status(200).json({ received: true, type: 'registration', id: registration.id });
       }
 

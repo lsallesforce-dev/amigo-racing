@@ -21,6 +21,10 @@ export const ENV = {
   // Verificação de ambiente
   isProduction: process.env.NODE_ENV === "production" || !!process.env.RENDER,
 
+  // Servidor de Email (Zoho SMTP)
+  smtpUser: process.env.SMTP_USER || "amigo@amigoracing.com.br",
+  smtpPassword: process.env.SMTP_PASSWORD || "",
+
   // Pagar.me (Onde o dinheiro entra)
   pagarmeApiKey: process.env.PAGARME_API_KEY || "",
   pagarmePublicKey: process.env.PAGARME_PUBLIC_KEY || "",

@@ -5,6 +5,7 @@ import { getSessionCookieOptions } from "./cookies.js";
 import { getUserByOpenId, upsertUser } from "./db.js";
 import { randomBytes, scryptSync, timingSafeEqual } from "crypto";
 import { ENV } from "./env.js";
+import { sendEmail } from "./email.js";
 
 // Local password hashing util using scrypt
 export function hashPassword(password: string): string {
@@ -144,8 +145,22 @@ export function registerOAuthRoutes(app: Express) {
       console.log(`${resetLink}`);
       console.log(`================================\n`);
       
-      // Here usually we'd call an email sending service.
-      // Since instructed to only mock/console.log, we stop here.
+      const emailHtml = `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; color: #333;">
+          <h2 style="color: #ea580c;">Recuperação de Senha</h2>
+          <p>Olá,</p>
+          <p>Recebemos uma solicitação para redefinir a senha da sua conta no Amigo Racing.</p>
+          <p>Para criar uma nova senha, clique no botão abaixo:</p>
+          <div style="text-align: center; margin: 30px 0;">
+            <a href="${resetLink}" style="background-color: #ea580c; color: white; padding: 12px 24px; text-decoration: none; border-radius: 4px; font-weight: bold;">Redefinir Minha Senha</a>
+          </div>
+          <p style="color: #666; font-size: 14px;">Este link é válido por 1 hora. Se você não solicitou esta alteração, pode ignorar este e-mail tranquilamente.</p>
+          <hr style="border: none; border-top: 1px solid #eee; margin: 20px 0;" />
+          <p style="color: #999; font-size: 12px; text-align: center;">🏁 Equipe Amigo Racing</p>
+        </div>
+      `;
+
+      await sendEmail(email, "Redefinição de Senha - Amigo Racing", emailHtml);
 
       res.json({ message: "If the email is valid, a link was sent." });
     } catch (error: any) {

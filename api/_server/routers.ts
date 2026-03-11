@@ -1,4 +1,4 @@
-﻿import * as pagarme from "./pagarme.js";
+import * as pagarme from "./pagarme.js";
 import * as storage from "./storage.js";
 import fs from "fs";
 import path from "path";
@@ -111,7 +111,8 @@ const financeRouter = router({
   getPagarmeBalance: organizerProcedure
     .query(async ({ ctx }) => {
       const user = ctx.user as any;
-      const recipientId = user.recipientId;
+      const freshUser = await db.getUserById(user.id);
+      const recipientId = freshUser?.recipientId || user.recipientId;
 
       if (!recipientId) {
         return { totalBalance: 0, availableBalance: 0, waitingBalance: 0, hasRecipient: false };
@@ -156,7 +157,8 @@ const financeRouter = router({
     }))
     .mutation(async ({ ctx, input }) => {
       const user = ctx.user as any;
-      const recipientId = user.recipientId;
+      const freshUser = await db.getUserById(user.id);
+      const recipientId = freshUser?.recipientId || user.recipientId;
 
       if (!recipientId) {
         throw new TRPCError({ code: 'BAD_REQUEST', message: 'Você precisa configurar seus dados bancários antes de solicitar uma transferência.' });

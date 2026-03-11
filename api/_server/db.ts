@@ -1,4 +1,4 @@
-﻿import { eq, and, or, gte, lte, asc, desc, sql } from "drizzle-orm";
+import { eq, and, or, gte, lte, asc, desc, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/postgres-js";
 import {
   User,
@@ -372,7 +372,7 @@ export async function getOpenEvents() {
     .where(and(
       eq(events.status, 'open'),
       eq(events.showInListing, true),
-      gte(events.startDate, today)
+      gte(events.endDate, today)
     ))
     .orderBy(asc(events.startDate));
 }
@@ -388,7 +388,7 @@ export async function getAllOpenEvents() {
   return await db.select().from(events)
     .where(and(
       eq(events.status, 'open'),
-      gte(events.startDate, today)
+      gte(events.endDate, today)
     ))
     .orderBy(asc(events.startDate));
 }
