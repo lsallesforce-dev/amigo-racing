@@ -36,6 +36,7 @@ type EventWithCategories = {
   city: string;
   state: string | null;
   status: "open" | "closed" | "cancelled";
+  isExternal: boolean;
   imageUrl: string | null;
   organizerId: number;
   createdAt: Date;
@@ -85,6 +86,7 @@ export default function OrganizerPanel() {
   const [categoryDialogOpen, setCategoryDialogOpen] = useState(false);
   const [selectedEventId, setSelectedEventId] = useState(0);
   const [editingEvent, setEditingEvent] = useState<any>(null);
+  const [showExternal, setShowExternal] = useState(false);
   const { data: eventCategories } = trpc.categories.listByEvent.useQuery(
     { eventId: editingEvent?.id || 0 },
     { enabled: !!editingEvent?.id }
@@ -1201,20 +1203,35 @@ export default function OrganizerPanel() {
         )}
 
         <Tabs defaultValue="events" className="w-full">
-          <TabsList className="mb-8 w-full justify-start border-b rounded-none h-auto p-0 bg-transparent gap-6">
-            <TabsTrigger
-              value="events"
-              className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent px-4 py-2 font-semibold transition-none shadow-none"
-            >
-              Eventos
-            </TabsTrigger>
-            <TabsTrigger
-              value="championships"
-              className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent px-4 py-2 font-semibold transition-none shadow-none"
-            >
-              Campeonatos
-            </TabsTrigger>
-          </TabsList>
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b mb-8 gap-4">
+            <TabsList className="justify-start border-0 rounded-none h-auto p-0 bg-transparent gap-6">
+              <TabsTrigger
+                value="events"
+                className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent px-4 py-2 font-semibold transition-none shadow-none"
+              >
+                Eventos
+              </TabsTrigger>
+              <TabsTrigger
+                value="championships"
+                className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent px-4 py-2 font-semibold transition-none shadow-none"
+              >
+                Campeonatos
+              </TabsTrigger>
+            </TabsList>
+            
+            <div className="flex items-center space-x-2 pb-2 sm:pb-0 px-4">
+              <input
+                type="checkbox"
+                id="show-external"
+                checked={showExternal}
+                onChange={(e) => setShowExternal(e.target.checked)}
+                className="h-4 w-4 rounded border-gray-300"
+              />
+              <Label htmlFor="show-external" className="text-sm text-muted-foreground cursor-pointer">
+                Exibir eventos externos
+              </Label>
+            </div>
+          </div>
 
           <TabsContent value="events">
             {/* Events List Content */}
@@ -1230,7 +1247,9 @@ export default function OrganizerPanel() {
               </div>
             ) : (events && events.length > 0) ? (
               <div className="grid gap-6 grid-cols-1 md:grid-cols-2">
-                {(events as any as EventWithCategories[]).map((event) => (
+                {(events as any as EventWithCategories[])
+                  .filter((event) => showExternal ? true : !event.isExternal)
+                  .map((event) => (
                   <Card key={event.id} className="overflow-hidden">
                     {event.imageUrl && (
                       <div className="w-full h-48 overflow-hidden">
