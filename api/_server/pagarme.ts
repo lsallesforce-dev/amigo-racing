@@ -414,7 +414,7 @@ router.post('/pagarme', async (req, res) => {
           </div>
         `;
         if (registration.pilotEmail) {
-          await sendEmail(registration.pilotEmail, "Inscrição Confirmada - Amigo Racing", emailHtml);
+          await sendEmail(registration.pilotEmail, `[NOVA INSCRIÇÃO] - ${registration.pilotName} - ${eventName}`, emailHtml);
         }
 
         return res.status(200).json({ received: true, type: 'registration', id: registration.id });
