@@ -560,10 +560,12 @@ export async function getRegistrationsByUserId(userId: number) {
       eventNavigationFiles: sql<any | null>`events."navigationFiles"`,
       eventAllowCancellation: sql<boolean | null>`events."allowCancellation"`,
       eventNotificationEmail: sql<string | null>`events."notificationEmail"`,
+      championshipId: championshipStages.championshipId,
     })
     .from(registrations)
     .leftJoin(categories, eq(registrations.categoryId, categories.id))
     .leftJoin(events, eq(registrations.eventId, events.id))
+    .leftJoin(championshipStages, eq(events.id, championshipStages.eventId))
     .where(eq(registrations.userId, userId))
     .orderBy(desc(registrations.createdAt));
 

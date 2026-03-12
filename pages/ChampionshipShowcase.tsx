@@ -24,9 +24,12 @@ export default function ChampionshipShowcase() {
     const chartRef = useRef<HTMLDivElement>(null);
 
     // Fetch public classification
-    const { data: standingsData, isLoading: isStandingsLoading } = trpc.championships.getPublicClassification.useQuery(
+    const { data: standingsData, isLoading: isStandingsLoading, error } = trpc.championships.getPublicClassification.useQuery(
         { championshipId },
-        { enabled: championshipId > 0 }
+        { 
+            enabled: championshipId > 0,
+            retry: false 
+        }
     );
 
     // Fetch name and other info (we can get this from standingsData if we modify the backend, 
@@ -199,14 +202,18 @@ export default function ChampionshipShowcase() {
         );
     }
 
-    if (!standingsData) {
+    if (error || !standingsData || !standingsData.championship) {
         return (
             <div className="min-h-screen bg-background flex flex-col items-center justify-center p-4">
                 <Trophy className="h-16 w-16 text-muted-foreground/20 mb-4" />
                 <h2 className="text-xl font-bold mb-2">Classificação não encontrada</h2>
-                <p className="text-muted-foreground text-center max-w-sm mb-6">Não conseguimos carregar os dados deste campeonato. Verifique o link ou tente novamente mais tarde.</p>
+                <p className="text-muted-foreground text-center max-w-sm mb-6">
+                    {error?.message === "Campeonato não encontrado" 
+                        ? "Este campeonato não existe ou foi removido." 
+                        : "Não conseguimos carregar os dados deste campeonato. Verifique o link ou tente novamente mais tarde."}
+                </p>
                 <Link href="/">
-                    <Button variant="outline">Ir para a Home</Button>
+                    <Button variant="outline" className="h-12 px-8 rounded-xl">Ir para a Home</Button>
                 </Link>
             </div>
         );
@@ -336,7 +343,7 @@ export default function ChampionshipShowcase() {
                                 return (
                                     <div className="p-20 text-center bg-muted/5">
                                         <Trophy className="h-16 w-16 text-muted-foreground/10 mx-auto mb-4" />
-                                        <h3 className="text-xl font-bold text-muted-foreground mb-1">Pódio Vazio</h3>
+                                        <h3 className="text-xl font-bold text-muted-foreground mb-1">Resultados em breve</h3>
                                         <p className="text-sm text-muted-foreground">Este campeonato ainda não possui resultados cadastrados.</p>
                                     </div>
                                 );

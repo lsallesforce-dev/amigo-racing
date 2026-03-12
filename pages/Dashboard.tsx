@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { getLoginUrl } from "@/api/_server/const";
 import { trpc } from "@/lib/trpc";
-import { Car, Calendar, MapPin, Plus, Loader2, QrCode, CreditCard, AlertCircle, X, ShoppingBag, Hash, Download, FileText } from "lucide-react";
+import { Car, Calendar, MapPin, Plus, Loader2, QrCode, CreditCard, AlertCircle, X, ShoppingBag, Hash, Download, FileText, Trophy } from "lucide-react";
 import { Link, useLocation } from "wouter";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -258,11 +258,6 @@ export default function Dashboard() {
               >
                 Minhas Inscrições
               </TabsTrigger>
-              <Link href="/championship/2">
-                <div className="inline-flex items-center justify-center whitespace-nowrap py-2 px-4 text-sm font-medium cursor-pointer hover:text-primary transition-all rounded-none h-11">
-                  Campeonatos
-                </div>
-              </Link>
               <TabsTrigger
                 value="vehicles"
                 className="inline-flex items-center justify-center whitespace-nowrap py-2 px-4 text-sm font-medium ring-offset-background transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 data-[state=active]:border-b-2 data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none rounded-none h-11"
@@ -466,6 +461,18 @@ export default function Dashboard() {
                           <X className="mr-2 h-4 w-4" />
                           Solicitar Cancelamento
                         </Button>
+                      )}
+                      {reg.championshipId && (
+                        <Link href={`/championship/${reg.championshipId}`}>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="text-primary border-primary/20 hover:bg-primary/5"
+                          >
+                            <Trophy className="mr-2 h-4 w-4" />
+                            Ver Classificação
+                          </Button>
+                        </Link>
                       )}
                     </CardFooter>
                   </Card>
