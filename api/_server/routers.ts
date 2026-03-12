@@ -579,6 +579,7 @@ export const appRouter = router({
       const cookieOptions = getSessionCookieOptions(ctx.req);
       ctx.res.clearCookie(COOKIE_NAME, cookieOptions);
       ctx.res.clearCookie(COOKIE_NAME); // Fallback: sem opções para garantir remoção em localhost
+      ctx.res.setHeader('Clear-Site-Data', '"cache", "cookies", "storage"');
       return { success: true };
     }),
   }),

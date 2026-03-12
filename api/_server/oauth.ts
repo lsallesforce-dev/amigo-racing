@@ -65,6 +65,8 @@ export function registerOAuthRoutes(app: Express) {
       const cookieOptions = getSessionCookieOptions(req);
       res.cookie(COOKIE_NAME, sessionToken, { ...cookieOptions, maxAge: ONE_YEAR_MS });
 
+      // Nuclear clear to ensure fresh start
+      res.setHeader('Clear-Site-Data', '"cache", "cookies", "storage"');
       res.setHeader('Cache-Control', 'no-store, max-age=0');
       res.json({ message: "Registered successfully", user: newUser, token: sessionToken });
     } catch (error: any) {
@@ -111,6 +113,8 @@ export function registerOAuthRoutes(app: Express) {
       const cookieOptions = getSessionCookieOptions(req);
       res.cookie(COOKIE_NAME, sessionToken, { ...cookieOptions, maxAge: ONE_YEAR_MS });
 
+      // Nuclear clear on login to bypass any stuck state
+      res.setHeader('Clear-Site-Data', '"cache", "cookies", "storage"');
       res.setHeader('Cache-Control', 'no-store, max-age=0');
       res.json({ message: "Logged in successfully", user: updatedUser, token: sessionToken });
     } catch (error: any) {
@@ -218,6 +222,7 @@ export function registerOAuthRoutes(app: Express) {
     const cookieOptions = getSessionCookieOptions(req);
     res.clearCookie(COOKIE_NAME, cookieOptions);
     res.clearCookie(COOKIE_NAME); // Clearing without options as fallback
+    res.setHeader('Clear-Site-Data', '"cache", "cookies", "storage"');
     res.redirect("/");
   });
 
@@ -225,6 +230,7 @@ export function registerOAuthRoutes(app: Express) {
     const cookieOptions = getSessionCookieOptions(req);
     res.clearCookie(COOKIE_NAME, cookieOptions);
     res.clearCookie(COOKIE_NAME);
+    res.setHeader('Clear-Site-Data', '"cache", "cookies", "storage"');
     res.json({ message: "Logged out" });
   });
 

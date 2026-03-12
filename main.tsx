@@ -8,6 +8,19 @@ import App from "./App";
 import { getLoginUrl } from "./api/_server/const";
 import "./index.css";
 
+// --- NUCLEAR SERVICE WORKER REMOVAL ---
+if (typeof window !== 'undefined' && 'serviceWorker' in navigator) {
+  navigator.serviceWorker.getRegistrations().then((registrations) => {
+    for (const registration of registrations) {
+      console.log('[Auth] Forcing Service Worker unregistration:', registration);
+      registration.unregister();
+    }
+  }).catch(err => {
+    console.warn('[Auth] Error unregistering service workers:', err);
+  });
+}
+// --------------------------------------
+
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
