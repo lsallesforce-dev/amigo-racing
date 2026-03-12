@@ -1630,7 +1630,7 @@ export async function getTransactions(userId: number, filters?: { type?: "INCOME
  */
 export async function getTransactionSummary(userId: number, filters?: { month?: number, year?: number }) {
   const db = await getDb();
-  if (!db) return { manualIncome: 0, expense: 0, balance: 0, paidRegistrations: 0, storeIncome: 0, pendingRegistrations: 0, pendingStoreIncome: 0, pendingExpense: 0, projectedBalance: 0 };
+  if (!db) return { manualIncome: 0, expense: 0, balance: 0, paidRegistrations: 0, storeIncome: 0, pendingRegistrations: 0, pendingStoreIncome: 0, pendingExpense: 0, projectedBalance: 0, manualBalance: 0 };
 
   const allTxs = await getTransactions(userId, filters);
 
@@ -1737,8 +1737,9 @@ export async function getTransactionSummary(userId: number, filters?: { month?: 
     pendingStoreIncome,
     expense,
     pendingExpense,
-    balance: (manualIncome + paidRegistrations + storeIncome) - expense,
-    projectedBalance: ((manualIncome + paidRegistrations + storeIncome) - expense) + pendingRegistrations + pendingStoreIncome - pendingExpense
+    balance: (manualIncome + paidRegistrations + storeIncome) - expense, // This remains gross "site" balance for backward compatibility if needed
+    manualBalance: manualIncome - expense, // NEW: Net amount in hand (excluding site transactions which are in Pagar.me)
+    projectedBalance: ((manualIncome + (paidRegistrations + storeIncome)*0.9) - expense) + (pendingRegistrations + pendingStoreIncome)*0.9 - pendingExpense
   };
 }
 

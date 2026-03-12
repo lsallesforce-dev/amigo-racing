@@ -11,6 +11,7 @@ export default function Login() {
 
     const [isLogin, setIsLogin] = useState(true);
     const [loading, setLoading] = useState(false);
+    const [authError, setAuthError] = useState<string | null>(null);
 
     const [email, setEmail] = useState("");
     const [password, setPassword] = useState("");
@@ -48,7 +49,12 @@ export default function Login() {
             window.location.href = redirectUri;
 
         } catch (error: any) {
-            alert("Error: " + error.message);
+            let errorMsg = error.message;
+            if (isLogin && (errorMsg.includes("not found") || errorMsg.includes("credentials") || errorMsg.includes("failed"))) {
+                setAuthError("E-mail não encontrado ou senha incorreta. Você já criou sua conta na nova plataforma?");
+            } else {
+                setAuthError(errorMsg);
+            }
         } finally {
             setLoading(false);
         }
@@ -58,7 +64,12 @@ export default function Login() {
         <div className="flex items-center justify-center min-h-screen bg-gray-50 p-4">
             <Card className="w-full max-w-md">
                 <form onSubmit={handleSubmit}>
-                    <CardHeader className="space-y-1 text-center">
+                    <CardHeader className="space-y-1 text-center pb-2">
+                        {isLogin && (
+                            <div className="bg-orange-50 dark:bg-orange-950/20 border border-orange-200 dark:border-orange-800 rounded-lg p-3 mb-4 text-sm text-orange-800 dark:text-orange-400 font-medium">
+                                🏁 Primeira vez aqui? Clique em <strong>Cadastre-se</strong> abaixo.
+                            </div>
+                        )}
                         <CardTitle className="text-2xl font-bold">Amigo Racing</CardTitle>
                         <CardDescription>
                             {isLogin ? "Entre com seu e-mail e senha" : "Crie sua conta para participar"}
@@ -129,26 +140,55 @@ export default function Login() {
                             </div>
                         </div>
 
-                        <Button type="submit" className="w-full h-11 text-base mt-2" disabled={loading}>
+                        {authError && (
+                            <div className="p-3 rounded-lg bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-800 text-sm text-red-600 dark:text-red-400">
+                                {authError}
+                                {isLogin && (
+                                    <button 
+                                        type="button"
+                                        onClick={() => { setIsLogin(false); setAuthError(null); }}
+                                        className="block mt-2 font-bold underline hover:text-red-700"
+                                    >
+                                        Clique aqui para se cadastrar
+                                    </button>
+                                )}
+                            </div>
+                        )}
+
+                        <Button type="submit" className="w-full h-11 text-base mt-2 bg-orange-600 hover:bg-orange-700 text-white" disabled={loading}>
                             {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                             {isLogin ? "Entrar" : "Criar Conta"}
                         </Button>
+
+                        {isLogin && (
+                            <Button 
+                                type="button" 
+                                variant="outline" 
+                                className="w-full h-11 text-base border-orange-600 text-orange-600 hover:bg-orange-50 dark:hover:bg-orange-950/20"
+                                onClick={() => { setIsLogin(false); setAuthError(null); }}
+                                disabled={loading}
+                            >
+                                Cadastre-se
+                            </Button>
+                        )}
                     </CardContent>
 
-                    <CardFooter className="flex flex-col space-y-2 text-sm text-center">
-                        <Button
-                            variant="link"
-                            type="button"
-                            onClick={() => setIsLogin(!isLogin)}
-                            className="text-muted-foreground hover:text-primary"
-                        >
-                            {isLogin ? "Não tem uma conta? Cadastre-se" : "Já tem conta? Faça login"}
-                        </Button>
+                    <CardFooter className="flex flex-col space-y-2 text-sm text-center pt-2">
+                        {!isLogin && (
+                            <Button
+                                variant="link"
+                                type="button"
+                                onClick={() => { setIsLogin(true); setAuthError(null); }}
+                                className="text-muted-foreground hover:text-primary"
+                            >
+                                Já tem conta? Faça login
+                            </Button>
+                        )}
                         <Button
                             variant="ghost"
                             type="button"
                             onClick={() => setLocation('/')}
-                            className="text-xs"
+                            className="text-xs text-muted-foreground"
                         >
                             Voltar para a Home
                         </Button>

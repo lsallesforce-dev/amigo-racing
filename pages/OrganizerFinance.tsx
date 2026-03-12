@@ -160,13 +160,12 @@ export default function OrganizerFinance() {
 
             const summaryBody = [
                 ["Recebido (Manual)", formatCurrency(summary?.manualIncome || 0)],
-                ["Inscrições Pagas", formatCurrency(summary?.paidRegistrations || 0)],
                 ["Vendas Avulsas (Loja)", formatCurrency(summary?.storeIncome || 0)],
                 ["Despesas Pagas", formatCurrency(summary?.expense || 0)],
-                ["Saldo Atual (Caixa)", formatCurrency(summary?.balance || 0)],
-                ["A Receber (Restante)", formatCurrency((summary?.pendingRegistrations || 0) + (summary?.pendingStoreIncome || 0))],
+                ["Saldo Atual (Caixa)", formatCurrency((summary?.manualBalance || 0) + (pagarmeBalance?.availableBalance || 0))],
+                ["A Receber (Restante Líquido)", formatCurrency(((summary?.pendingRegistrations || 0) + (summary?.pendingStoreIncome || 0)) * 0.9)],
                 ["A Pagar (Agendado)", formatCurrency(summary?.pendingExpense || 0)],
-                ["Previsão de Lucro Final", formatCurrency(summary?.projectedBalance || 0)],
+                ["Previsão de Lucro Final", formatCurrency((summary?.manualBalance || 0) + (pagarmeBalance?.totalBalance || 0) + ((summary?.pendingRegistrations || 0) + (summary?.pendingStoreIncome || 0)) * 0.9 - (summary?.pendingExpense || 0))],
             ];
 
             autoTable(doc, {
@@ -429,17 +428,17 @@ export default function OrganizerFinance() {
                                 </CardContent>
                             </Card>
 
-                            {/* Card 2: Disponível para Saque */}
-                            <Card className="border-green-300/50 bg-gradient-to-br from-green-50/50 to-green-100/30 dark:from-green-950/20 dark:to-green-900/10">
+                            {/* Card 2: Disponível para Saque - HIGHLIGHTED */}
+                            <Card className="border-green-500 shadow-lg shadow-green-500/20 bg-gradient-to-br from-green-500/10 to-green-600/20 dark:from-green-500/20 dark:to-green-600/10 scale-105 z-10">
                                 <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                                    <CardTitle className="text-sm font-medium text-green-700 dark:text-green-400">Disponível para Saque</CardTitle>
-                                    <Banknote className="h-4 w-4 text-green-600" />
+                                    <CardTitle className="text-sm font-bold text-green-700 dark:text-green-400">Disponível para Saque</CardTitle>
+                                    <Banknote className="h-5 w-5 text-green-600 animate-pulse" />
                                 </CardHeader>
                                 <CardContent>
-                                    <div className="text-2xl font-bold text-green-700 dark:text-green-400">
-                                        {isLoadingBalance ? <Loader2 className="h-5 w-5 animate-spin" /> : formatCurrency(pagarmeBalance?.availableBalance || 0)}
+                                    <div className="text-3xl font-extrabold text-green-700 dark:text-green-400">
+                                        {isLoadingBalance ? <Loader2 className="h-6 w-6 animate-spin" /> : formatCurrency(pagarmeBalance?.availableBalance || 0)}
                                     </div>
-                                    <p className="text-xs text-muted-foreground mt-1">Liquidado e pronto para transferência</p>
+                                    <p className="text-xs font-medium text-green-600/80 mt-1 italic">Liquidado e pronto para transferência agora</p>
                                 </CardContent>
                             </Card>
 
@@ -514,22 +513,6 @@ export default function OrganizerFinance() {
                     <Card>
                         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                             <CardTitle className="text-sm font-medium">
-                                Inscrições Pagas
-                            </CardTitle>
-                            <ArrowUpRight className="h-4 w-4 text-green-500" />
-                        </CardHeader>
-                        <CardContent>
-                            <div className="text-2xl font-bold text-green-600">
-                                {isLoadingSummary ? "..." : formatCurrency(summary?.paidRegistrations || 0)}
-                            </div>
-                            <p className="text-xs text-muted-foreground mt-1">
-                                Receita confirmada do site
-                            </p>
-                        </CardContent>
-                    </Card>
-                    <Card>
-                        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                            <CardTitle className="text-sm font-medium">
                                 Loja
                             </CardTitle>
                             <ShoppingBag className="h-4 w-4 text-green-500" />
@@ -559,7 +542,7 @@ export default function OrganizerFinance() {
                             </p>
                         </CardContent>
                     </Card>
-                    <Card>
+                    <Card className="border-primary/20 bg-primary/5">
                         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                             <CardTitle className="text-sm font-medium">
                                 Caixa
@@ -567,11 +550,11 @@ export default function OrganizerFinance() {
                             <TrendingUp className="h-4 w-4 text-primary" />
                         </CardHeader>
                         <CardContent>
-                            <div className={`text-2xl font-bold ${(summary?.balance || 0) >= 0 ? 'text-green-600 dark:text-green-500' : 'text-red-600 dark:text-red-500'}`}>
-                                {isLoadingSummary ? "..." : formatCurrency(summary?.balance || 0)}
+                            <div className={`text-2xl font-bold ${((summary?.manualBalance || 0) + (pagarmeBalance?.availableBalance || 0)) >= 0 ? 'text-green-600 dark:text-green-500' : 'text-red-600 dark:text-red-500'}`}>
+                                {isLoadingSummary ? "..." : formatCurrency((summary?.manualBalance || 0) + (pagarmeBalance?.availableBalance || 0))}
                             </div>
                             <p className="text-xs text-muted-foreground mt-1">
-                                Saldo real em mãos
+                                Saldo manual + Pagar.me disponível
                             </p>
                         </CardContent>
                     </Card>
@@ -620,11 +603,11 @@ export default function OrganizerFinance() {
                             <TrendingUp className="h-4 w-4 text-primary" />
                         </CardHeader>
                         <CardContent>
-                            <div className={`text-2xl font-bold ${(summary?.projectedBalance || 0) >= 0 ? 'text-green-600 dark:text-green-500' : 'text-red-600 dark:text-red-500'}`}>
-                                {isLoadingSummary ? "..." : formatCurrency(summary?.projectedBalance || 0)}
+                            <div className={`text-2xl font-bold ${((summary?.manualBalance || 0) + (pagarmeBalance?.totalBalance || 0) + ((summary?.pendingRegistrations || 0) + (summary?.pendingStoreIncome || 0)) * 0.9 - (summary?.pendingExpense || 0)) >= 0 ? 'text-green-600 dark:text-green-500' : 'text-red-600 dark:text-red-500'}`}>
+                                {isLoadingSummary ? "..." : formatCurrency((summary?.manualBalance || 0) + (pagarmeBalance?.totalBalance || 0) + ((summary?.pendingRegistrations || 0) + (summary?.pendingStoreIncome || 0)) * 0.9 - (summary?.pendingExpense || 0))}
                             </div>
                             <p className="text-xs text-muted-foreground mt-1">
-                                Caixa + A Receber - A Pagar
+                                Saldo Real + Expectativa Líquida do Site
                             </p>
                         </CardContent>
                     </Card>
