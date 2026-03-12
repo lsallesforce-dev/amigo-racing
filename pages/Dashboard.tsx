@@ -137,6 +137,7 @@ export default function Dashboard() {
       vehicleYear: reg.vehicleYear || '',
       vehicleColor: reg.vehicleColor || '',
       vehiclePlate: reg.vehiclePlate || '',
+      hasShirts: reg.eventHasShirts !== false,
     });
     setEditDialogOpen(true);
   };
@@ -206,6 +207,8 @@ export default function Dashboard() {
       vehiclePlate: editForm.vehiclePlate || null,
       team: editForm.team || null,
       notes: editForm.notes || null,
+      pilotShirtSize: editForm.hasShirts ? editForm.pilotShirtSize : null,
+      navigatorShirtSize: (editForm.hasShirts && editForm.navigatorName) ? editForm.navigatorShirtSize : null,
     };
 
     updateRegistration.mutate(submitData);
@@ -774,26 +777,28 @@ export default function Dashboard() {
                       onChange={(e) => setEditForm({ ...editForm, pilotAge: e.target.value })}
                     />
                   </div>
-                  <div>
-                    <Label htmlFor="pilotShirtSize">Tamanho da Camiseta *</Label>
-                    <select
-                      id="pilotShirtSize"
-                      className="w-full border rounded-md px-3 py-2"
-                      value={editForm.pilotShirtSize || ''}
-                      onChange={(e) => setEditForm({ ...editForm, pilotShirtSize: e.target.value })}
-                    >
-                      <option value="pp">PP</option>
-                      <option value="p">P</option>
-                      <option value="m">M</option>
-                      <option value="g">G</option>
-                      <option value="gg">GG</option>
-                      <option value="g1">G1</option>
-                      <option value="g2">G2</option>
-                      <option value="g3">G3</option>
-                      <option value="g4">G4</option>
-                      <option value="infantil">Infantil</option>
-                    </select>
-                  </div>
+                  {editForm.hasShirts && (
+                    <div>
+                      <Label htmlFor="pilotShirtSize">Tamanho da Camiseta *</Label>
+                      <select
+                        id="pilotShirtSize"
+                        className="w-full border rounded-md px-3 py-2"
+                        value={editForm.pilotShirtSize || ''}
+                        onChange={(e) => setEditForm({ ...editForm, pilotShirtSize: e.target.value })}
+                      >
+                        <option value="pp">PP</option>
+                        <option value="p">P</option>
+                        <option value="m">M</option>
+                        <option value="g">G</option>
+                        <option value="gg">GG</option>
+                        <option value="g1">G1</option>
+                        <option value="g2">G2</option>
+                        <option value="g3">G3</option>
+                        <option value="g4">G4</option>
+                        <option value="infantil">Infantil</option>
+                      </select>
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -832,27 +837,29 @@ export default function Dashboard() {
                         <p className="text-[10px] text-red-500 mt-1">CPF inválido</p>
                       )}
                     </div>
-                    <div>
-                      <Label htmlFor="navigatorShirtSize">Tamanho da Camiseta</Label>
-                      <select
-                        id="navigatorShirtSize"
-                        className="w-full border rounded-md px-3 py-2"
-                        value={editForm.navigatorShirtSize || ''}
-                        onChange={(e) => setEditForm({ ...editForm, navigatorShirtSize: e.target.value })}
-                      >
-                        <option value="">Selecione...</option>
-                        <option value="pp">PP</option>
-                        <option value="p">P</option>
-                        <option value="m">M</option>
-                        <option value="g">G</option>
-                        <option value="gg">GG</option>
-                        <option value="g1">G1</option>
-                        <option value="g2">G2</option>
-                        <option value="g3">G3</option>
-                        <option value="g4">G4</option>
-                        <option value="infantil">Infantil</option>
-                      </select>
-                    </div>
+                    {editForm.hasShirts && (
+                      <div>
+                        <Label htmlFor="navigatorShirtSize">Tamanho da Camiseta</Label>
+                        <select
+                          id="navigatorShirtSize"
+                          className="w-full border rounded-md px-3 py-2"
+                          value={editForm.navigatorShirtSize || ''}
+                          onChange={(e) => setEditForm({ ...editForm, navigatorShirtSize: e.target.value })}
+                        >
+                          <option value="">Selecione...</option>
+                          <option value="pp">PP</option>
+                          <option value="p">P</option>
+                          <option value="m">M</option>
+                          <option value="g">G</option>
+                          <option value="gg">GG</option>
+                          <option value="g1">G1</option>
+                          <option value="g2">G2</option>
+                          <option value="g3">G3</option>
+                          <option value="g4">G4</option>
+                          <option value="infantil">Infantil</option>
+                        </select>
+                      </div>
+                    )}
                   </div>
                 </div>
               )}

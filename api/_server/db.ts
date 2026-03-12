@@ -560,6 +560,7 @@ export async function getRegistrationsByUserId(userId: number) {
       eventNavigationFiles: sql<any | null>`events."navigationFiles"`,
       eventAllowCancellation: sql<boolean | null>`events."allowCancellation"`,
       eventNotificationEmail: sql<string | null>`events."notificationEmail"`,
+      eventHasShirts: events.hasShirts,
       championshipId: championshipStages.championshipId,
     })
     .from(registrations)
