@@ -249,7 +249,7 @@ export function PaymentModal({
 
     return (
         <Dialog open={open} onOpenChange={handleClose}>
-            <DialogContent className="max-w-md">
+            <DialogContent className="max-w-md max-h-[95vh] overflow-y-auto pb-12">
                 <DialogHeader>
                     <DialogTitle>Pagamento da Inscrição</DialogTitle>
                     <DialogDescription>
