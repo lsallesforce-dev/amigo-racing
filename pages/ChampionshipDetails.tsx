@@ -1235,7 +1235,7 @@ export default function ChampionshipDetails() {
                                     </div>
                                     <div className="flex items-center gap-2">
                                         <Select value={selectedCategory} onValueChange={setSelectedCategory}>
-                                            <SelectTrigger className="w-[180px]">
+                                            <SelectTrigger className="w-full sm:w-[180px]">
                                                 <SelectValue placeholder="Categoria" />
                                             </SelectTrigger>
                                             <SelectContent>
@@ -1246,12 +1246,12 @@ export default function ChampionshipDetails() {
                                             </SelectContent>
                                         </Select>
 
-                                        <div className="bg-muted p-1 rounded-md flex items-center">
+                                        <div className="bg-muted p-1 rounded-md flex items-center w-full sm:w-auto">
                                             <Button
                                                 variant={selectedRole === "pilot" ? "default" : "ghost"}
                                                 size="sm"
                                                 onClick={() => setSelectedRole("pilot")}
-                                                className="h-8 px-4"
+                                                className="h-8 px-4 flex-1 sm:flex-none"
                                             >
                                                 Pilotos
                                             </Button>
@@ -1259,7 +1259,7 @@ export default function ChampionshipDetails() {
                                                 variant={selectedRole === "navigator" ? "default" : "ghost"}
                                                 size="sm"
                                                 onClick={() => setSelectedRole("navigator")}
-                                                className="h-8 px-4"
+                                                className="h-8 px-4 flex-1 sm:flex-none"
                                             >
                                                 Navegadores
                                             </Button>
@@ -1270,7 +1270,7 @@ export default function ChampionshipDetails() {
                                             <Button
                                                 variant="outline"
                                                 size="sm"
-                                                className="h-8 gap-2 border-primary/20 text-primary hover:bg-primary/5"
+                                                className="h-8 gap-2 border-primary/20 text-primary hover:bg-primary/5 w-full sm:w-auto"
                                                 onClick={() => setIsMergeModalOpen(true)}
                                             >
                                                 <GitMerge className="h-4 w-4" />
@@ -1301,8 +1301,8 @@ export default function ChampionshipDetails() {
                                     const orderedStages = standingsData.stages.sort((a, b) => a.stageNumber - b.stageNumber);
 
                                     return (
-                                        <div className="rounded-md border overflow-x-auto">
-                                            <Table>
+                                        <div className="rounded-md border overflow-x-auto w-full">
+                                            <Table className="min-w-[800px]">
                                                 <TableHeader className="bg-muted/50">
                                                     <TableRow>
                                                         <TableHead className="w-[60px] text-center font-bold">Pos</TableHead>

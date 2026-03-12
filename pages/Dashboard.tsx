@@ -400,11 +400,12 @@ export default function Dashboard() {
                         </div>
                       </div>
                     )}
-                    <CardFooter className="flex gap-2">
+                    <CardFooter className="flex flex-wrap gap-2">
                       {canEditRegistration(reg) && (
                         <Button
                           size="sm"
                           variant="outline"
+                          className="w-full sm:w-auto"
                           onClick={() => handleEditClick(reg)}
                         >
                           Editar Inscrição
@@ -415,6 +416,7 @@ export default function Dashboard() {
                           <Button
                             size="sm"
                             variant="outline"
+                            className="w-full sm:w-auto"
                             onClick={() => {
                               setSelectedRegistrationForPayment(reg);
                               setPaymentModalOpen(true);
@@ -437,6 +439,7 @@ export default function Dashboard() {
                         <Button
                           size="sm"
                           variant="outline"
+                          className="w-full sm:w-auto"
                           onClick={() => {
                             setSelectedRegForQrCode(reg);
                             setSelectedQrCode(reg.qrCode || "");
@@ -451,7 +454,7 @@ export default function Dashboard() {
                         <Button
                           size="sm"
                           variant="outline"
-                          className="hover:bg-destructive/10"
+                          className="w-full sm:w-auto hover:bg-destructive/10"
                           onClick={() => {
                             setSelectedRegistrationForCancel(reg);
                             setCancellationReason("");
@@ -467,7 +470,7 @@ export default function Dashboard() {
                           <Button
                             size="sm"
                             variant="outline"
-                            className="text-primary border-primary/20 hover:bg-primary/5"
+                            className="w-full sm:w-auto bg-primary/10 hover:bg-primary/20 text-primary border-primary/20"
                           >
                             <Trophy className="mr-2 h-4 w-4" />
                             Ver Classificação

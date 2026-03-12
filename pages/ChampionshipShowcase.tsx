@@ -373,8 +373,8 @@ export default function ChampionshipShowcase() {
                             }
 
                             return (
-                                <div className="overflow-x-auto">
-                                    <Table>
+                                <div className="w-full overflow-x-auto pb-4">
+                                    <Table className="min-w-[800px]">
                                         <TableHeader className="bg-muted/30">
                                             <TableRow className="hover:bg-transparent">
                                                 <TableHead className="w-[80px] text-center font-black text-xs uppercase tracking-wider py-5">Pos</TableHead>

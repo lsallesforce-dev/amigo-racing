@@ -1438,55 +1438,56 @@ export default function OrganizerPanel() {
                       )}
                     </CardContent>
                     <CardFooter className="flex flex-wrap gap-2">
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => {
-                          setSelectedEventId(event.id);
-                          setCategoryForm({ vehicleType: "", customVehicleType: "", level: "", customLevel: "", price: "", slots: "", eventId: event.id });
-                          setCategoryDialogOpen(true);
-                        }}
-                      >
-                        <Plus className="mr-2 h-4 w-4" />
-                        Adicionar Categoria
-                      </Button>
-                      <Link href={`/events/${event.id}`}>
-                        <Button size="sm" variant="outline">
-                          <Pencil className="h-4 w-4 mr-2" />
-                          Editar Categorias
-                        </Button>
-                      </Link>
-                      <Button size="sm" variant="outline" onClick={() => handleEditClick(event)}>
-                        <Pencil className="h-4 w-4 mr-2" />
-                        Editar Evento
-                      </Button>
-                      <Link href={`/organizer/events/${event.id}/start-order`}>
-                        <Button size="sm" variant="outline">
-                          <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
-                          </svg>
-                          Ordem de Largada
-                        </Button>
-                      </Link>
-                      <Link href={`/organizer/events/${event.id}/secretariat`}>
-                        <Button size="sm" variant="outline" className="bg-primary/10 hover:bg-primary/20 text-primary border-primary/20">
-                          <ClipboardCheck className="h-4 w-4 mr-2" />
-                          Secretaria / Check-in
-                        </Button>
-                      </Link>
-                      <Link href={`/registrations?eventId=${event.id}`}>
-                        <Button size="sm" variant="outline" className="bg-primary/10 hover:bg-primary/20 text-primary border-primary/20">
-                          <Users className="h-4 w-4 mr-2" />
-                          Inscritos
-                        </Button>
-                      </Link>
-                      <AlertDialog>
-                        <AlertDialogTrigger asChild>
-                          <Button size="sm" variant="destructive">
-                            <Trash2 className="h-4 w-4 mr-2" />
-                            Deletar Evento
-                          </Button>
-                        </AlertDialogTrigger>
+                       <Button
+                         size="sm"
+                         variant="outline"
+                         className="w-full md:w-auto"
+                         onClick={() => {
+                           setSelectedEventId(event.id);
+                           setCategoryForm({ vehicleType: "", customVehicleType: "", level: "", customLevel: "", price: "", slots: "", eventId: event.id });
+                           setCategoryDialogOpen(true);
+                         }}
+                       >
+                         <Plus className="mr-2 h-4 w-4" />
+                         Adicionar Categoria
+                       </Button>
+                       <Link href={`/events/${event.id}`} className="w-full md:w-auto">
+                         <Button size="sm" variant="outline" className="w-full">
+                           <Pencil className="h-4 w-4 mr-2" />
+                           Editar Categorias
+                         </Button>
+                       </Link>
+                       <Button size="sm" variant="outline" className="w-full md:w-auto" onClick={() => handleEditClick(event)}>
+                         <Pencil className="h-4 w-4 mr-2" />
+                         Editar Evento
+                       </Button>
+                       <Link href={`/organizer/events/${event.id}/start-order`} className="w-full md:w-auto">
+                         <Button size="sm" variant="outline" className="w-full">
+                           <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
+                           </svg>
+                           Ordem de Largada
+                         </Button>
+                       </Link>
+                       <Link href={`/organizer/events/${event.id}/secretariat`} className="w-full md:w-auto">
+                         <Button size="sm" variant="outline" className="w-full bg-primary/10 hover:bg-primary/20 text-primary border-primary/20">
+                           <ClipboardCheck className="h-4 w-4 mr-2" />
+                           Secretaria / Check-in
+                         </Button>
+                       </Link>
+                       <Link href={`/registrations?eventId=${event.id}`} className="w-full md:w-auto">
+                         <Button size="sm" variant="outline" className="w-full bg-primary/10 hover:bg-primary/20 text-primary border-primary/20">
+                           <Users className="h-4 w-4 mr-2" />
+                           Inscritos
+                         </Button>
+                       </Link>
+                       <AlertDialog>
+                         <AlertDialogTrigger asChild className="w-full md:w-auto">
+                           <Button size="sm" variant="destructive" className="w-full">
+                             <Trash2 className="h-4 w-4 mr-2" />
+                             Deletar Evento
+                           </Button>
+                         </AlertDialogTrigger>
                         <AlertDialogContent>
                           <AlertDialogHeader>
                             <AlertDialogTitle>Confirmar Deleção</AlertDialogTitle>
