@@ -119,6 +119,8 @@ export default function ChampionshipDetails() {
     );
 
     const championship = championships?.find(c => c.id === championshipId);
+    const isOwner = championship?.organizerId === user?.id;
+    const isStageOwner = (stage: any) => stage.event?.organizerId === user?.id;
 
     // Sync edit form with championship data
     useEffect(() => {
@@ -725,14 +727,15 @@ export default function ChampionshipDetails() {
                         </div>
                     </div>
                     <div className="flex items-center gap-2">
-                        <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
-                            <DialogTrigger asChild>
-                                <Button variant="outline" size="sm" className="gap-2">
-                                    <Settings className="h-4 w-4" />
-                                    Configurações
-                                </Button>
-                            </DialogTrigger>
-                            <DialogContent className="sm:max-w-[425px]">
+                        {isOwner && (
+                            <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
+                                <DialogTrigger asChild>
+                                    <Button variant="outline" size="sm" className="gap-2">
+                                        <Settings className="h-4 w-4" />
+                                        Configurações
+                                    </Button>
+                                </DialogTrigger>
+                                <DialogContent className="sm:max-w-[425px]">
                                 <DialogHeader>
                                     <DialogTitle>Editar Campeonato</DialogTitle>
                                     <DialogDescription>
@@ -904,6 +907,7 @@ export default function ChampionshipDetails() {
                                 </DialogFooter>
                             </DialogContent>
                         </Dialog>
+                        )}
 
                         {isOrganizerOrAdmin && standingsData && standingsData.standings.length > 0 && (
                             <Button
@@ -917,14 +921,15 @@ export default function ChampionshipDetails() {
                             </Button>
                         )}
 
-                        <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-                            <DialogTrigger asChild>
-                                <Button className="gap-2 w-full md:w-auto">
-                                    <Plus className="h-4 w-4" />
-                                    Adicionar Etapa
-                                </Button>
-                            </DialogTrigger>
-                            <DialogContent className="sm:max-w-[425px]">
+                        {isOwner && (
+                            <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+                                <DialogTrigger asChild>
+                                    <Button className="gap-2 w-full md:w-auto">
+                                        <Plus className="h-4 w-4" />
+                                        Adicionar Etapa
+                                    </Button>
+                                </DialogTrigger>
+                                <DialogContent className="sm:max-w-[425px]">
                                 <DialogHeader>
                                     <DialogTitle>Adicionar Etapa ao Campeonato</DialogTitle>
                                     <DialogDescription>
@@ -990,6 +995,7 @@ export default function ChampionshipDetails() {
                                 </DialogFooter>
                             </DialogContent>
                         </Dialog>
+                        )}
                     </div>
                 </div>
 
@@ -999,14 +1005,16 @@ export default function ChampionshipDetails() {
                             <TabsList className="bg-muted/50 p-1 w-full max-w-[600px] flex min-w-max">
                                 <TabsTrigger value="standings" className="flex-1">Geral do Campeonato</TabsTrigger>
                                 <TabsTrigger value="stages" className="flex-1">Etapas e Resultados</TabsTrigger>
-                                <TabsTrigger value="requests" className="flex-1 relative">
-                                    Solicitações
-                                    {pendingRequests && pendingRequests.length > 0 && (
-                                        <span className="ml-2 bg-primary text-primary-foreground text-xs px-2 py-0.5 rounded-full">
-                                            {pendingRequests.filter(r => r.championshipName === championship?.name).length}
-                                        </span>
-                                    )}
-                                </TabsTrigger>
+                                {isOwner && (
+                                    <TabsTrigger value="requests" className="flex-1 relative">
+                                        Solicitações
+                                        {pendingRequests && pendingRequests.length > 0 && (
+                                            <span className="ml-2 bg-primary text-primary-foreground text-xs px-2 py-0.5 rounded-full">
+                                                {pendingRequests.filter(r => r.championshipName === championship?.name).length}
+                                            </span>
+                                        )}
+                                    </TabsTrigger>
+                                )}
                             </TabsList>
                         </div>
                     </div>
@@ -1080,62 +1088,68 @@ export default function ChampionshipDetails() {
                                                             {!stage.isExternal && stage.event?.city ? `${stage.event.city}/${stage.event.state}` : '-'}
                                                         </TableCell>
                                                         <TableCell className="text-center">
-                                                            <div className="flex items-center justify-center gap-1">
-                                                                <Button
-                                                                    variant="ghost"
-                                                                    size="sm"
-                                                                    className="h-8 gap-1.5 text-primary hover:text-primary hover:bg-primary/10"
-                                                                    onClick={() => openResultsModal(stage.id)}
-                                                                >
-                                                                    <Upload className="h-4 w-4" />
-                                                                    Lançar
-                                                                </Button>
-                                                                {(stage as any).categories?.length > 0 && (
+                                                            {(isOwner || isStageOwner(stage)) && (
+                                                                <div className="flex items-center justify-center gap-1">
                                                                     <Button
                                                                         variant="ghost"
                                                                         size="sm"
-                                                                        className="h-8 gap-1.5"
-                                                                        onClick={() => {
-                                                                            setActiveViewStageId(stage.id);
-                                                                            setViewResultsModalOpen(true);
-                                                                        }}
+                                                                        className="h-8 gap-1.5 text-primary hover:text-primary hover:bg-primary/10"
+                                                                        onClick={() => openResultsModal(stage.id)}
                                                                     >
-                                                                        <List className="h-4 w-4" />
-                                                                        Gerenciar
+                                                                        <Upload className="h-4 w-4" />
+                                                                        Lançar
                                                                     </Button>
-                                                                )}
-                                                            </div>
+                                                                    {(stage as any).categories?.length > 0 && (
+                                                                        <Button
+                                                                            variant="ghost"
+                                                                            size="sm"
+                                                                            className="h-8 gap-1.5"
+                                                                            onClick={() => {
+                                                                                setActiveViewStageId(stage.id);
+                                                                                setViewResultsModalOpen(true);
+                                                                            }}
+                                                                        >
+                                                                            <List className="h-4 w-4" />
+                                                                            Gerenciar
+                                                                        </Button>
+                                                                    )}
+                                                                </div>
+                                                            )}
                                                         </TableCell>
                                                         <TableCell className="text-center w-[50px]">
-                                                            <DropdownMenu>
-                                                                <DropdownMenuTrigger asChild>
-                                                                    <Button variant="ghost" size="icon" className="h-8 w-8">
-                                                                        <MoreVertical className="h-4 w-4" />
-                                                                    </Button>
-                                                                </DropdownMenuTrigger>
-                                                                <DropdownMenuContent align="end">
-                                                                    <DropdownMenuItem
-                                                                        className="text-amber-600 focus:text-amber-600 cursor-pointer"
-                                                                        onClick={() => {
-                                                                            setConfirmAction({ type: 'clear', stageId: stage.id, stageNumber: stage.stageNumber });
-                                                                            setIsConfirmOpen(true);
-                                                                        }}
-                                                                    >
-                                                                        <Eraser className="h-4 w-4 mr-2" />
-                                                                        Limpar Resultados
-                                                                    </DropdownMenuItem>
-                                                                    <DropdownMenuItem
-                                                                        className="text-destructive focus:text-destructive cursor-pointer"
-                                                                        onClick={() => {
-                                                                            setConfirmAction({ type: 'delete', stageId: stage.id, stageNumber: stage.stageNumber });
-                                                                            setIsConfirmOpen(true);
-                                                                        }}
-                                                                    >
-                                                                        <Trash2 className="h-4 w-4 mr-2" />
-                                                                        Excluir Etapa
-                                                                    </DropdownMenuItem>
-                                                                </DropdownMenuContent>
-                                                            </DropdownMenu>
+                                                            {(isOwner || isStageOwner(stage)) && (
+                                                                <DropdownMenu>
+                                                                    <DropdownMenuTrigger asChild>
+                                                                        <Button variant="ghost" size="icon" className="h-8 w-8">
+                                                                            <MoreVertical className="h-4 w-4" />
+                                                                        </Button>
+                                                                    </DropdownMenuTrigger>
+                                                                    <DropdownMenuContent align="end">
+                                                                        <DropdownMenuItem
+                                                                            className="text-amber-600 focus:text-amber-600 cursor-pointer"
+                                                                            onClick={() => {
+                                                                                setConfirmAction({ type: 'clear', stageId: stage.id, stageNumber: stage.stageNumber });
+                                                                                setIsConfirmOpen(true);
+                                                                            }}
+                                                                        >
+                                                                            <Eraser className="h-4 w-4 mr-2" />
+                                                                            Limpar Resultados
+                                                                        </DropdownMenuItem>
+                                                                        {isOwner && (
+                                                                            <DropdownMenuItem
+                                                                                className="text-destructive focus:text-destructive cursor-pointer"
+                                                                                onClick={() => {
+                                                                                    setConfirmAction({ type: 'delete', stageId: stage.id, stageNumber: stage.stageNumber });
+                                                                                    setIsConfirmOpen(true);
+                                                                                }}
+                                                                            >
+                                                                                <Trash2 className="h-4 w-4 mr-2" />
+                                                                                Excluir Etapa
+                                                                            </DropdownMenuItem>
+                                                                        )}
+                                                                    </DropdownMenuContent>
+                                                                </DropdownMenu>
+                                                            )}
                                                         </TableCell>
                                                     </TableRow>
                                                 ))}

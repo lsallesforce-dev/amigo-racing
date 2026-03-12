@@ -231,7 +231,8 @@ export const championshipRouter = router({
             const db = await getDb();
             if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database error" });
 
-            return await db
+            // 1. Campeonatos onde o usuário é o DONO
+            const owned = await db
                 .select()
                 .from(championships)
                 .where(
@@ -239,8 +240,39 @@ export const championshipRouter = router({
                         eq(championships.organizerId, input.organizerId),
                         eq(championships.active, true)
                     )
+                );
+
+            // 2. Campeonatos onde o usuário PARTICIPA via alguma etapa (evento dele vinculado)
+            const participating = await db
+                .select({
+                    id: championships.id,
+                    name: championships.name,
+                    year: championships.year,
+                    organizerId: championships.organizerId,
+                    active: championships.active,
+                    discardRule: championships.discardRule,
+                    sponsorBannerUrl: championships.sponsorBannerUrl,
+                    imageUrl: championships.imageUrl,
+                    allowDiscardMissedStages: championships.allowDiscardMissedStages,
+                    createdAt: championships.createdAt,
+                    updatedAt: championships.updatedAt
+                })
+                .from(championships)
+                .innerJoin(championshipStages, eq(championships.id, championshipStages.championshipId))
+                .innerJoin(events, eq(championshipStages.eventId, events.id))
+                .where(
+                    and(
+                        eq(events.organizerId, input.organizerId),
+                        eq(championships.active, true),
+                        ne(championships.organizerId, input.organizerId) // Evita duplicar os que já estão no "owned"
+                    )
                 )
-                .orderBy(desc(championships.year));
+                .groupBy(championships.id); // Agrupa por ID do campeonato caso tenha múltiplas etapas no mesmo campeonato
+
+            // Combina os resultados e ordena por ano descrescente
+            const combined = [...owned, ...participating].sort((a, b) => b.year - a.year);
+
+            return combined;
         }),
 
     // Lista todos os campeonatos ativos na plataforma (para vínculo entre organizadores)
@@ -339,6 +371,7 @@ export const championshipRouter = router({
                         startDate: events.startDate,
                         city: events.city,
                         state: events.state,
+                        organizerId: events.organizerId,
                     }
                 })
                 .from(championshipStages)
@@ -426,6 +459,28 @@ export const championshipRouter = router({
                 throw new TRPCError({ code: "FORBIDDEN", message: "Not authorized to manage championships" });
             }
 
+            // --- PERMISSION CHECK ---
+            const [stage] = await db.select().from(championshipStages).where(eq(championshipStages.id, input.stageId)).limit(1);
+            if (!stage) throw new TRPCError({ code: "NOT_FOUND", message: "Etapa não encontrada" });
+
+            const [champ] = await db.select().from(championships).where(eq(championships.id, stage.championshipId)).limit(1);
+            if (!champ) throw new TRPCError({ code: "NOT_FOUND", message: "Campeonato não encontrado" });
+
+            const isChampOwner = champ.organizerId === organizerCtx.principalUserId;
+            let isStageOwner = false;
+
+            if (stage.eventId) {
+                const [event] = await db.select().from(events).where(eq(events.id, stage.eventId)).limit(1);
+                if (event && event.organizerId === organizerCtx.principalUserId) {
+                    isStageOwner = true;
+                }
+            }
+
+            if (!isChampOwner && !isStageOwner) {
+                throw new TRPCError({ code: "FORBIDDEN", message: "Você não tem permissão para gerenciar esta etapa" });
+            }
+            // -------------------------
+
             // Calculates the points for each result using the cbaRules pure function logic
             const resultsWithPoints = input.results.map(r => ({
                 stageId: input.stageId,
@@ -481,6 +536,28 @@ export const championshipRouter = router({
             ) {
                 throw new TRPCError({ code: "FORBIDDEN", message: "Not authorized to manage championships" });
             }
+
+            // --- PERMISSION CHECK ---
+            const [stage] = await db.select().from(championshipStages).where(eq(championshipStages.id, input.stageId)).limit(1);
+            if (!stage) throw new TRPCError({ code: "NOT_FOUND", message: "Etapa não encontrada" });
+
+            const [champ] = await db.select().from(championships).where(eq(championships.id, stage.championshipId)).limit(1);
+            if (!champ) throw new TRPCError({ code: "NOT_FOUND", message: "Campeonato não encontrado" });
+
+            const isChampOwner = champ.organizerId === organizerCtx.principalUserId;
+            let isStageOwner = false;
+
+            if (stage.eventId) {
+                const [event] = await db.select().from(events).where(eq(events.id, stage.eventId)).limit(1);
+                if (event && event.organizerId === organizerCtx.principalUserId) {
+                    isStageOwner = true;
+                }
+            }
+
+            if (!isChampOwner && !isStageOwner) {
+                throw new TRPCError({ code: "FORBIDDEN", message: "Você não tem permissão para gerenciar esta etapa" });
+            }
+            // -------------------------
 
             await db.delete(championshipResults)
                 .where(
@@ -730,6 +807,28 @@ export const championshipRouter = router({
                 throw new TRPCError({ code: "FORBIDDEN", message: "Not authorized" });
             }
 
+            // --- PERMISSION CHECK ---
+            const [stage] = await db.select().from(championshipStages).where(eq(championshipStages.id, input.stageId)).limit(1);
+            if (!stage) throw new TRPCError({ code: "NOT_FOUND", message: "Etapa não encontrada" });
+
+            const [champ] = await db.select().from(championships).where(eq(championships.id, stage.championshipId)).limit(1);
+            if (!champ) throw new TRPCError({ code: "NOT_FOUND", message: "Campeonato não encontrado" });
+
+            const isChampOwner = champ.organizerId === organizerCtx.principalUserId;
+            let isStageOwner = false;
+
+            if (stage.eventId) {
+                const [event] = await db.select().from(events).where(eq(events.id, stage.eventId)).limit(1);
+                if (event && event.organizerId === organizerCtx.principalUserId) {
+                    isStageOwner = true;
+                }
+            }
+
+            if (!isChampOwner && !isStageOwner) {
+                throw new TRPCError({ code: "FORBIDDEN", message: "Você não tem permissão para gerenciar esta etapa" });
+            }
+            // -------------------------
+
             await db.delete(championshipResults)
                 .where(eq(championshipResults.stageId, input.stageId));
 
@@ -747,6 +846,18 @@ export const championshipRouter = router({
             if (organizerCtx.type === "MEMBER" && !organizerCtx.permissions.includes("events")) {
                 throw new TRPCError({ code: "FORBIDDEN", message: "Not authorized" });
             }
+
+            // --- PERMISSION CHECK ---
+            const [stage] = await db.select().from(championshipStages).where(eq(championshipStages.id, input.stageId)).limit(1);
+            if (!stage) throw new TRPCError({ code: "NOT_FOUND", message: "Etapa não encontrada" });
+
+            const [champ] = await db.select().from(championships).where(eq(championships.id, stage.championshipId)).limit(1);
+            if (!champ) throw new TRPCError({ code: "NOT_FOUND", message: "Campeonato não encontrado" });
+
+            if (champ.organizerId !== organizerCtx.principalUserId) {
+                throw new TRPCError({ code: "FORBIDDEN", message: "Apenas o dono do campeonato pode excluir etapas" });
+            }
+            // -------------------------
 
             await db.transaction(async (tx) => {
                 // Delete results first
