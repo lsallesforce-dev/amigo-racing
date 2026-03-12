@@ -189,11 +189,23 @@ export default function Dashboard() {
       ...editForm,
       // Limpeza de campos de texto (remover formatação)
       pilotCpf: editForm.pilotCpf.replace(/\D/g, ''),
-      navigatorCpf: editForm.navigatorCpf ? editForm.navigatorCpf.replace(/\D/g, '') : '',
+      navigatorCpf: editForm.navigatorCpf ? editForm.navigatorCpf.replace(/\D/g, '') : null,
       phone: editForm.phone.replace(/\D/g, ''),
       // Conversão de tipos numéricos
       pilotAge: Number(editForm.pilotAge),
-      vehicleYear: editForm.vehicleYear ? Number(editForm.vehicleYear) : undefined,
+      vehicleYear: editForm.vehicleYear ? Number(editForm.vehicleYear) : null,
+      // Garantir que opcionais vazios vão como null para o backend
+      navigatorName: editForm.navigatorName || null,
+      navigatorEmail: editForm.navigatorEmail || null,
+      navigatorCity: editForm.navigatorCity || null,
+      navigatorState: editForm.navigatorState || null,
+      navigatorShirtSize: editForm.navigatorShirtSize || null,
+      vehicleBrand: editForm.vehicleBrand || null,
+      vehicleModel: editForm.vehicleModel || null,
+      vehicleColor: editForm.vehicleColor || null,
+      vehiclePlate: editForm.vehiclePlate || null,
+      team: editForm.team || null,
+      notes: editForm.notes || null,
     };
 
     updateRegistration.mutate(submitData);

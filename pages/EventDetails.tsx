@@ -281,8 +281,8 @@ export default function EventDetails() {
         return;
       }
 
-      // Validar camiseta navegador apenas se não for Motos
-      if (!isMotosCategory && !formData.navigator_shirt) {
+      // Validar camiseta navegador apenas se houver nome do navegador e não for Motos
+      if (formData.navigator_name && !isMotosCategory && !formData.navigator_shirt) {
         toast.error("Selecione o tamanho da camiseta do navegador");
         return;
       }
@@ -305,12 +305,12 @@ export default function EventDetails() {
       pilotState: formData.pilot_state,
       pilotShirtSize: (event as any)?.hasShirts !== false ? formData.pilot_shirt : "p", // Enviamo 'p' como fallback pois DB exige não-nulo para piloto
       phone: formData.pilot_phone,
-      navigatorName: formData.navigator_name,
-      navigatorEmail: formData.navigator_email,
-      navigatorCpf: formData.navigator_cpf,
-      navigatorCity: formData.navigator_city,
-      navigatorState: formData.navigator_state,
-      navigatorShirtSize: (event as any)?.hasShirts !== false ? formData.navigator_shirt : null,
+      navigatorName: formData.navigator_name || null,
+      navigatorEmail: formData.navigator_email || null,
+      navigatorCpf: formData.navigator_cpf || null,
+      navigatorCity: formData.navigator_city || null,
+      navigatorState: formData.navigator_state || null,
+      navigatorShirtSize: (event as any)?.hasShirts !== false && formData.navigator_name && formData.navigator_shirt ? formData.navigator_shirt : null,
       team: formData.team,
       notes: formData.notes,
       termsAccepted: formData.termsAccepted,
