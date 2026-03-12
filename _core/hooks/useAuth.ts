@@ -1,4 +1,4 @@
-﻿import { getLoginUrl } from "@/api/_server/const";
+import { getLoginUrl } from "@/api/_server/const";
 import { trpc } from "@/lib/trpc";
 import { TRPCClientError } from "@trpc/client";
 import { useCallback, useEffect, useMemo, useRef } from "react";
@@ -81,6 +81,9 @@ export function useAuth(options?: UseAuthOptions) {
         // Limpar sessionStorage
         sessionStorage.clear();
 
+        // Limpar localStorage completamente
+        localStorage.clear();
+
         // Limpar cookies (via document.cookie)
         const cookies = document.cookie.split(';');
         cookies.forEach((c) => {
@@ -91,6 +94,9 @@ export function useAuth(options?: UseAuthOptions) {
           document.cookie = name + '=;expires=' + new Date().toUTCString() + ';path=/;domain=.amigoracing.com.br';
           document.cookie = name + '=;expires=' + new Date().toUTCString() + ';path=/;domain=' + window.location.hostname;
         });
+
+        // Garantir que o cookie antigo tambÃ©m seja limpo se existir
+        document.cookie = 'app_session_id=;expires=' + new Date(0).toUTCString() + ';path=/';
 
         // Aguardar um pouco antes de redirecionar para garantir que tudo foi limpo
         setTimeout(() => {

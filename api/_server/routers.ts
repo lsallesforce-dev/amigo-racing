@@ -564,6 +564,7 @@ export const appRouter = router({
 
   auth: router({
     me: publicProcedure.query(async ({ ctx }) => {
+      ctx.res.setHeader('Cache-Control', 'no-store, max-age=0');
       if (!ctx.user) return null;
       const user = ctx.user as any;
       return {

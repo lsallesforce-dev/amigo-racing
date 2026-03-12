@@ -65,6 +65,7 @@ export function registerOAuthRoutes(app: Express) {
       const cookieOptions = getSessionCookieOptions(req);
       res.cookie(COOKIE_NAME, sessionToken, { ...cookieOptions, maxAge: ONE_YEAR_MS });
 
+      res.setHeader('Cache-Control', 'no-store, max-age=0');
       res.json({ message: "Registered successfully", user: newUser, token: sessionToken });
     } catch (error: any) {
       console.error("[Auth] Registration failed", error);
@@ -110,6 +111,7 @@ export function registerOAuthRoutes(app: Express) {
       const cookieOptions = getSessionCookieOptions(req);
       res.cookie(COOKIE_NAME, sessionToken, { ...cookieOptions, maxAge: ONE_YEAR_MS });
 
+      res.setHeader('Cache-Control', 'no-store, max-age=0');
       res.json({ message: "Logged in successfully", user: updatedUser, token: sessionToken });
     } catch (error: any) {
       console.error("[Auth] Login failed", error);
