@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useLocation } from "wouter";
 import { trpc } from "@/lib/trpc";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -31,6 +31,15 @@ export default function Registrations() {
   const [selectedRegistrationId, setSelectedRegistrationId] = useState<number | null>(null);
   const [deleteConfirmDialogOpen, setDeleteConfirmDialogOpen] = useState(false);
   const [registrationToDelete, setRegistrationToDelete] = useState<any>(null);
+
+  // Efeito para carregar eventId da URL se presente
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const eventIdParam = params.get('eventId');
+    if (eventIdParam) {
+      setSelectedEventId(Number(eventIdParam));
+    }
+  }, []);
 
   // Buscar eventos do organizador
   const { data: events = [] } = trpc.events.myEvents.useQuery();

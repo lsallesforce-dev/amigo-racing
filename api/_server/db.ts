@@ -402,11 +402,21 @@ export async function getEventsByOrganizerId(organizerId: number) {
   const db = await getDb();
   if (!db) return [];
 
-  return await db.select().from(events)
-    .where(
-      eq(events.organizerId, organizerId)
-    )
+  const results = await db
+    .select({
+      event: events,
+      registrationCount: sql<number>`count(${registrations.id})`.mapWith(Number),
+    })
+    .from(events)
+    .leftJoin(registrations, eq(events.id, registrations.eventId))
+    .where(eq(events.organizerId, organizerId))
+    .groupBy(events.id)
     .orderBy(asc(events.startDate));
+
+  return results.map(r => ({
+    ...r.event,
+    registrationCount: r.registrationCount
+  }));
 }
 
 export async function updateEvent(id: number, data: Partial<InsertEvent>) {

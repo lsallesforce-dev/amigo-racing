@@ -612,7 +612,8 @@ export const appRouter = router({
       const principal = await db.getUserById(context.principalUserId) as any;
       const organizer = principal ? await db.getOrganizerByOwnerId(principal.openId) as any : null;
       if (!organizer) return [];
-      return await db.getEventsByOrganizerId(organizer.id);
+      const result = await db.getEventsByOrganizerId(organizer.id);
+      return result;
     }),
     create: protectedProcedure
       .input(z.object({

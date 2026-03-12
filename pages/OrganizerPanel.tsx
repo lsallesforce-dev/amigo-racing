@@ -52,6 +52,7 @@ type EventWithCategories = {
     eventId: number;
     createdAt: Date;
   }>;
+  registrationCount?: number;
 };
 
 
@@ -1290,6 +1291,12 @@ export default function OrganizerPanel() {
                             <MapPin className="h-4 w-4 shrink-0" />
                             <span className="truncate">{event.city}, {event.state || 'SP'}</span>
                           </div>
+                          {(event as any).registrationCount !== undefined && (
+                            <div className="flex items-center gap-1 text-orange-600 font-medium pt-1">
+                              <Users className="h-4 w-4 shrink-0" />
+                              <span>{(event as any).registrationCount} inscritos</span>
+                            </div>
+                          )}
                         </div>
                       </div>
 
@@ -1465,6 +1472,12 @@ export default function OrganizerPanel() {
                         <Button size="sm" variant="outline" className="bg-primary/10 hover:bg-primary/20 text-primary border-primary/20">
                           <ClipboardCheck className="h-4 w-4 mr-2" />
                           Secretaria / Check-in
+                        </Button>
+                      </Link>
+                      <Link href={`/registrations?eventId=${event.id}`}>
+                        <Button size="sm" variant="outline" className="text-orange-600 border-orange-200 hover:bg-orange-50 bg-orange-50/50">
+                          <Users className="h-4 w-4 mr-2" />
+                          Inscritos
                         </Button>
                       </Link>
                       <AlertDialog>
