@@ -49,9 +49,11 @@ export async function createSignedUploadUrl(relKey: string): Promise<{ url: stri
   }
 
   const data = await response.json();
-  // Supabase returns { url: "/relative/path?token=..." }
+  // Supabase returns { url: "/object/upload/sign/..." } which is relative to /storage/v1
+  // We MUST ensure the full URL includes /storage/v1
+  const relativeUrl = data.url.startsWith('/') ? data.url : `/${data.url}`;
   return {
-    url: `${baseUrl}${data.url}`
+    url: `${baseUrl}/storage/v1${relativeUrl}`
   };
 }
 

@@ -50,7 +50,7 @@ export function EventDocumentsManager({ eventId, documents: docsProp, terms: ter
 
             // 2. Upload DIRECTLY to Supabase from Browser
             const uploadResponse = await fetch(url, {
-                method: "PUT",
+                method: "POST", // Changed from PUT to POST per Supabase signed URL docs
                 body: file,
                 headers: {
                     "Content-Type": file.type || "application/octet-stream",

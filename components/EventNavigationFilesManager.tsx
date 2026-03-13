@@ -39,7 +39,7 @@ export function EventNavigationFilesManager({ eventId, files: filesProp, categor
 
             // 2. Upload DIRECTLY to Supabase from Browser
             const uploadResponse = await fetch(url, {
-                method: "PUT", // Supabase signed URLs usually use PUT for uploads
+                method: "POST", // Changed from PUT to POST per Supabase signed URL docs
                 body: file,
                 headers: {
                     "Content-Type": file.type || "application/octet-stream",
