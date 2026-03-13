@@ -44,7 +44,7 @@ export function EventDocumentsManager({ eventId, documents: docsProp, terms: ter
         setIsUploading(true);
         try {
             // 1. Get Signed URL from Backend (Bypasses Vercel Size Limit)
-            const { url, path: remotePath } = await getSignedUrl.mutateAsync({ 
+            const { url, path: remotePath, publicUrl } = await getSignedUrl.mutateAsync({ 
                 filename: file.name 
             });
 
@@ -62,9 +62,6 @@ export function EventDocumentsManager({ eventId, documents: docsProp, terms: ter
                 throw new Error(`Erro no upload direto: ${uploadResponse.status} ${errorText}`);
             }
 
-            // 3. Construct the public URL
-            const publicUrl = `https://rjcdkasnipxcdrlmkskm.supabase.co/storage/v1/object/public/amigo-racing/${remotePath}`;
-            
             // Auto-add the document after successful upload
             const newDocument: EventDocument = {
                 name: newDoc.name || file.name.split('.')[0],

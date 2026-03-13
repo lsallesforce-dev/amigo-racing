@@ -47,7 +47,8 @@ const storageRouter = router({
       const safeName = input.filename.replace(/[^a-zA-Z0-9.-]/g, "_");
       const relativePath = `uploads/${Date.now()}-${safeName}`;
       const config = await storage.createSignedUploadUrl(relativePath);
-      return { ...config, path: relativePath };
+      const publicUrl = await storage.storageGet(relativePath);
+      return { ...config, path: relativePath, publicUrl };
     }),
 });
 

@@ -33,7 +33,7 @@ export function EventNavigationFilesManager({ eventId, files: filesProp, categor
         setIsUploading(true);
         try {
             // 1. Get Signed URL from Backend (Bypasses Vercel Size Limit)
-            const { url, path: remotePath } = await getSignedUrl.mutateAsync({ 
+            const { url, path: remotePath, publicUrl } = await getSignedUrl.mutateAsync({ 
                 filename: file.name 
             });
 
@@ -50,14 +50,6 @@ export function EventNavigationFilesManager({ eventId, files: filesProp, categor
                 const errorText = await uploadResponse.text();
                 throw new Error(`Erro no upload direto: ${uploadResponse.status} ${errorText}`);
             }
-
-            // 3. Construct the public URL (using our storage.storageGet logic equivalent)
-            // storageGet logic is baseSupabaseUrl + '/storage/v1/object/public/amigo-racing/' + path
-            // Since the backend already knows how to get the URL, we can just use the path
-            // But we already have an api route for it? No, let's keep it simple.
-            
-            // We'll use the public URL format
-            const publicUrl = `https://rjcdkasnipxcdrlmkskm.supabase.co/storage/v1/object/public/amigo-racing/${remotePath}`;
 
             const newFile = {
                 name: file.name,
