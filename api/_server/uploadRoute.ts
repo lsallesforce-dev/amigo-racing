@@ -31,7 +31,11 @@ router.post("/upload", upload.single("file"), async (req, res) => {
         const relativePath = `uploads/${Date.now()}-${safeName}`;
 
         console.log(`[Upload] Recebido arquivo: ${file.originalname} (${file.size} bytes). Enviando para storage...`);
-
+        try {
+            // Try official storage first
+            await storage.storagePut(relativePath, file.buffer, { contentType: file.mimetype });
+            const url = await storage.storageGet(relativePath);
+            return res.json({ url });
         } catch (error) {
             const storageError = error instanceof Error ? error.message : String(error);
             console.warn("[UploadRoute] Storage proxy failed:", storageError);
