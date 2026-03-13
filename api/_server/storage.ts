@@ -38,9 +38,13 @@ export async function storagePut(
   const url = `${baseUrl}/storage/v1/object/${BUCKET_NAME}/${safePath}`;
 
   const headers: Record<string, string> = {
-    "Authorization": `Bearer ${apiKey}`,
-    "x-upsert": "true" // Allow overwriting
+    "Authorization": apiKey.startsWith("Bearer ") ? apiKey : `Bearer ${apiKey}`,
+    "apikey": apiKey.replace("Bearer ", ""),
+    "x-upsert": "true"
   };
+
+  const keyPreview = apiKey.substring(0, 15) + "...";
+  console.log(`[Supabase Storage] Uploading to ${url}. Key prefix: ${keyPreview}, Length: ${apiKey.length}`);
 
   if (options?.contentType) {
     headers["Content-Type"] = options.contentType;
