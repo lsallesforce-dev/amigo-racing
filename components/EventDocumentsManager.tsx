@@ -35,16 +35,6 @@ export function EventDocumentsManager({ eventId, documents: docsProp, terms: ter
         setTerms(termsProp || "");
     }, [termsProp]);
 
-    const handleAddDocument = () => {
-        if (!newDoc.name || !newDoc.url) {
-            toast.error("Preencha o nome e a URL do documento");
-            return;
-        }
-        const updatedDocs = [...documents, newDoc];
-        onUpdate(JSON.stringify(updatedDocs), terms);
-        setNewDoc({ name: "", url: "", type: "pdf" });
-    };
-
     const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
         if (!file) return;
@@ -54,8 +44,12 @@ export function EventDocumentsManager({ eventId, documents: docsProp, terms: ter
         formData.append("file", file);
 
         try {
+            const token = localStorage.getItem("app_session_id");
             const response = await fetch("/api/upload", {
                 method: "POST",
+                headers: {
+                    ...(token ? { "Authorization": `Bearer ${token}` } : {}),
+                },
                 body: formData,
             });
 
@@ -65,12 +59,19 @@ export function EventDocumentsManager({ eventId, documents: docsProp, terms: ter
             }
 
             const data = await response.json();
-            setNewDoc({
+            
+            // Auto-add the document after successful upload
+            const newDocument: EventDocument = {
                 name: newDoc.name || file.name.split('.')[0],
                 url: data.url,
                 type: file.type.includes("pdf") ? "pdf" : "txt"
-            });
-            toast.success("Arquivo enviado com sucesso!");
+            };
+
+            const updatedDocs = [...documents, newDocument];
+            onUpdate(JSON.stringify(updatedDocs), terms);
+            
+            setNewDoc({ name: "", url: "", type: "pdf" });
+            toast.success("Arquivo enviado e adicionado com sucesso!");
         } catch (error) {
             toast.error("Erro ao enviar arquivo: " + (error instanceof Error ? error.message : "Erro desconhecido"));
             console.error(error);
@@ -100,66 +101,42 @@ export function EventDocumentsManager({ eventId, documents: docsProp, terms: ter
                     </CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-4">
-                    <div className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end border p-4 rounded-lg bg-muted/30">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-end border p-4 rounded-lg bg-muted/30">
                         <div className="space-y-2">
-                            <Label className="text-xs">Nome do Documento</Label>
+                            <Label className="text-xs">Nome do Documento (opcional)</Label>
                             <Input
-                                placeholder="Ex: Regulamento"
+                                placeholder="Ex: Regulamento (deixe vazio para usar nome do arquivo)"
                                 value={newDoc.name}
                                 onChange={(e) => setNewDoc({ ...newDoc, name: e.target.value })}
                                 className="h-9"
                             />
                         </div>
                         <div className="space-y-2">
-                            <Label className="text-xs">Arquivo / Link</Label>
+                            <Label className="text-xs">Upload de Arquivo (PDF, JPG, PNG)</Label>
                             <div className="flex gap-2">
-                                <Input
-                                    placeholder="http://... ou faça upload ->"
-                                    value={newDoc.url}
-                                    onChange={(e) => setNewDoc({ ...newDoc, url: e.target.value })}
-                                    className="h-9"
+                                <input
+                                    type="file"
+                                    id="doc-upload"
+                                    className="hidden"
+                                    onChange={handleFileUpload}
+                                    accept=".pdf,.doc,.docx,.txt,.jpg,.jpeg,.png"
                                 />
-                                <div className="relative">
-                                    <input
-                                        type="file"
-                                        id="doc-upload"
-                                        className="hidden"
-                                        onChange={handleFileUpload}
-                                        accept=".pdf,.doc,.docx,.txt"
-                                    />
-                                    <Button
-                                        type="button"
-                                        variant="outline"
-                                        size="icon"
-                                        className="h-9 w-9 shrink-0"
-                                        disabled={isUploading}
-                                        onClick={() => document.getElementById('doc-upload')?.click()}
-                                    >
-                                        {isUploading ? (
-                                            <Loader2 className="h-4 w-4 animate-spin" />
-                                        ) : (
-                                            <Plus className="h-4 w-4" />
-                                        )}
-                                    </Button>
-                                </div>
+                                <Button
+                                    type="button"
+                                    variant="default"
+                                    className="h-9 w-full flex gap-2"
+                                    disabled={isUploading}
+                                    onClick={() => document.getElementById('doc-upload')?.click()}
+                                >
+                                    {isUploading ? (
+                                        <Loader2 className="h-4 w-4 animate-spin" />
+                                    ) : (
+                                        <Plus className="h-4 w-4" />
+                                    )}
+                                    {isUploading ? "Enviando..." : "Selecionar e Adicionar Arquivo"}
+                                </Button>
                             </div>
                         </div>
-                        <div className="space-y-2">
-                            <Label className="text-xs">Tipo</Label>
-                            <select
-                                className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-                                value={newDoc.type}
-                                onChange={(e) => setNewDoc({ ...newDoc, type: e.target.value })}
-                            >
-                                <option value="pdf">PDF</option>
-                                <option value="url">Link Externo</option>
-                                <option value="txt">Texto / Outros</option>
-                            </select>
-                        </div>
-                        <Button type="button" onClick={handleAddDocument} className="h-9">
-                            <Plus className="h-4 w-4 mr-2" />
-                            Adicionar
-                        </Button>
                     </div>
 
                     <div className="space-y-2 mt-4">
@@ -183,17 +160,29 @@ export function EventDocumentsManager({ eventId, documents: docsProp, terms: ter
                                             </div>
                                             <div className="min-w-0">
                                                 <p className="text-sm font-medium truncate">{doc.name}</p>
-                                                <p className="text-[10px] text-muted-foreground truncate uppercase font-bold">{doc.type} • {doc.url}</p>
+                                                <p className="text-[10px] text-muted-foreground truncate uppercase font-bold">{doc.type}</p>
                                             </div>
                                         </div>
-                                        <Button
-                                            variant="ghost"
-                                            size="icon"
-                                            onClick={() => handleRemoveDocument(index)}
-                                            className="h-8 w-8 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
-                                        >
-                                            <Trash2 className="h-4 w-4" />
-                                        </Button>
+                                        <div className="flex gap-1">
+                                            <Button
+                                                variant="ghost"
+                                                size="icon"
+                                                asChild
+                                                className="h-8 w-8 text-muted-foreground hover:text-primary hover:bg-primary/10"
+                                            >
+                                                <a href={doc.url} target="_blank" rel="noopener noreferrer">
+                                                    <FileText className="h-4 w-4" />
+                                                </a>
+                                            </Button>
+                                            <Button
+                                                variant="ghost"
+                                                size="icon"
+                                                onClick={() => handleRemoveDocument(index)}
+                                                className="h-8 w-8 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+                                            >
+                                                <Trash2 className="h-4 w-4" />
+                                            </Button>
+                                        </div>
                                     </div>
                                 ))}
                             </div>

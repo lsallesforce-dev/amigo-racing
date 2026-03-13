@@ -58,9 +58,10 @@ router.post("/upload", upload.single("file"), async (req, res) => {
     } catch (error) {
         console.error("[UploadRoute] Erro na requisição de upload:", error);
         if (error instanceof Error && (error.message.includes("session") || error.message.includes("not found") || error.name === "ForbiddenError")) {
+            console.warn("[UploadRoute] Falha de autenticação:", error.message);
             return res.status(401).json({ error: "Não autorizado" });
         }
-        return res.status(500).json({ error: "Erro crítico no servidor de upload" });
+        return res.status(500).json({ error: "Erro crítico no servidor de upload: " + (error instanceof Error ? error.message : String(error)) });
     }
 });
 
