@@ -32,9 +32,9 @@ export const ENV = {
   pagarmeApiUrl: process.env.PAGARME_API_URL || "https://api.pagar.me/core/v5",
   pagarmePlatformRecipientId: process.env.PAGARME_PLATFORM_RECIPIENT_ID || "",
 
-  // Storage (Provido pelo Manus)
-  forgeApiUrl: process.env.BUILT_IN_FORGE_API_URL || "https://api.manus.pro",
-  forgeApiKey: process.env.BUILT_IN_FORGE_API_KEY || "",
+  // Storage (Provido pelo Manus/Forge)
+  forgeApiUrl: process.env.BUILT_IN_FORGE_API_URL || process.env.FORGE_API_URL || "https://api.manus.pro",
+  forgeApiKey: process.env.BUILT_IN_FORGE_API_KEY || process.env.FORGE_API_KEY || "",
 
   // CORS (Segurança em nuvem)
   allowedOrigins: process.env.ALLOWED_ORIGINS
@@ -53,5 +53,7 @@ console.log("[Env] Status Check:", {
   dbUrl: mask(ENV.databaseUrl),
   jwtSecret: ENV.cookieSecret === "uma-senha-muito-segura-e-longa-de-32-caracteres" ? "FALLBACK_DETECTED" : "LOADED_OK",
   oAuthUrl: ENV.oAuthServerUrl,
-  allowedOrigins: ENV.allowedOrigins
+  allowedOrigins: ENV.allowedOrigins,
+  storageUrl: ENV.forgeApiUrl,
+  storageKey: mask(ENV.forgeApiKey)
 });

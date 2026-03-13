@@ -9,8 +9,9 @@ function getStorageConfig(): StorageConfig {
   const apiKey = ENV.forgeApiKey;
 
   if (!baseUrl || !apiKey) {
+    const missing = !baseUrl ? "BUILT_IN_FORGE_API_URL" : "BUILT_IN_FORGE_API_KEY";
     throw new Error(
-      "Storage proxy credentials missing: set BUILT_IN_FORGE_API_URL and BUILT_IN_FORGE_API_KEY"
+      `Storage proxy credentials missing: ${missing} not found in environment.`
     );
   }
 
