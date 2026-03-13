@@ -44,16 +44,17 @@ export function EventDocumentsManager({ eventId, documents: docsProp, terms: ter
         setIsUploading(true);
         try {
             // 1. Get Signed URL from Backend (Bypasses Vercel Size Limit)
-            const { url, path: remotePath, publicUrl } = await getSignedUrl.mutateAsync({ 
+            const { url, path: remotePath, publicUrl, token } = await getSignedUrl.mutateAsync({ 
                 filename: file.name 
             });
 
             // 2. Upload DIRECTLY to Supabase from Browser
             const uploadResponse = await fetch(url, {
-                method: "POST", // Changed from PUT to POST per Supabase signed URL docs
+                method: "PUT", // Supabase signed URLs work best with PUT
                 body: file,
                 headers: {
                     "Content-Type": file.type || "application/octet-stream",
+                    "Authorization": `Bearer ${token}`
                 }
             });
 
