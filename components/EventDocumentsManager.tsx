@@ -35,39 +35,40 @@ export function EventDocumentsManager({ eventId, documents: docsProp, terms: ter
         setTerms(termsProp || "");
     }, [termsProp]);
 
+    const getSignedUrl = trpc.storage.getSignedUrl.useMutation();
+
     const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
         if (!file) return;
 
         setIsUploading(true);
-        const formData = new FormData();
-        formData.append("file", file);
-
         try {
-            const token = localStorage.getItem("app_session_id");
-            const response = await fetch("/api/upload", {
-                method: "POST",
-                headers: {
-                    ...(token ? { "Authorization": `Bearer ${token}` } : {}),
-                },
-                body: formData,
+            // 1. Get Signed URL from Backend (Bypasses Vercel Size Limit)
+            const { url, path: remotePath } = await getSignedUrl.mutateAsync({ 
+                filename: file.name 
             });
 
-            if (!response.ok) {
-                const errorData = await response.json().catch(() => ({}));
-                let errorMessage = errorData.error || "Falha no upload";
-                if (errorData.details) {
-                    errorMessage += ` (${errorData.details.storage})`;
+            // 2. Upload DIRECTLY to Supabase from Browser
+            const uploadResponse = await fetch(url, {
+                method: "PUT",
+                body: file,
+                headers: {
+                    "Content-Type": file.type || "application/octet-stream",
                 }
-                throw new Error(errorMessage);
+            });
+
+            if (!uploadResponse.ok) {
+                const errorText = await uploadResponse.text();
+                throw new Error(`Erro no upload direto: ${uploadResponse.status} ${errorText}`);
             }
 
-            const data = await response.json();
+            // 3. Construct the public URL
+            const publicUrl = `https://rjcdkasnipxcdrlmkskm.supabase.co/storage/v1/object/public/amigo-racing/${remotePath}`;
             
             // Auto-add the document after successful upload
             const newDocument: EventDocument = {
                 name: newDoc.name || file.name.split('.')[0],
-                url: data.url,
+                url: publicUrl,
                 type: file.type.includes("pdf") ? "pdf" : "txt"
             };
 
@@ -75,7 +76,7 @@ export function EventDocumentsManager({ eventId, documents: docsProp, terms: ter
             onUpdate(JSON.stringify(updatedDocs), terms);
             
             setNewDoc({ name: "", url: "", type: "pdf" });
-            toast.success("Arquivo enviado e adicionado com sucesso!");
+            toast.success("Arquivo enviado diretamente para o Storage!");
         } catch (error) {
             toast.error("Erro ao enviar arquivo: " + (error instanceof Error ? error.message : "Erro desconhecido"));
             console.error(error);

@@ -18,6 +18,17 @@ import { ENV } from "./env.js";
 import { adminProcedure as baseAdminProcedure } from "./_core/trpc.js";
 import { championshipRouter, calculateChampionshipStandings } from "./backend_routers/championship.js";
 
+const storageRouter = router({
+  getSignedUrl: organizerProcedure
+    .input(z.object({ filename: z.string() }))
+    .mutation(async ({ input }) => {
+      const safeName = input.filename.replace(/[^a-zA-Z0-9.-]/g, "_");
+      const relativePath = `uploads/${Date.now()}-${safeName}`;
+      const config = await storage.createSignedUploadUrl(relativePath);
+      return { ...config, path: relativePath };
+    }),
+});
+
 
 const integerSchema = z.number().int();
 
@@ -502,6 +513,7 @@ export const appRouter = router({
   store: storeRouter,
   championships: championshipRouter,
   competitor: competitorRouter,
+  storage: storageRouter,
 
   organizerMembers: router({
     invite: organizerProcedure

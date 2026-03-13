@@ -24,29 +24,44 @@ export function EventNavigationFilesManager({ eventId, files: filesProp, categor
         setFiles(Array.isArray(filesProp) ? filesProp : []);
     }, [filesProp]);
 
+    const getSignedUrl = trpc.storage.getSignedUrl.useMutation();
+
     const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
         if (!file) return;
 
         setIsUploading(true);
-        const formData = new FormData();
-        formData.append("file", file);
-
         try {
-            const response = await fetch("/api/upload", {
-                method: "POST",
-                body: formData,
+            // 1. Get Signed URL from Backend (Bypasses Vercel Size Limit)
+            const { url, path: remotePath } = await getSignedUrl.mutateAsync({ 
+                filename: file.name 
             });
 
-            if (!response.ok) {
-                const errorData = await response.json().catch(() => ({}));
-                throw new Error(errorData.error || "Falha no upload");
+            // 2. Upload DIRECTLY to Supabase from Browser
+            const uploadResponse = await fetch(url, {
+                method: "PUT", // Supabase signed URLs usually use PUT for uploads
+                body: file,
+                headers: {
+                    "Content-Type": file.type || "application/octet-stream",
+                }
+            });
+
+            if (!uploadResponse.ok) {
+                const errorText = await uploadResponse.text();
+                throw new Error(`Erro no upload direto: ${uploadResponse.status} ${errorText}`);
             }
 
-            const data = await response.json();
+            // 3. Construct the public URL (using our storage.storageGet logic equivalent)
+            // storageGet logic is baseSupabaseUrl + '/storage/v1/object/public/amigo-racing/' + path
+            // Since the backend already knows how to get the URL, we can just use the path
+            // But we already have an api route for it? No, let's keep it simple.
+            
+            // We'll use the public URL format
+            const publicUrl = `https://rjcdkasnipxcdrlmkskm.supabase.co/storage/v1/object/public/amigo-racing/${remotePath}`;
+
             const newFile = {
                 name: file.name,
-                url: data.url,
+                url: publicUrl,
                 type: file.name.split('.').pop()?.toLowerCase() || "bin",
                 categoryId: selectedCategoryId === "all" ? null : Number(selectedCategoryId),
                 uploadedAt: new Date().toISOString()
@@ -54,8 +69,9 @@ export function EventNavigationFilesManager({ eventId, files: filesProp, categor
 
             const updatedFiles = [...files, newFile];
             onUpdate(updatedFiles);
-            toast.success(`Arquivo ${file.name} enviado!`);
+            toast.success(`Arquivo ${file.name} enviado diretamente para o Storage!`);
         } catch (error) {
+            console.error("[Upload] Error:", error);
             toast.error("Erro ao enviar arquivo: " + (error instanceof Error ? error.message : "Erro desconhecido"));
         } finally {
             setIsUploading(false);

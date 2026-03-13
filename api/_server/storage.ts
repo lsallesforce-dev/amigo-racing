@@ -24,6 +24,38 @@ function normalizeKey(relKey: string): string {
 }
 
 /**
+ * Generates a signed URL for direct client-side upload (Bypass Vercel 5MB limit)
+ */
+export async function createSignedUploadUrl(relKey: string): Promise<{ url: string }> {
+  const { baseUrl, apiKey } = getSupabaseConfig();
+  const safePath = normalizeKey(relKey);
+  
+  // Supabase REST API for signed upload URL:
+  // POST /storage/v1/object/upload/sign/[bucket]/[path]
+  const url = `${baseUrl}/storage/v1/object/upload/sign/${BUCKET_NAME}/${safePath}`;
+
+  const response = await fetch(url, {
+    method: "POST",
+    headers: {
+      "Authorization": `Bearer ${apiKey}`,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({ expiresIn: 3600 }) // 1 hour
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`Failed to create signed upload URL (${response.status}): ${errorText}`);
+  }
+
+  const data = await response.json();
+  // Supabase returns { url: "/relative/path?token=..." }
+  return {
+    url: `${baseUrl}${data.url}`
+  };
+}
+
+/**
  * Uploads a file to Supabase Storage
  */
 export async function storagePut(
