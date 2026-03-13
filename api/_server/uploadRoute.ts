@@ -32,13 +32,9 @@ router.post("/upload", upload.single("file"), async (req, res) => {
 
         console.log(`[Upload] Recebido arquivo: ${file.originalname} (${file.size} bytes). Enviando para storage...`);
 
-        try {
-            // Try official storage first
-            await storage.storagePut(relativePath, file.buffer, { contentType: file.mimetype });
-            const url = await storage.storageGet(relativePath);
-            return res.json({ url });
         } catch (error) {
-            console.warn("[UploadRoute] Storage proxy failed, using fallback:", error instanceof Error ? error.message : error);
+            const storageError = error instanceof Error ? error.message : String(error);
+            console.warn("[UploadRoute] Storage proxy failed:", storageError);
 
             // Fallback Plan B: Save locally to public/uploads if possible
             try {
@@ -51,8 +47,16 @@ router.post("/upload", upload.single("file"), async (req, res) => {
                 fs.writeFileSync(localPath, file.buffer);
                 return res.json({ url: `/uploads/${localFileName}` });
             } catch (localError) {
-                console.error("[UploadRoute] Local fallback also failed:", localError);
-                return res.status(500).json({ error: "Erro interno no servidor de upload (e fallback falhou)" });
+                const fallbackError = localError instanceof Error ? localError.message : String(localError);
+                console.error("[UploadRoute] Local fallback also failed:", fallbackError);
+                return res.status(500).json({ 
+                    error: "Erro interno no servidor de upload",
+                    details: {
+                        storage: storageError,
+                        fallback: fallbackError,
+                        path: relativePath
+                    }
+                });
             }
         }
     } catch (error) {

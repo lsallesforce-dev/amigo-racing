@@ -1,4 +1,4 @@
-﻿// Uses the Biz-provided storage proxy (Authorization: Bearer <token>)
+// Uses the Biz-provided storage proxy (Authorization: Bearer <token>)
 
 import { ENV } from './env.js';
 
@@ -78,7 +78,8 @@ export async function storagePut(
 
   if (!response.ok) {
     const errorText = await response.text();
-    throw new Error(`Storage upload failed (${response.status}): ${errorText}`);
+    console.error(`[Storage] Upload falhou para ${url.toString()}. Status: ${response.status}. Erro: ${errorText}`);
+    throw new Error(`Storage upload failed (${response.status}): ${errorText || 'Sem resposta do servidor'}`);
   }
 }
 

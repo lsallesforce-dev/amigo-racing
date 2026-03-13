@@ -55,7 +55,11 @@ export function EventDocumentsManager({ eventId, documents: docsProp, terms: ter
 
             if (!response.ok) {
                 const errorData = await response.json().catch(() => ({}));
-                throw new Error(errorData.error || "Falha no upload");
+                let errorMessage = errorData.error || "Falha no upload";
+                if (errorData.details) {
+                    errorMessage += ` (${errorData.details.storage})`;
+                }
+                throw new Error(errorMessage);
             }
 
             const data = await response.json();
