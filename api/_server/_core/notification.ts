@@ -1,4 +1,4 @@
-﻿import { TRPCError } from "@trpc/server";
+import { TRPCError } from "@trpc/server";
 import { ENV } from "../env.js";
 
 export type NotificationPayload = {
@@ -68,24 +68,20 @@ export async function notifyOwner(
 ): Promise<boolean> {
   const { title, content } = validatePayload(payload);
 
-  if (!ENV.forgeApiUrl) {
-    console.warn("[Notification] Notification service URL is not configured. Skipping.");
-    return false;
-  }
+  // NOTE: Manus/Forge notification service is disabled because credentials were removed from ENV.
+  // In the future, this can be migrated to Supabase / AWS SNS / etc.
+  console.warn("[Notification] Notification service is currently disabled (Manus credentials removed).");
+  return false;
 
-  if (!ENV.forgeApiKey) {
-    console.warn("[Notification] Notification service API key is not configured. Skipping.");
-    return false;
-  }
-
-  const endpoint = buildEndpointUrl(ENV.forgeApiUrl);
+  /*
+  const endpoint = buildEndpointUrl(ENV.forgeApiUrl as any);
 
   try {
     const response = await fetch(endpoint, {
       method: "POST",
       headers: {
         accept: "application/json",
-        authorization: `Bearer ${ENV.forgeApiKey}`,
+        authorization: `Bearer ${ENV.forgeApiKey as any}`,
         "content-type": "application/json",
         "connect-protocol-version": "1",
       },
@@ -106,4 +102,5 @@ export async function notifyOwner(
     console.warn("[Notification] Error calling notification service:", error);
     return false;
   }
+  */
 }
