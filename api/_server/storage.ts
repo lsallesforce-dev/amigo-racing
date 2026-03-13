@@ -1,70 +1,45 @@
-// Uses the Biz-provided storage proxy (Authorization: Bearer <token>)
-
+// Uses Supabase Storage REST API
 import { ENV } from './env.js';
 
-type StorageConfig = { baseUrl: string; apiKey: string };
+const BUCKET_NAME = "amigo-racing";
 
-function getStorageConfig(): StorageConfig {
-  const baseUrl = ENV.forgeApiUrl;
-  const apiKey = ENV.forgeApiKey;
+function getSupabaseConfig() {
+  const url = ENV.supabaseUrl;
+  const key = ENV.supabaseServiceKey;
 
-  if (!baseUrl || !apiKey) {
-    const missing = !baseUrl ? "BUILT_IN_FORGE_API_URL" : "BUILT_IN_FORGE_API_KEY";
+  if (!url || !key) {
     throw new Error(
-      `Storage proxy credentials missing: ${missing} not found in environment.`
+      "Supabase Storage credentials missing: set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY"
     );
   }
 
-  return { baseUrl: baseUrl.replace(/\/+$/, ""), apiKey };
-}
-
-function buildUploadUrl(baseUrl: string, relKey: string): URL {
-  const url = new URL("v1/storage/upload", ensureTrailingSlash(baseUrl));
-  url.searchParams.set("path", normalizeKey(relKey));
-  return url;
-}
-
-async function buildDownloadUrl(
-  baseUrl: string,
-  relKey: string,
-  apiKey: string
-): Promise<string> {
-  const downloadApiUrl = new URL(
-    "v1/storage/downloadUrl",
-    ensureTrailingSlash(baseUrl)
-  );
-  downloadApiUrl.searchParams.set("path", normalizeKey(relKey));
-  const response = await fetch(downloadApiUrl, {
-    method: "GET",
-    headers: buildAuthHeaders(apiKey),
-  });
-  return (await response.json()).url;
-}
-
-function ensureTrailingSlash(value: string): string {
-  return value.endsWith("/") ? value : `${value}/`;
+  return { 
+    baseUrl: url.replace(/\/+$/, ""), 
+    apiKey: key 
+  };
 }
 
 function normalizeKey(relKey: string): string {
   return relKey.replace(/^\/+/, "");
 }
 
-function buildAuthHeaders(apiKey: string): HeadersInit {
-  return {
-    Authorization: `Bearer ${apiKey}`,
-  };
-}
-
+/**
+ * Uploads a file to Supabase Storage
+ */
 export async function storagePut(
   relKey: string,
-  data: any,
+  data: Buffer | ArrayBuffer | string,
   options?: { contentType?: string }
 ): Promise<void> {
-  const { baseUrl, apiKey } = getStorageConfig();
-  const url = buildUploadUrl(baseUrl, relKey);
+  const { baseUrl, apiKey } = getSupabaseConfig();
+  const safePath = normalizeKey(relKey);
+  
+  // URL: https://[project-id].supabase.co/storage/v1/object/[bucket]/[path]
+  const url = `${baseUrl}/storage/v1/object/${BUCKET_NAME}/${safePath}`;
 
-  const headers: any = {
-    ...buildAuthHeaders(apiKey),
+  const headers: Record<string, string> = {
+    "Authorization": `Bearer ${apiKey}`,
+    "x-upsert": "true" // Allow overwriting
   };
 
   if (options?.contentType) {
@@ -74,17 +49,23 @@ export async function storagePut(
   const response = await fetch(url, {
     method: "POST",
     headers,
-    body: data,
+    body: data as any,
   });
 
   if (!response.ok) {
     const errorText = await response.text();
-    console.error(`[Storage] Upload falhou para ${url.toString()}. Status: ${response.status}. Erro: ${errorText}`);
-    throw new Error(`Storage upload failed (${response.status}): ${errorText || 'Sem resposta do servidor'}`);
+    console.error(`[Supabase Storage] Upload failed for ${url}. Status: ${response.status}. Error: ${errorText}`);
+    throw new Error(`Supabase storage upload failed (${response.status}): ${errorText}`);
   }
 }
 
+/**
+ * Gets a public URL for a file in Supabase Storage
+ */
 export async function storageGet(relKey: string): Promise<string> {
-  const { baseUrl, apiKey } = getStorageConfig();
-  return buildDownloadUrl(baseUrl, relKey, apiKey);
+  const { baseUrl } = getSupabaseConfig();
+  const safePath = normalizeKey(relKey);
+  
+  // URL: https://[project-id].supabase.co/storage/v1/object/public/[bucket]/[path]
+  return `${baseUrl}/storage/v1/object/public/${BUCKET_NAME}/${safePath}`;
 }

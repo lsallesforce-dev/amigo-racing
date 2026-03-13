@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Image Proxy Endpoint
  * 
  * Serve imagens do S3 privado atravÃ©s de um proxy no backend que adiciona autenticaÃ§Ã£o.
@@ -8,43 +8,25 @@
 
 import { Request, Response } from 'express';
 import { ENV } from './env.js';
+import * as storage from './storage.js';
 
 /**
- * Busca uma imagem do S3 usando o storage API do Manus
+ * Busca uma imagem do Supabase Storage
  */
 async function fetchImageFromS3(fileKey: string): Promise<{ buffer: Buffer; contentType: string }> {
-  const baseUrl = ENV.forgeApiUrl;
-  const apiKey = ENV.forgeApiKey;
+  // Com Supabase Public Bucket, podemos baixar diretamente da URL pública
+  // No entanto, para manter o proxy (se necessário por CORS ou segurança futura),
+  // fazemos o fetch pelo backend.
+  
+  const relPath = fileKey.replace(/^\/+/, '');
+  const url = await storage.storageGet(relPath);
 
-  if (!baseUrl || !apiKey) {
-    throw new Error('Storage credentials missing');
-  }
+  console.log('[ImageProxy] Fetching from Supabase:', url);
 
-  // Normalizar fileKey (remover barra inicial)
-  const normalizedKey = fileKey.replace(/^\/+/, '');
-
-  // Primeiro, obter URL assinada do storage API
-  const downloadUrlApiUrl = new URL('v1/storage/downloadUrl', baseUrl.replace(/\/+$/, '') + '/');
-  downloadUrlApiUrl.searchParams.set('path', normalizedKey);
-
-  const urlResponse = await fetch(downloadUrlApiUrl, {
-    method: 'GET',
-    headers: {
-      'Authorization': `Bearer ${apiKey}`,
-    },
-  });
-
-  if (!urlResponse.ok) {
-    throw new Error(`Failed to get download URL: ${urlResponse.status} ${urlResponse.statusText}`);
-  }
-
-  const { url: signedUrl } = await urlResponse.json();
-
-  // Agora fazer download da imagem usando a URL assinada
-  const imageResponse = await fetch(signedUrl);
+  const imageResponse = await fetch(url);
 
   if (!imageResponse.ok) {
-    throw new Error(`Failed to fetch image: ${imageResponse.status} ${imageResponse.statusText}`);
+    throw new Error(`Failed to fetch image from Supabase: ${imageResponse.status} ${imageResponse.statusText}`);
   }
 
   // Obter o buffer da imagem
