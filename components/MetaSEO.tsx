@@ -67,15 +67,26 @@ export default function MetaSEO({
       ogTypeTag.setAttribute("content", ogType);
     }
 
+    // OpenGraph Image Handling
+    const getAbsoluteUrl = (url?: string) => {
+      if (!url) return null;
+      if (url.startsWith('data:')) return null; // WhatsApp/Meta ignore base64
+      if (url.startsWith('http')) return url;
+      const clean = url.startsWith('/') ? url.slice(1) : url;
+      return `https://www.amigoracing.com.br/${clean}`;
+    };
+
+    const absoluteImage = getAbsoluteUrl(ogImage);
+
     // Update OpenGraph Image
-    if (ogImage) {
+    if (absoluteImage) {
       let ogImageTag = document.querySelector('meta[property="og:image"]');
       if (!ogImageTag) {
         ogImageTag = document.createElement("meta");
         ogImageTag.setAttribute("property", "og:image");
         document.head.appendChild(ogImageTag);
       }
-      ogImageTag.setAttribute("content", ogImage);
+      ogImageTag.setAttribute("content", absoluteImage);
     }
 
     // Update OpenGraph Image Dimensions
@@ -116,7 +127,7 @@ export default function MetaSEO({
     }
 
     // Update Twitter Tags
-    if (ogImage) {
+    if (absoluteImage) {
       let twitterCardTag = document.querySelector('meta[name="twitter:card"]');
       if (!twitterCardTag) {
         twitterCardTag = document.createElement("meta");
@@ -130,13 +141,6 @@ export default function MetaSEO({
         twitterImageTag = document.createElement("meta");
         twitterImageTag.setAttribute("name", "twitter:image");
         document.head.appendChild(twitterImageTag);
-      }
-      
-      // Ensure absolute
-      let absoluteImage = ogImage;
-      if (!absoluteImage.startsWith("http")) {
-          const clean = absoluteImage.startsWith("/") ? absoluteImage.slice(1) : absoluteImage;
-          absoluteImage = `https://www.amigoracing.com.br/${clean}`;
       }
       twitterImageTag.setAttribute("content", absoluteImage);
     }
