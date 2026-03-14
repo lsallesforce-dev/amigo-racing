@@ -8,7 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { trpc } from "@/lib/trpc";
 import { Link } from "wouter";
-import { DollarSign, Plus, ArrowUpRight, ArrowDownRight, TrendingUp, Loader2, Clock, Check, Download, ShoppingBag, ArrowLeft, Trophy, Send, Wallet, Banknote } from "lucide-react";
+import { DollarSign, Plus, ArrowUpRight, ArrowDownRight, TrendingUp, Loader2, Clock, Check, Download, ShoppingBag, ArrowLeft, Trophy, Send, Wallet, Banknote, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 import { format } from "date-fns";
@@ -66,6 +66,17 @@ export default function OrganizerFinance() {
         },
         onError: (error) => {
             toast.error(error.message || "Erro ao dar baixa na transação");
+        }
+    });
+
+    const deleteMutation = trpc.finance.delete.useMutation({
+        onSuccess: () => {
+            toast.success("Lançamento excluído com sucesso!");
+            utils.finance.getSummary.invalidate();
+            utils.finance.getAll.invalidate();
+        },
+        onError: (error) => {
+            toast.error(error.message || "Erro ao excluir lançamento");
         }
     });
 
@@ -668,8 +679,8 @@ export default function OrganizerFinance() {
                                                 <TableCell className={`text-right font-bold ${tx.type === 'INCOME' ? 'text-green-600' : 'text-red-600'}`}>
                                                     {tx.type === 'INCOME' ? '+' : '-'} {formatCurrency(tx.amount)}
                                                 </TableCell>
-                                                <TableCell className="text-center">
-                                                    {tx.status === 'PENDING' && typeof tx.id === 'string' && !tx.id.startsWith('org-') && (
+                                                <TableCell className="text-center flex justify-center gap-1">
+                                                    {tx.status === 'PENDING' && typeof tx.id === 'string' && !tx.id.startsWith('org-') && !tx.id.startsWith('store-') && (
                                                         <Button
                                                             variant="ghost"
                                                             size="sm"
@@ -682,8 +693,24 @@ export default function OrganizerFinance() {
                                                             Baixa
                                                         </Button>
                                                     )}
-                                                    {tx.status === 'PENDING' && typeof tx.id === 'string' && tx.id.startsWith('org-') && (
-                                                        <span className="text-xs text-muted-foreground" title="Inscrições pendentes são baixadas automaticamente no sistema">-</span>
+                                                    {typeof tx.id === 'string' && !tx.id.startsWith('org-') && !tx.id.startsWith('store-') && (
+                                                        <Button
+                                                            variant="ghost"
+                                                            size="sm"
+                                                            className="h-8 text-red-600 hover:text-red-700 hover:bg-red-100 dark:hover:bg-red-900/20"
+                                                            onClick={() => {
+                                                                if (confirm("Deseja realmente excluir este lançamento?")) {
+                                                                    deleteMutation.mutate({ id: tx.id as string });
+                                                                }
+                                                            }}
+                                                            disabled={deleteMutation.isPending}
+                                                            title="Excluir"
+                                                        >
+                                                            <Trash2 className="h-4 w-4" />
+                                                        </Button>
+                                                    )}
+                                                    {typeof tx.id === 'string' && (tx.id.startsWith('org-') || tx.id.startsWith('store-')) && (
+                                                        <span className="text-xs text-muted-foreground" title="Transações do sistema são gerenciadas automaticamente">-</span>
                                                     )}
                                                 </TableCell>
                                             </TableRow>

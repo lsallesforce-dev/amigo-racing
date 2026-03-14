@@ -121,6 +121,19 @@ const financeRouter = router({
       return await db.updateTransactionStatus(input.id, "COMPLETED");
     }),
 
+  delete: organizerProcedure
+    .input(z.object({
+      id: z.string()
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const user = ctx.user as any;
+      const context = await db.getOrganizerContext(user);
+      if (context.type === 'MEMBER' && !context.permissions.includes('finance')) {
+        throw new TRPCError({ code: 'FORBIDDEN', message: 'Sem permissão para financeiro' });
+      }
+      return await db.deleteTransaction(input.id, context.principalUserId);
+    }),
+
   // Retorna o saldo Pagar.me do organizador logado
   getPagarmeBalance: organizerProcedure
     .query(async ({ ctx }) => {

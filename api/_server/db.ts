@@ -1513,6 +1513,20 @@ export async function updateTransactionStatus(id: string, status: "PENDING" | "C
 }
 
 /**
+ * Delete a transaction
+ */
+export async function deleteTransaction(id: string, userId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  const [result] = await db.delete(transactions)
+    .where(and(eq(transactions.id, id), eq(transactions.userId, userId)))
+    .returning();
+
+  return result;
+}
+
+/**
  * Get transactions for a user with optional filters
  */
 export async function getTransactions(userId: number, filters?: { type?: "INCOME" | "EXPENSE", month?: number, year?: number }) {
