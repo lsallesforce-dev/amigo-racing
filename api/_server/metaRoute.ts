@@ -48,8 +48,11 @@ export function setupMetaRoutes(app: Express) {
             }
         }
 
-        // Ensure absolute URL
-        if (image && !image.startsWith("http")) {
+        // Ensure absolute URL and handle base64
+        if (image && image.startsWith("data:")) {
+          // Social scrapers don't support base64, fallback to logo
+          image = "https://www.amigoracing.com.br/logo.png";
+        } else if (image && !image.startsWith("http")) {
           const cleanImage = image.startsWith("/") ? image.slice(1) : image;
           image = `${SITE_URL}/${cleanImage}`;
         }
