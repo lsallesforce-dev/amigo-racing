@@ -398,9 +398,22 @@ export default function EventDetails() {
                 <CardTitle>Sobre o Evento</CardTitle>
               </CardHeader>
               <CardContent>
-                <p className="text-muted-foreground">{event.description}</p>
-                <div className="mt-4 text-sm text-muted-foreground">
-                  <p><strong>Local:</strong> {event.location}</p>
+                <div className="flex flex-col md:flex-row gap-6">
+                  <div className="flex-1">
+                    <p className="text-muted-foreground whitespace-pre-wrap">{event.description}</p>
+                    <div className="mt-4 text-sm text-muted-foreground">
+                      <p><strong>Local:</strong> {event.location}</p>
+                    </div>
+                  </div>
+                  {event.imageUrl && (
+                    <div className="w-full md:w-1/3 shrink-0 flex items-center justify-center bg-muted/30 rounded-lg p-2 border border-border/50">
+                      <img 
+                        src={event.imageUrl} 
+                        alt={event.name} 
+                        className="w-full h-auto max-h-[300px] object-contain rounded shadow-sm" 
+                      />
+                    </div>
+                  )}
                 </div>
               </CardContent>
             </Card>
