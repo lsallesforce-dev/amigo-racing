@@ -354,6 +354,7 @@ export default function EventDetails() {
         description={event.description || `Participe do ${event.name} em ${event.city}, ${event.state}. Inscrições abertas na Amigo Racing!`}
         ogTitle={event.name}
         ogDescription={event.description || `Participe do ${event.name} em ${event.city}, ${event.state}.`}
+        ogImage={event.imageUrl || undefined}
       />
       <Navbar />
 

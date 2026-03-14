@@ -15,6 +15,7 @@ import { imageProxyHandler } from "./imageProxy.js";
 import { qrCodeProxyHandler } from "./qrCodeProxy.js";
 import pagarmeWebhook from "./pagarme.js";
 import uploadRoute from "./uploadRoute.js";
+import { setupMetaRoutes } from "./metaRoute.js";
 
 export async function createExpressApp() {
     const app = express();
@@ -51,6 +52,8 @@ export async function createExpressApp() {
             });
         }
     });
+
+    setupMetaRoutes(app);
 
     // --- IMPORTANT: Body parsers MUST be registered BEFORE route handlers ---
     // The webhook route needs JSON parsing available, so it comes first.

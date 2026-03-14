@@ -6,6 +6,7 @@ interface MetaSEOProps {
   ogTitle?: string;
   ogDescription?: string;
   ogType?: string;
+  ogImage?: string;
 }
 
 export default function MetaSEO({
@@ -14,6 +15,7 @@ export default function MetaSEO({
   ogTitle,
   ogDescription,
   ogType = "website",
+  ogImage,
 }: MetaSEOProps) {
   useEffect(() => {
     // Update Document Title
@@ -64,7 +66,18 @@ export default function MetaSEO({
       }
       ogTypeTag.setAttribute("content", ogType);
     }
-  }, [title, description, ogTitle, ogDescription, ogType]);
+
+    // Update OpenGraph Image
+    if (ogImage) {
+      let ogImageTag = document.querySelector('meta[property="og:image"]');
+      if (!ogImageTag) {
+        ogImageTag = document.createElement("meta");
+        ogImageTag.setAttribute("property", "og:image");
+        document.head.appendChild(ogImageTag);
+      }
+      ogImageTag.setAttribute("content", ogImage);
+    }
+  }, [title, description, ogTitle, ogDescription, ogType, ogImage]);
 
   return null;
 }

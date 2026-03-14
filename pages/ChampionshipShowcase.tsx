@@ -227,6 +227,7 @@ export default function ChampionshipShowcase() {
             <MetaSEO 
                 title={championship.name} 
                 description={`Classificação Geral do ${championship.name} - Temporada ${championship.year}. Acompanhe os resultados oficiais na Amigo Racing.`}
+                ogImage={championship.imageUrl || undefined}
             />
             {/* Public Header */}
             <header className="border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 sticky top-0 z-50">
