@@ -2,8 +2,8 @@ import { getDb } from "./api/_server/db.js";
 import { events, championships } from "./api/_server/schema.js";
 
 export async function generateSitemap(baseUrl: string): Promise<string> {
-  // Force HTTPS as requested by the user
-  const secureBaseUrl = baseUrl.replace(/^http:\/\//, "https://");
+  // Use official domain as requested by the user
+  const secureBaseUrl = "https://www.amigoracing.com.br";
   
   const db = await getDb();
   if (!db) throw new Error("Database not initialized");
