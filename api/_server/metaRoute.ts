@@ -49,12 +49,14 @@ export function setupMetaRoutes(app: Express) {
         }
 
         // Ensure absolute URL and handle base64
+        const PUBLIC_URL = process.env.VITE_SITE_URL || process.env.SITE_URL || "https://www.amigoracing.com.br";
+        
         if (image && image.startsWith("data:")) {
           // Social scrapers don't support base64, fallback to logo
-          image = "https://www.amigoracing.com.br/logo-amigo-racing.png";
+          image = `${PUBLIC_URL}/logo-amigo-racing.png`;
         } else if (image && !image.startsWith("http")) {
           const cleanImage = image.startsWith("/") ? image.slice(1) : image;
-          image = `${SITE_URL}/${cleanImage}`;
+          image = `${PUBLIC_URL}/${cleanImage}`;
         }
         
         // Detect MIME Type
