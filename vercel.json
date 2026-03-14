@@ -19,14 +19,16 @@
         },
         {
             "source": "/events/:id(\\d+)",
+            "has": [{ "type": "header", "key": "user-agent", "value": ".*(WhatsApp|Facebot|Twitterbot|Slackbot|LinkedInBot|TelegramBot|Discordbot).*" }],
             "destination": "/api/index.ts"
         },
         {
             "source": "/championship/:id(\\d+)",
+            "has": [{ "type": "header", "key": "user-agent", "value": ".*(WhatsApp|Facebot|Twitterbot|Slackbot|LinkedInBot|TelegramBot|Discordbot).*" }],
             "destination": "/api/index.ts"
         },
         {
-            "source": "/((?!api/|assets/|favicon|.*\\.(?:css|js|png|jpg|svg|ico|json)).*)",
+            "source": "/((?!api/|.*\\.).*)",
             "destination": "/index.html"
         }
     ]

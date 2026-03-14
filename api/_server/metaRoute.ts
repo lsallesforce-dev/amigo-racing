@@ -15,15 +15,9 @@ export function setupMetaRoutes(app: Express) {
       const isEvent = req.path.startsWith("/events");
       const isChamp = req.path.startsWith("/championship");
 
-      // For real users, we don't want to serve the potentially brokenSSR-lite HTML
-      // We want them to get the real Vite-built index.html
+      // Safety check: If a real user somehow hits this API route, redirect to the real page
+      // but ideally Vercel's has: header check prevents this from happening.
       if (!isBot && (isEvent || isChamp)) {
-         // Fallback to static serving. Vercel will handle index.html if we just don't handle it,
-         // but since we are in a route, we should probably just send the file.
-         // However, on Vercel, the built files are not always at process.cwd()
-         // Best fallback for users is to let the request continue or send index.html
-         // BUT wait, if we are here, Vercel ALREADY matched this route.
-         // Let's try to send the file from the public/dist directory if we can find it.
          return res.sendFile(path.join(process.cwd(), "index.html"));
       }
       
