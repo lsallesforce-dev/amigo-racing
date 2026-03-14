@@ -23,7 +23,7 @@ export function setupMetaRoutes(app: Express) {
       
       let title = "Amigo Racing - Plataforma de Eventos Off-Road e Rally";
       let description = "Plataforma completa para organizar e participar de eventos de Rally e Off-Road no Brasil. Gerencie inscrições, categorias, ordem de largada e documentos em um único lugar.";
-      let image = "https://www.amigoracing.com.br/logo.png"; // Default logo URL
+      let image = "https://www.amigoracing.com.br/logo-amigo-racing.png"; // Default logo URL
       let imageType = "image/png";
       const SITE_URL = "https://www.amigoracing.com.br";
 
@@ -51,7 +51,7 @@ export function setupMetaRoutes(app: Express) {
         // Ensure absolute URL and handle base64
         if (image && image.startsWith("data:")) {
           // Social scrapers don't support base64, fallback to logo
-          image = "https://www.amigoracing.com.br/logo.png";
+          image = "https://www.amigoracing.com.br/logo-amigo-racing.png";
         } else if (image && !image.startsWith("http")) {
           const cleanImage = image.startsWith("/") ? image.slice(1) : image;
           image = `${SITE_URL}/${cleanImage}`;
@@ -118,6 +118,7 @@ export function setupMetaRoutes(app: Express) {
                         `  <meta property="og:image:width" content="1200" />\n` +
                         `  <meta property="og:image:height" content="630" />\n` +
                         `  <meta property="og:url" content="${currentUrl}" />\n` +
+                        `  <meta property="og:site_name" content="Amigo Racing" />\n` +
                         `  <meta name="twitter:card" content="summary_large_image" />\n` +
                         `  <meta name="twitter:image" content="${image}" />\n`;
       
@@ -125,6 +126,7 @@ export function setupMetaRoutes(app: Express) {
       html = html.replace(/<meta property="og:image:width" content=".*?" \/>\n\s*/g, "");
       html = html.replace(/<meta property="og:image:height" content=".*?" \/>\n\s*/g, "");
       html = html.replace(/<meta property="og:url" content=".*?" \/>\n\s*/g, "");
+      html = html.replace(/<meta property="og:site_name" content=".*?" \/>\n\s*/g, "");
       
       html = html.replace("</head>", `${extraMeta}</head>`);
 
