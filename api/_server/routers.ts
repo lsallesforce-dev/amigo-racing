@@ -235,13 +235,14 @@ const storeRouter = router({
     }),
 
   getAll: organizerProcedure
-    .query(async ({ ctx }) => {
+    .input(z.object({ eventId: z.number().optional() }).optional())
+    .query(async ({ ctx, input }) => {
       const user = ctx.user as any;
       const context = await db.getOrganizerContext(user);
       if (context.type === 'MEMBER' && !context.permissions.includes('store')) {
         throw new TRPCError({ code: 'FORBIDDEN', message: 'Sem permissão para loja' });
       }
-      return await db.getProductsByUserId(context.principalUserId);
+      return await db.getProductsByUserId(context.principalUserId, input?.eventId);
     }),
 
   getAvailable: publicProcedure
@@ -348,7 +349,8 @@ const storeRouter = router({
     }),
 
   getOrganizerOrders: organizerProcedure
-    .query(async ({ ctx }) => {
+    .input(z.object({ eventId: z.number().optional() }).optional())
+    .query(async ({ ctx, input }) => {
       const user = ctx.user as any;
       const context = await db.getOrganizerContext(user);
       if (context.type === 'MEMBER' && !context.permissions.includes('store')) {
@@ -357,13 +359,18 @@ const storeRouter = router({
       const dbInstance = await getDb();
       if (!dbInstance) throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Database connection failed' });
 
+      let baseCondition = eq(products.userId, context.principalUserId);
+      if (input?.eventId) {
+        baseCondition = and(baseCondition, eq(productOrders.eventId, input.eventId)) as any;
+      }
+
       const orders = await dbInstance.select({
         order: productOrders,
         product: products
       })
         .from(productOrders)
         .innerJoin(products, eq(productOrders.productId, products.id))
-        .where(eq(products.userId, context.principalUserId))
+        .where(baseCondition)
         .orderBy(sql`${productOrders.createdAt} DESC`);
 
       return orders;

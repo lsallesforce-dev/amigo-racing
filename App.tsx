@@ -36,6 +36,7 @@ function Router() {
       <Route path="/organizer" component={OrganizerPanel} />
       <Route path="/organizer/finance" component={OrganizerFinance} />
       <Route path="/organizer/store" component={OrganizerStore} />
+      <Route path="/organizer/events/:id/store" component={OrganizerStore} />
       <Route path="/organizer/championships" component={Championships} />
       <Route path="/organizer/championships/:id" component={ChampionshipDetails} />
       <Route path="/registrations" component={Registrations} />

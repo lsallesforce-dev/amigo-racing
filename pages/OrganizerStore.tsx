@@ -8,7 +8,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { getLoginUrl } from "@/api/_server/const";
 import { trpc } from "@/lib/trpc";
 import { ShoppingBag, Plus, Loader2, ArrowLeft, Image as ImageIcon, Trash2, Pencil, Trophy } from "lucide-react";
-import { Link } from "wouter";
+import { Link, useParams } from "wouter";
 import { useState } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -29,6 +29,10 @@ const formatCurrency = (value: number) => {
 export default function OrganizerStore() {
     const { user, isAuthenticated, loading, logout } = useAuth();
 
+    const params = useParams() as { id?: string };
+    const eventIdParam = params.id;
+    const eventId = eventIdParam ? parseInt(eventIdParam, 10) : undefined;
+
     const [productDialogOpen, setProductDialogOpen] = useState(false);
     const [editingProduct, setEditingProduct] = useState<any>(null);
 
@@ -43,11 +47,11 @@ export default function OrganizerStore() {
 
     const utils = trpc.useUtils();
 
-    const { data: products, isLoading: productsLoading } = trpc.store.getAll.useQuery(undefined, {
+    const { data: products, isLoading: productsLoading } = trpc.store.getAll.useQuery({ eventId }, {
         enabled: isAuthenticated && (user?.role === 'organizer' || user?.role === 'admin')
     });
 
-    const { data: orders, isLoading: ordersLoading } = trpc.store.getOrganizerOrders.useQuery(undefined, {
+    const { data: orders, isLoading: ordersLoading } = trpc.store.getOrganizerOrders.useQuery({ eventId }, {
         enabled: isAuthenticated && (user?.role === 'organizer' || user?.role === 'admin')
     });
 
@@ -137,6 +141,7 @@ export default function OrganizerStore() {
                 stock: stockNum,
                 availableSizes: productForm.availableSizes || undefined,
                 imageUrl: productForm.imageUrl || undefined,
+                eventId: eventId,
             });
         } else {
             createProduct.mutate({
@@ -146,6 +151,7 @@ export default function OrganizerStore() {
                 stock: stockNum,
                 availableSizes: productForm.availableSizes || undefined,
                 imageUrl: productForm.imageUrl || undefined,
+                eventId: eventId,
             });
         }
     };
@@ -192,6 +198,15 @@ export default function OrganizerStore() {
             <Navbar />
 
             <div className="container py-8">
+                <div className="mb-6">
+                    <Link href="/organizer">
+                        <Button variant="ghost" size="sm" className="gap-2">
+                            <ArrowLeft className="h-4 w-4" />
+                            Voltar ao Painel
+                        </Button>
+                    </Link>
+                </div>
+
                 <div className="mb-8 flex flex-col md:flex-row md:items-center justify-between gap-6 border-b pb-6">
                     <div>
                         <h1 className="text-2xl md:text-3xl font-bold mb-1 flex items-center gap-3">

@@ -1754,12 +1754,18 @@ export async function createProduct(product: InsertProduct) {
   return result[0];
 }
 
-export async function getProductsByUserId(userId: number) {
+export async function getProductsByUserId(userId: number, eventId?: number) {
   const db = await getDb();
   if (!db) return [];
 
+  let conditions = eq(products.userId, userId);
+  
+  if (eventId) {
+    conditions = and(conditions, eq(products.eventId, eventId)) as any;
+  }
+
   return await db.select().from(products)
-    .where(eq(products.userId, userId))
+    .where(conditions)
     .orderBy(desc(products.createdAt));
 }
 

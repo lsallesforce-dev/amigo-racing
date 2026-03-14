@@ -1469,6 +1469,14 @@ export default function OrganizerPanel() {
                            Ordem de Largada
                          </Button>
                        </Link>
+                       {canStore && (
+                         <Link href={`/organizer/events/${event.id}/store`} className="w-full md:w-auto">
+                           <Button size="sm" variant="outline" className="w-full bg-primary/10 hover:bg-primary/20 text-primary border-primary/20">
+                             <ShoppingBag className="h-4 w-4 mr-2" />
+                             Loja do EventO
+                           </Button>
+                         </Link>
+                       )}
                        <Link href={`/organizer/events/${event.id}/secretariat`} className="w-full md:w-auto">
                          <Button size="sm" variant="outline" className="w-full bg-primary/10 hover:bg-primary/20 text-primary border-primary/20">
                            <ClipboardCheck className="h-4 w-4 mr-2" />
