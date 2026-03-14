@@ -30,6 +30,7 @@ export function setupMetaRoutes(app: Express) {
       let title = "Amigo Racing - Plataforma de Eventos Off-Road e Rally";
       let description = "Plataforma completa para organizar e participar de eventos de Rally e Off-Road no Brasil. Gerencie inscrições, categorias, ordem de largada e documentos em um único lugar.";
       let image = "https://www.amigoracing.com.br/logo.png"; // Default logo URL
+      let imageType = "image/png";
 
       try {
         const db = await getDb();
@@ -53,10 +54,17 @@ export function setupMetaRoutes(app: Express) {
         }
 
         // Ensure absolute URL
+        const SITE_URL = "https://www.amigoracing.com.br";
         if (image && !image.startsWith("http")) {
-          // Remove leading slash if any
           const cleanImage = image.startsWith("/") ? image.slice(1) : image;
-          image = `https://www.amigoracing.com.br/${cleanImage}`;
+          image = `${SITE_URL}/${cleanImage}`;
+        }
+        
+        // Detect MIME Type
+        if (image.toLowerCase().endsWith(".jpg") || image.toLowerCase().endsWith(".jpeg")) {
+            imageType = "image/jpeg";
+        } else if (image.toLowerCase().endsWith(".webp")) {
+            imageType = "image/webp";
         }
       } catch (dbErr) {
         console.error("[Meta] DB Error:", dbErr);
@@ -105,11 +113,18 @@ export function setupMetaRoutes(app: Express) {
           html = html.replace("</head>", `  <meta property="og:image" content="${image}" />\n</head>`);
       }
 
-      // 6. Image Dimensions (WhatsApp likes these)
-      const dimensions = `  <meta property="og:image:width" content="1200" />\n  <meta property="og:image:height" content="630" />\n`;
-      if (!html.includes('property="og:image:width"')) {
-          html = html.replace("</head>", `${dimensions}</head>`);
-      }
+      // 6. Additional Image Metadata (WhatsApp/Twitter)
+      const extraMeta = `  <meta property="og:image:type" content="${imageType}" />\n` +
+                        `  <meta property="og:image:width" content="1200" />\n` +
+                        `  <meta property="og:image:height" content="630" />\n` +
+                        `  <meta name="twitter:card" content="summary_large_image" />\n` +
+                        `  <meta name="twitter:image" content="${image}" />\n`;
+      
+      // Clean up existing dimensions if any to avoid duplicates
+      html = html.replace(/<meta property="og:image:width" content=".*?" \/>\n\s*/g, "");
+      html = html.replace(/<meta property="og:image:height" content=".*?" \/>\n\s*/g, "");
+      
+      html = html.replace("</head>", `${extraMeta}</head>`);
 
       // Force content type to HTML
       res.header("Content-Type", "text/html");

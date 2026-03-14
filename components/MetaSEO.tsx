@@ -96,6 +96,50 @@ export default function MetaSEO({
       }
       ogHeightTag.setAttribute("content", "630");
     }
+
+    // Update OpenGraph Image Type
+    if (ogImage) {
+      let ogTypeImgTag = document.querySelector('meta[property="og:image:type"]');
+      if (!ogTypeImgTag) {
+        ogTypeImgTag = document.createElement("meta");
+        ogTypeImgTag.setAttribute("property", "og:image:type");
+        document.head.appendChild(ogTypeImgTag);
+      }
+      
+      let type = "image/png";
+      if (ogImage.toLowerCase().endsWith(".jpg") || ogImage.toLowerCase().endsWith(".jpeg")) {
+        type = "image/jpeg";
+      } else if (ogImage.toLowerCase().endsWith(".webp")) {
+        type = "image/webp";
+      }
+      ogTypeImgTag.setAttribute("content", type);
+    }
+
+    // Update Twitter Tags
+    if (ogImage) {
+      let twitterCardTag = document.querySelector('meta[name="twitter:card"]');
+      if (!twitterCardTag) {
+        twitterCardTag = document.createElement("meta");
+        twitterCardTag.setAttribute("name", "twitter:card");
+        document.head.appendChild(twitterCardTag);
+      }
+      twitterCardTag.setAttribute("content", "summary_large_image");
+
+      let twitterImageTag = document.querySelector('meta[name="twitter:image"]');
+      if (!twitterImageTag) {
+        twitterImageTag = document.createElement("meta");
+        twitterImageTag.setAttribute("name", "twitter:image");
+        document.head.appendChild(twitterImageTag);
+      }
+      
+      // Ensure absolute
+      let absoluteImage = ogImage;
+      if (!absoluteImage.startsWith("http")) {
+          const clean = absoluteImage.startsWith("/") ? absoluteImage.slice(1) : absoluteImage;
+          absoluteImage = `https://www.amigoracing.com.br/${clean}`;
+      }
+      twitterImageTag.setAttribute("content", absoluteImage);
+    }
   }, [title, description, ogTitle, ogDescription, ogType, ogImage]);
 
   return null;
