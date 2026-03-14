@@ -8,9 +8,24 @@ import { eq } from "drizzle-orm";
 export function setupMetaRoutes(app: Express) {
   const handler = async (req: any, res: any) => {
     try {
+      const userAgent = req.headers["user-agent"] || "";
+      const isBot = /WhatsApp|Facebot|Twitterbot|Slackbot|LinkedInBot|TelegramBot|Discordbot/i.test(userAgent);
+      
       const { id } = req.params;
       const isEvent = req.path.startsWith("/events");
       const isChamp = req.path.startsWith("/championship");
+
+      // For real users, we don't want to serve the potentially brokenSSR-lite HTML
+      // We want them to get the real Vite-built index.html
+      if (!isBot && (isEvent || isChamp)) {
+         // Fallback to static serving. Vercel will handle index.html if we just don't handle it,
+         // but since we are in a route, we should probably just send the file.
+         // However, on Vercel, the built files are not always at process.cwd()
+         // Best fallback for users is to let the request continue or send index.html
+         // BUT wait, if we are here, Vercel ALREADY matched this route.
+         // Let's try to send the file from the public/dist directory if we can find it.
+         return res.sendFile(path.join(process.cwd(), "index.html"));
+      }
       
       let title = "Amigo Racing - Plataforma de Eventos Off-Road e Rally";
       let description = "Plataforma completa para organizar e participar de eventos de Rally e Off-Road no Brasil. Gerencie inscrições, categorias, ordem de largada e documentos em um único lugar.";
@@ -35,6 +50,13 @@ export function setupMetaRoutes(app: Express) {
                 if (champ.imageUrl) image = champ.imageUrl;
               }
             }
+        }
+
+        // Ensure absolute URL
+        if (image && !image.startsWith("http")) {
+          // Remove leading slash if any
+          const cleanImage = image.startsWith("/") ? image.slice(1) : image;
+          image = `https://www.amigoracing.com.br/${cleanImage}`;
         }
       } catch (dbErr) {
         console.error("[Meta] DB Error:", dbErr);
@@ -77,11 +99,16 @@ export function setupMetaRoutes(app: Express) {
           html = html.replace("</head>", `  <meta property="og:description" content="${description}" />\n</head>`);
       }
 
-      // 5. Open Graph Image
       if (html.includes('property="og:image"')) {
           html = html.replace(/<meta property="og:image" content=".*?" \/>/, `<meta property="og:image" content="${image}" />`);
       } else {
           html = html.replace("</head>", `  <meta property="og:image" content="${image}" />\n</head>`);
+      }
+
+      // 6. Image Dimensions (WhatsApp likes these)
+      const dimensions = `  <meta property="og:image:width" content="1200" />\n  <meta property="og:image:height" content="630" />\n`;
+      if (!html.includes('property="og:image:width"')) {
+          html = html.replace("</head>", `${dimensions}</head>`);
       }
 
       // Force content type to HTML

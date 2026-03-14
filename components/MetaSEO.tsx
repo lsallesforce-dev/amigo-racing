@@ -77,6 +77,25 @@ export default function MetaSEO({
       }
       ogImageTag.setAttribute("content", ogImage);
     }
+
+    // Update OpenGraph Image Dimensions
+    if (ogImage) {
+      let ogWidthTag = document.querySelector('meta[property="og:image:width"]');
+      if (!ogWidthTag) {
+        ogWidthTag = document.createElement("meta");
+        ogWidthTag.setAttribute("property", "og:image:width");
+        document.head.appendChild(ogWidthTag);
+      }
+      ogWidthTag.setAttribute("content", "1200");
+
+      let ogHeightTag = document.querySelector('meta[property="og:image:height"]');
+      if (!ogHeightTag) {
+        ogHeightTag = document.createElement("meta");
+        ogHeightTag.setAttribute("property", "og:image:height");
+        document.head.appendChild(ogHeightTag);
+      }
+      ogHeightTag.setAttribute("content", "630");
+    }
   }, [title, description, ogTitle, ogDescription, ogType, ogImage]);
 
   return null;

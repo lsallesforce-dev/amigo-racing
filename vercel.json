@@ -18,19 +18,15 @@
             "destination": "/api/index.ts"
         },
         {
-            "source": "/",
+            "source": "/events/:id(\\d+)",
             "destination": "/api/index.ts"
         },
         {
-            "source": "/events/:id",
+            "source": "/championship/:id(\\d+)",
             "destination": "/api/index.ts"
         },
         {
-            "source": "/championship/:id",
-            "destination": "/api/index.ts"
-        },
-        {
-            "source": "/((?!api/).*)",
+            "source": "/((?!api/|assets/|favicon|.*\\.(?:css|js|png|jpg|svg|ico|json)).*)",
             "destination": "/index.html"
         }
     ]
