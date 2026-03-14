@@ -16,6 +16,7 @@ export const ENV = {
 
   // URLs de Servidor
   oAuthServerUrl: process.env.OAUTH_SERVER_URL || "http://localhost:3000",
+  siteUrl: (process.env.SITE_URL || process.env.OAUTH_SERVER_URL || "https://amigoracing.com.br").replace(/\/+$/, ""),
   ownerOpenId: process.env.OWNER_OPEN_ID || "",
 
   // Verificação de ambiente
@@ -57,5 +58,6 @@ console.log("[Env] Status Check:", {
   allowedOrigins: ENV.allowedOrigins,
   supabaseUrl: ENV.supabaseUrl,
   supabaseKey: mask(ENV.supabaseServiceKey),
-  supabaseAnonKey: mask(process.env.SUPABASE_ANON_KEY)
+  supabaseAnonKey: mask(process.env.SUPABASE_ANON_KEY),
+  siteUrl: ENV.siteUrl
 });

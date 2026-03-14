@@ -2,6 +2,9 @@ import { getDb } from "./api/_server/db.js";
 import { events, championships } from "./api/_server/schema.js";
 
 export async function generateSitemap(baseUrl: string): Promise<string> {
+  // Force HTTPS as requested by the user
+  const secureBaseUrl = baseUrl.replace(/^http:\/\//, "https://");
+  
   const db = await getDb();
   if (!db) throw new Error("Database not initialized");
   const allEvents = await db.select().from(events);
@@ -9,13 +12,13 @@ export async function generateSitemap(baseUrl: string): Promise<string> {
 
   const urls = [
     {
-      loc: `${baseUrl}/`,
+      loc: `${secureBaseUrl}/`,
       lastmod: new Date().toISOString().split("T")[0],
       changefreq: "daily",
       priority: "1.0",
     },
     {
-      loc: `${baseUrl}/login`,
+      loc: `${secureBaseUrl}/login`,
       lastmod: new Date().toISOString().split("T")[0],
       changefreq: "monthly",
       priority: "0.5",
@@ -25,7 +28,7 @@ export async function generateSitemap(baseUrl: string): Promise<string> {
   // Add event pages
   for (const event of allEvents) {
     urls.push({
-      loc: `${baseUrl}/events/${event.id}`,
+      loc: `${secureBaseUrl}/events/${event.id}`,
       lastmod: event.updatedAt
         ? new Date(event.updatedAt).toISOString().split("T")[0]
         : new Date().toISOString().split("T")[0],
@@ -37,7 +40,7 @@ export async function generateSitemap(baseUrl: string): Promise<string> {
   // Add championship pages
   for (const champ of allChampionships) {
     urls.push({
-      loc: `${baseUrl}/championship/${champ.id}`,
+      loc: `${secureBaseUrl}/championship/${champ.id}`,
       lastmod: champ.updatedAt
         ? new Date(champ.updatedAt).toISOString().split("T")[0]
         : new Date().toISOString().split("T")[0],

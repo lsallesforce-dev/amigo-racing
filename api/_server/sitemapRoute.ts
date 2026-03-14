@@ -1,12 +1,18 @@
-﻿import { Express } from "express";
+import { Express } from "express";
 import { generateSitemap } from "../../sitemap.js";
+import { ENV } from "./env.js";
 
 export function setupSitemapRoute(app: Express) {
   app.get("/sitemap.xml", async (req, res) => {
     try {
-      const protocol = req.protocol || "https";
-      const host = req.get("host") || "localhost:3000";
-      const baseUrl = `${protocol}://${host}`;
+      let baseUrl = ENV.siteUrl;
+      
+      // Fallback for local development if siteUrl is not a full URL
+      if (!baseUrl.startsWith('http')) {
+        const protocol = "https"; // Force HTTPS
+        const host = req.get("host") || "localhost:3000";
+        baseUrl = `${protocol}://${host}`;
+      }
 
       const sitemap = await generateSitemap(baseUrl);
 
@@ -20,9 +26,11 @@ export function setupSitemapRoute(app: Express) {
   });
 
   app.get("/robots.txt", (req, res) => {
-    const protocol = req.protocol || "https";
-    const host = req.get("host") || "localhost:3000";
-    const baseUrl = `${protocol}://${host}`;
+    let baseUrl = ENV.siteUrl;
+    if (!baseUrl.startsWith('http')) {
+      const host = req.get("host") || "localhost:3000";
+      baseUrl = `https://${host}`;
+    }
 
     const robots = `User-agent: *
 Allow: /
