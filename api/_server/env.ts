@@ -35,6 +35,7 @@ export const ENV = {
   // Supabase Storage
   supabaseUrl: process.env.SUPABASE_URL || "https://rjcdkasnipxcdrlmkskm.supabase.co",
   supabaseServiceKey: process.env.SUPABASE_SERVICE_ROLE_KEY || "",
+  supabaseAnonKey: process.env.SUPABASE_ANON_KEY || "",
 
   // CORS (Segurança em nuvem)
   allowedOrigins: process.env.ALLOWED_ORIGINS
@@ -55,5 +56,6 @@ console.log("[Env] Status Check:", {
   oAuthUrl: ENV.oAuthServerUrl,
   allowedOrigins: ENV.allowedOrigins,
   supabaseUrl: ENV.supabaseUrl,
-  supabaseKey: mask(ENV.supabaseServiceKey)
+  supabaseKey: mask(ENV.supabaseServiceKey),
+  supabaseAnonKey: mask(process.env.SUPABASE_ANON_KEY)
 });

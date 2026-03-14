@@ -48,7 +48,13 @@ const storageRouter = router({
       const relativePath = `uploads/${Date.now()}-${safeName}`;
       const config = await storage.createSignedUploadUrl(relativePath);
       const publicUrl = await storage.storageGet(relativePath);
-      return { ...config, path: relativePath, publicUrl };
+      return { 
+        ...config, 
+        path: relativePath, 
+        publicUrl,
+        supabaseUrl: ENV.supabaseUrl,
+        anonKey: ENV.supabaseAnonKey
+      };
     }),
 });
 

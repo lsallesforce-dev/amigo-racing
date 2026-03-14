@@ -44,7 +44,7 @@ export function EventDocumentsManager({ eventId, documents: docsProp, terms: ter
         setIsUploading(true);
         try {
             // 1. Get Signed URL from Backend (Bypasses Vercel Size Limit)
-            const { url, path: remotePath, publicUrl, token } = await getSignedUrl.mutateAsync({ 
+            const { url, path: remotePath, publicUrl, token, anonKey } = await getSignedUrl.mutateAsync({ 
                 filename: file.name 
             });
 
@@ -54,7 +54,8 @@ export function EventDocumentsManager({ eventId, documents: docsProp, terms: ter
                 body: file,
                 headers: {
                     "Content-Type": file.type || "application/octet-stream",
-                    "Authorization": `Bearer ${token}`
+                    "Authorization": `Bearer ${anonKey || token}`,
+                    "apikey": anonKey || ""
                 }
             });
 
