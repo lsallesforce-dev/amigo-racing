@@ -9,7 +9,7 @@ export function setupMetaRoutes(app: Express) {
   const handler = async (req: any, res: any) => {
     try {
       const userAgent = req.headers["user-agent"] || "";
-      const isBot = /WhatsApp|Facebot|Twitterbot|Slackbot|LinkedInBot|TelegramBot|Discordbot/i.test(userAgent);
+      const isBot = /WhatsApp|Facebot|facebookexternalhit|Twitterbot|Slackbot|LinkedInBot|TelegramBot|Discordbot/i.test(userAgent);
       
       const { id } = req.params;
       const isEvent = req.path.startsWith("/events");
@@ -25,6 +25,7 @@ export function setupMetaRoutes(app: Express) {
       let description = "Plataforma completa para organizar e participar de eventos de Rally e Off-Road no Brasil. Gerencie inscrições, categorias, ordem de largada e documentos em um único lugar.";
       let image = "https://www.amigoracing.com.br/logo.png"; // Default logo URL
       let imageType = "image/png";
+      const SITE_URL = "https://www.amigoracing.com.br";
 
       try {
         const db = await getDb();
@@ -48,7 +49,6 @@ export function setupMetaRoutes(app: Express) {
         }
 
         // Ensure absolute URL
-        const SITE_URL = "https://www.amigoracing.com.br";
         if (image && !image.startsWith("http")) {
           const cleanImage = image.startsWith("/") ? image.slice(1) : image;
           image = `${SITE_URL}/${cleanImage}`;
@@ -75,6 +75,9 @@ export function setupMetaRoutes(app: Express) {
           // Fallback if index.html is not found (unlikely in prod)
           return res.status(404).send("App template not found");
       }
+
+      // 7. Canonical URL
+      const currentUrl = `${SITE_URL}${req.path}`;
 
       // Inject dynamic tags
       // 1. Title
@@ -111,12 +114,14 @@ export function setupMetaRoutes(app: Express) {
       const extraMeta = `  <meta property="og:image:type" content="${imageType}" />\n` +
                         `  <meta property="og:image:width" content="1200" />\n` +
                         `  <meta property="og:image:height" content="630" />\n` +
+                        `  <meta property="og:url" content="${currentUrl}" />\n` +
                         `  <meta name="twitter:card" content="summary_large_image" />\n` +
                         `  <meta name="twitter:image" content="${image}" />\n`;
       
-      // Clean up existing dimensions if any to avoid duplicates
+      // Clean up existing metadata if any to avoid duplicates
       html = html.replace(/<meta property="og:image:width" content=".*?" \/>\n\s*/g, "");
       html = html.replace(/<meta property="og:image:height" content=".*?" \/>\n\s*/g, "");
+      html = html.replace(/<meta property="og:url" content=".*?" \/>\n\s*/g, "");
       
       html = html.replace("</head>", `${extraMeta}</head>`);
 
