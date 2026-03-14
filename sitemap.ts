@@ -1,13 +1,11 @@
-// import { getDb } from "./api/db.js";
-// import { events } from "./api/drizzle/schema.js";
+import { getDb } from "./api/_server/db.js";
+import { events, championships } from "./api/_server/schema.js";
 
 export async function generateSitemap(baseUrl: string): Promise<string> {
-  // Simplificação radical para garantir build na Vercel
-  /*
   const db = await getDb();
   if (!db) throw new Error("Database not initialized");
   const allEvents = await db.select().from(events);
-  */
+  const allChampionships = await db.select().from(championships);
 
   const urls = [
     {
@@ -24,11 +22,10 @@ export async function generateSitemap(baseUrl: string): Promise<string> {
     },
   ];
 
-  /*
   // Add event pages
   for (const event of allEvents) {
     urls.push({
-      loc: `${baseUrl}/event/${event.id}`,
+      loc: `${baseUrl}/events/${event.id}`,
       lastmod: event.updatedAt
         ? new Date(event.updatedAt).toISOString().split("T")[0]
         : new Date().toISOString().split("T")[0],
@@ -36,7 +33,19 @@ export async function generateSitemap(baseUrl: string): Promise<string> {
       priority: "0.8",
     });
   }
-  */
+
+  // Add championship pages
+  for (const champ of allChampionships) {
+    urls.push({
+      loc: `${baseUrl}/championship/${champ.id}`,
+      lastmod: champ.updatedAt
+        ? new Date(champ.updatedAt).toISOString().split("T")[0]
+        : new Date().toISOString().split("T")[0],
+      changefreq: "weekly",
+      priority: "0.7",
+    });
+  }
+
 
   // Generate XML
   let xml = '<?xml version="1.0" encoding="UTF-8"?>\n';

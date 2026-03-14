@@ -20,6 +20,7 @@ import { EventGallery } from "@/components/EventGallery";
 import { EventSponsors } from "@/components/EventSponsors";
 import { PaymentModal } from "@/components/PaymentModal";
 import Navbar from "@/components/Navbar";
+import MetaSEO from "@/components/MetaSEO";
 
 const BRAZILIAN_STATES = [
   "AC", "AL", "AP", "AM", "BA", "CE", "DF", "ES", "GO", "MA",
@@ -348,6 +349,12 @@ export default function EventDetails() {
 
   return (
     <div className="min-h-screen bg-background">
+      <MetaSEO 
+        title={event.name} 
+        description={event.description || `Participe do ${event.name} em ${event.city}, ${event.state}. Inscrições abertas na Amigo Racing!`}
+        ogTitle={event.name}
+        ogDescription={event.description || `Participe do ${event.name} em ${event.city}, ${event.state}.`}
+      />
       <Navbar />
 
       <div className="container py-8">

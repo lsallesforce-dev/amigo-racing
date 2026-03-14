@@ -13,6 +13,7 @@ import { ptBR } from "date-fns/locale";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import { PerformanceChart } from "@/components/PerformanceChart";
+import MetaSEO from "@/components/MetaSEO";
 
 export default function ChampionshipShowcase() {
     const [, params] = useRoute("/championship/:id");
@@ -223,6 +224,10 @@ export default function ChampionshipShowcase() {
 
     return (
         <div className="min-h-screen bg-background flex flex-col">
+            <MetaSEO 
+                title={championship.name} 
+                description={`Classificação Geral do ${championship.name} - Temporada ${championship.year}. Acompanhe os resultados oficiais na Amigo Racing.`}
+            />
             {/* Public Header */}
             <header className="border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 sticky top-0 z-50">
                 <div className="container flex h-16 items-center justify-between">

@@ -12,6 +12,7 @@ import { ImageLightbox } from "@/components/ImageLightbox";
 import Navbar from "@/components/Navbar";
 import { useState, useMemo } from "react";
 import { EventListItem } from "@/components/events/EventListItem";
+import MetaSEO from "@/components/MetaSEO";
 
 export default function Home() {
   const { user, isAuthenticated } = useAuth();
@@ -33,7 +34,12 @@ export default function Home() {
 
   return (
     <div className="min-h-screen bg-neutral-950 text-foreground selection:bg-primary/30">
+      <MetaSEO 
+        title="Home" 
+        description="Plataforma completa para organizar e participar de eventos de Rally e Off-Road no Brasil. Gerencie inscrições, categorias, ordem de largada e documentos."
+      />
       <Navbar />
+
 
       {/* Hero Section - Visual mais Premium e Dark */}
       <section className="relative py-24 px-4 overflow-hidden">
