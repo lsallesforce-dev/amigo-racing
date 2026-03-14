@@ -99,6 +99,7 @@ export function EventEditDialog({ open, onOpenChange, event, onSuccess }: EventE
     const [editingEvent, setEditingEvent] = useState<any>(null);
     const [isUploadingSponsors, setIsUploadingSponsors] = useState(false);
     const [isUploadingGallery, setIsUploadingGallery] = useState(false);
+    const [isUploadingImage, setIsUploadingImage] = useState(false);
 
     const utils = trpc.useUtils();
     const uploadImage = trpc.upload.image.useMutation();
@@ -371,17 +372,32 @@ export function EventEditDialog({ open, onOpenChange, event, onSuccess }: EventE
                                     const file = e.target.files?.[0];
                                     if (file) {
                                         try {
+                                            setIsUploadingImage(true);
                                             const compressedBase64 = await compressImage(file);
-                                            setEditingEvent({ ...editingEvent, imageUrl: compressedBase64 });
+                                            const { url } = await uploadImage.mutateAsync({
+                                                base64: compressedBase64,
+                                                fileName: `event_main_${file.name}`,
+                                                contentType: file.type
+                                            });
+                                            setEditingEvent({ ...editingEvent, imageUrl: url });
+                                            toast.success('Imagem enviada com sucesso!');
                                         } catch (error) {
                                             toast.error('Erro ao processar imagem');
+                                        } finally {
+                                            setIsUploadingImage(false);
                                         }
                                     }
                                 }}
                             />
-                            {editingEvent.imageUrl && (
+                            {isUploadingImage && (
+                                <div className="mt-2 flex items-center gap-2 text-sm text-muted-foreground">
+                                    <Loader2 className="h-4 w-4 animate-spin" />
+                                    Subindo imagem...
+                                </div>
+                            )}
+                            {editingEvent.imageUrl && !isUploadingImage && (
                                 <div className="mt-2 bg-gradient-to-br from-gray-900 to-gray-800 rounded">
-                                    <img src={encodeURI(editingEvent.imageUrl)} alt="Preview" className="w-full h-48 object-contain rounded" />
+                                    <img src={editingEvent.imageUrl} alt="Preview" className="w-full h-48 object-contain rounded" />
                                 </div>
                             )}
                         </div>
@@ -497,8 +513,8 @@ export function EventEditDialog({ open, onOpenChange, event, onSuccess }: EventE
                     <Button variant="outline" onClick={() => onOpenChange(false)}>
                         Cancelar
                     </Button>
-                    <Button onClick={handleUpdateEvent} disabled={updateEvent.isPending}>
-                        {updateEvent.isPending ? "Salvando..." : "Salvar Alterações"}
+                    <Button onClick={handleUpdateEvent} disabled={updateEvent.isPending || isUploadingImage || isUploadingSponsors || isUploadingGallery}>
+                        {updateEvent.isPending ? "Salvando..." : (isUploadingImage || isUploadingSponsors || isUploadingGallery) ? "Fazendo Upload..." : "Salvar Alterações"}
                     </Button>
                 </DialogFooter>
             </DialogContent>

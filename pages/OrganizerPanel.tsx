@@ -158,6 +158,8 @@ export default function OrganizerPanel() {
 
   const [isBankConfigured, setIsBankConfigured] = useState(false);
   const [isEditingBank, setIsEditingBank] = useState(false);
+  const [isUploadingImage, setIsUploadingImage] = useState(false);
+  const [isUploadingExternalImage, setIsUploadingExternalImage] = useState(false);
 
 
   const { data: championships, isLoading: championshipsLoading } = trpc.championships.getAllByOrganizer.useQuery(
@@ -167,6 +169,7 @@ export default function OrganizerPanel() {
 
 
   const utils = trpc.useUtils();
+  const uploadImage = trpc.upload.image.useMutation();
 
   // Carregar dados bancários existentes quando o usuário estiver autenticado
   useEffect(() => {
@@ -825,20 +828,44 @@ export default function OrganizerPanel() {
                           const file = e.target.files?.[0];
                           if (file) {
                             try {
+                              setIsUploadingExternalImage(true);
                               const compressedBase64 = await compressImage(file);
-                              setExternalEventForm({ ...externalEventForm, imageUrl: compressedBase64 });
+                              const { url } = await uploadImage.mutateAsync({
+                                base64: compressedBase64,
+                                fileName: `event_external_${file.name}`,
+                                contentType: file.type
+                              });
+                              setExternalEventForm({ ...externalEventForm, imageUrl: url });
+                              toast.success('Imagem enviada com sucesso!');
                             } catch (error) {
                               toast.error('Erro ao processar imagem');
+                            } finally {
+                              setIsUploadingExternalImage(false);
                             }
                           }
                         }}
                       />
+                      {isUploadingExternalImage && (
+                        <div className="mt-2 flex items-center gap-2 text-sm text-muted-foreground">
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                          Subindo imagem...
+                        </div>
+                      )}
+                      {externalEventForm.imageUrl && !isUploadingExternalImage && (
+                        <div className="mt-2 h-32 rounded border bg-muted flex items-center justify-center overflow-hidden">
+                          <img 
+                            src={externalEventForm.imageUrl} 
+                            alt="Preview" 
+                            className="w-full h-full object-cover"
+                          />
+                        </div>
+                      )}
                       <p className="text-sm text-muted-foreground">Recomendado: 1200x600px (formato 2:1)</p>
                     </div>
                   </div>
                   <DialogFooter>
-                    <Button onClick={handleCreateExternalEvent} disabled={createExternalEvent.isPending}>
-                      {createExternalEvent.isPending ? "Adicionando..." : "Adicionar Evento Externo"}
+                    <Button onClick={handleCreateExternalEvent} disabled={createExternalEvent.isPending || isUploadingExternalImage}>
+                      {createExternalEvent.isPending ? "Adicionando..." : isUploadingExternalImage ? "Enviando Imagem..." : "Adicionar Evento Externo"}
                     </Button>
                   </DialogFooter>
                 </DialogContent>
@@ -971,14 +998,38 @@ export default function OrganizerPanel() {
                         const file = e.target.files?.[0];
                         if (file) {
                           try {
+                            setIsUploadingImage(true);
                             const compressedBase64 = await compressImage(file);
-                            setEventForm({ ...eventForm, imageUrl: compressedBase64 });
+                            const { url } = await uploadImage.mutateAsync({
+                              base64: compressedBase64,
+                              fileName: `event_main_${file.name}`,
+                              contentType: file.type
+                            });
+                            setEventForm({ ...eventForm, imageUrl: url });
+                            toast.success('Imagem enviada com sucesso!');
                           } catch (error) {
                             toast.error('Erro ao processar imagem');
+                          } finally {
+                            setIsUploadingImage(false);
                           }
                         }
                       }}
                     />
+                    {isUploadingImage && (
+                      <div className="mt-2 flex items-center gap-2 text-sm text-muted-foreground">
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                        Subindo imagem...
+                      </div>
+                    )}
+                    {eventForm.imageUrl && !isUploadingImage && (
+                      <div className="mt-2 h-32 rounded border bg-muted flex items-center justify-center overflow-hidden">
+                        <img 
+                          src={eventForm.imageUrl} 
+                          alt="Preview" 
+                          className="w-full h-full object-cover"
+                        />
+                      </div>
+                    )}
                     <p className="text-sm text-muted-foreground">Recomendado: 1200x600px (formato 2:1)</p>
                   </div>
                   <div className="flex items-center space-x-2">
@@ -1019,8 +1070,8 @@ export default function OrganizerPanel() {
                   </div>
                 </div>
                 <DialogFooter>
-                  <Button onClick={handleCreateEvent} disabled={createEvent.isPending}>
-                    {createEvent.isPending ? "Criando..." : "Criar Evento"}
+                  <Button onClick={handleCreateEvent} disabled={createEvent.isPending || isUploadingImage}>
+                    {createEvent.isPending ? "Criando..." : isUploadingImage ? "Enviando Imagem..." : "Criar Evento"}
                   </Button>
                 </DialogFooter>
               </DialogContent>

@@ -200,7 +200,6 @@ export default function Dashboard() {
       navigatorEmail: editForm.navigatorEmail || null,
       navigatorCity: editForm.navigatorCity || null,
       navigatorState: editForm.navigatorState || null,
-      navigatorShirtSize: editForm.navigatorShirtSize || null,
       vehicleBrand: editForm.vehicleBrand || null,
       vehicleModel: editForm.vehicleModel || null,
       vehicleColor: editForm.vehicleColor || null,
