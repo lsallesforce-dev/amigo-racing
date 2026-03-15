@@ -38,6 +38,9 @@ export const ENV = {
   supabaseServiceKey: process.env.SUPABASE_SERVICE_ROLE_KEY || "",
   supabaseAnonKey: process.env.SUPABASE_ANON_KEY || "",
 
+  // Gemini AI
+  geminiApiKey: process.env.GEMINI_API_KEY || "",
+
   // CORS (Segurança em nuvem)
   allowedOrigins: process.env.ALLOWED_ORIGINS
     ? process.env.ALLOWED_ORIGINS.split(',').map(o => o.trim())
