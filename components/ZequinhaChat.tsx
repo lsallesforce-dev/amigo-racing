@@ -74,13 +74,13 @@ export default function ZequinhaChat() {
           <CardContent className="flex-1 overflow-hidden p-0 bg-[radial-gradient(circle_at_50%_0%,rgba(234,88,12,0.05),transparent_70%)]">
             <div 
               ref={scrollRef}
-              className="h-full overflow-y-auto p-4 flex flex-col gap-4 scrollbar-thin scrollbar-thumb-primary/20"
+              className="h-full overflow-y-auto p-4 pb-20 flex flex-col gap-4 scrollbar-thin scrollbar-thumb-primary/20"
             >
               {messages.map((msg, i) => (
                 <div
                   key={i}
                   className={cn(
-                    "flex gap-3 max-w-[90%]",
+                    "flex gap-3 max-w-[90%] h-auto shrink-0",
                     msg.role === "user" ? "ml-auto flex-row-reverse" : "mr-auto"
                   )}
                 >
@@ -91,7 +91,7 @@ export default function ZequinhaChat() {
                     {msg.role === "user" ? <User className="h-4 w-4 text-white/50" /> : <Bot className="h-4 w-4 text-primary" />}
                   </div>
                   <div className={cn(
-                    "p-3 rounded-2xl text-sm leading-relaxed",
+                    "p-3 rounded-2xl text-sm leading-relaxed h-auto",
                     msg.role === "user" 
                       ? "bg-primary text-white font-medium rounded-tr-none shadow-lg shadow-primary/10" 
                       : "bg-white/5 border border-white/10 text-neutral-200 rounded-tl-none"
