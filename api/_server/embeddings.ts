@@ -6,13 +6,14 @@ import postgres from "postgres";
 const SQL = postgres(ENV.databaseUrl, { ssl: 'require' });
 
 async function generateEmbedding(text: string) {
-  const url = `https://generativelanguage.googleapis.com/v1/models/embedding-001:embedContent?key=${ENV.geminiApiKey}`;
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-2-preview:embedContent?key=${ENV.geminiApiKey}`;
   const response = await fetch(url, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      model: "models/embedding-001",
+      model: "models/gemini-embedding-2-preview",
       content: { parts: [{ text }] },
+      task_type: "RETRIEVAL_DOCUMENT",
     })
   });
 
@@ -35,9 +36,10 @@ async function run() {
     const section = sections[i].trim();
     console.log(`Processing ${i+1}/${sections.length}...`);
     const embedding = await generateEmbedding(section);
+    const vectorString = `[${embedding.join(",")}]`;
     await SQL`
       INSERT INTO knowledge_chunks (content, embedding, metadata)
-      VALUES (${section}, ${embedding}, ${JSON.stringify({ source: 'base.md', i })})
+      VALUES (${section}, ${vectorString}, ${JSON.stringify({ source: 'base.md', i })})
     `;
     console.log(`Saved ${i+1}`);
   }
