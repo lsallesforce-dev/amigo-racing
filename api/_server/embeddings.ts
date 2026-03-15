@@ -6,12 +6,12 @@ import postgres from "postgres";
 const SQL = postgres(ENV.databaseUrl, { ssl: 'require' });
 
 async function generateEmbedding(text: string) {
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/text-embedding-004:embedContent?key=${ENV.geminiApiKey}`;
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:embedContent?key=${ENV.geminiApiKey}`;
   const response = await fetch(url, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      model: "models/text-embedding-004",
+      model: "models/gemini-embedding-001",
       content: { parts: [{ text }] },
       task_type: "RETRIEVAL_DOCUMENT",
     })
