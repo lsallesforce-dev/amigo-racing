@@ -26,6 +26,7 @@ import Passport from "./pages/Passport";
 import ChampionshipShowcase from "./pages/ChampionshipShowcase";
 import ResetPassword from "./pages/ResetPassword";
 import UpdatePassword from "./pages/UpdatePassword";
+import ZequinhaChat from "./components/ZequinhaChat";
 
 function Router() {
   return (
@@ -64,6 +65,7 @@ function App() {
       <TooltipProvider>
         <Toaster />
         <Router />
+        <ZequinhaChat />
       </TooltipProvider>
     </ThemeProvider>
   );

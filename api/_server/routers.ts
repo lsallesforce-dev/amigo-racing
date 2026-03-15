@@ -536,6 +536,127 @@ export const competitorRouter = router({
     })
 });
 
+// --- ZEQUINHA AI AGENT LOGIC ---
+async function generateGeminiEmbedding(text: string) {
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-2-preview:embedContent?key=${ENV.geminiApiKey}`;
+  const response = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      model: "models/gemini-embedding-2-preview",
+      content: { parts: [{ text }] },
+      task_type: "RETRIEVAL_DOCUMENT",
+    })
+  });
+
+  if (!response.ok) {
+    const err = await response.text();
+    throw new Error(`Gemini Embedding Error: ${err}`);
+  }
+
+  const data = await response.json() as any;
+  return data.embedding.values;
+}
+
+async function generateGeminiResponse(prompt: string, systemPrompt: string, history: { role: 'user' | 'model', content: string }[]) {
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${ENV.geminiApiKey}`;
+  
+  const contents = [
+    ...history.map(h => ({
+      role: h.role,
+      parts: [{ text: h.content }]
+    })),
+    {
+      role: 'user',
+      parts: [{ text: prompt }]
+    }
+  ];
+
+  const response = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      contents,
+      system_instruction: {
+        parts: [{ text: systemPrompt }]
+      },
+      generationConfig: {
+        temperature: 0.7,
+        maxOutputTokens: 800,
+      }
+    })
+  });
+
+  if (!response.ok) {
+    const err = await response.text();
+    throw new Error(`Gemini Chat Error: ${err}`);
+  }
+
+  const data = await response.json() as any;
+  if (!data.candidates?.[0]?.content?.parts?.[0]?.text) {
+    throw new Error('Gemini returned an empty response.');
+  }
+  return data.candidates[0].content.parts[0].text;
+}
+
+const zequinhaRouter = router({
+  ask: publicProcedure
+    .input(z.object({
+      question: z.string().min(1),
+      history: z.array(z.object({
+        role: z.enum(['user', 'model']),
+        content: z.string()
+      })).optional()
+    }))
+    .mutation(async ({ input }) => {
+      try {
+        // 1. Get embedding for the question
+        const embedding = await generateGeminiEmbedding(input.question);
+        
+        // 2. Search knowledge base
+        const dbInstance = await getDb();
+        if (!dbInstance) throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Falha na conexão com o banco de dados.' });
+
+        const vectorString = `[${embedding.join(",")}]`;
+        const matches = await dbInstance.execute(sql`
+          SELECT content, 1 - (embedding <=> ${vectorString}::vector) as similarity
+          FROM knowledge_chunks
+          WHERE 1 - (embedding <=> ${vectorString}::vector) > 0.4
+          ORDER BY similarity DESC
+          LIMIT 4
+        `) as any[];
+
+        const context = matches.map(m => m.content).join("\n\n---\n\n");
+
+        // 3. System Prompt
+        const systemPrompt = `Você é o Zequinha, o assistente técnico especialista e mascote da Amigo Racing.
+Sua personalidade é amigável, técnica, prestativa e um pouco "off-road" (usa termos como "bora pro grid", "na trilha", etc).
+Sua principal função é ajudar pilotos e organizadores com dúvidas sobre a plataforma e regras de rally.
+
+Responda SEMPRE com base nos CONHECIMENTOS TÉCNICOS fornecidos abaixo.
+Se a informação não estiver no contexto, seja honesto e diga que não sabe sobre esse assunto específico, mas incentive o usuário a entrar em contato com o suporte da Amigo Racing via WhatsApp.
+Mantenha as respostas concisas, organizadas por tópicos se necessário, e em Português do Brasil.
+
+CONHECIMENTOS TÉCNICOS:
+${context || 'Nenhum conhecimento específico encontrado para esta pergunta.'}`;
+
+        // 4. Generate response
+        const answer = await generateGeminiResponse(input.question, systemPrompt, (input.history || []) as any);
+
+        return {
+          answer,
+          hasContext: matches.length > 0
+        };
+      } catch (error: any) {
+        console.error('[zequinha.ask] Error:', error);
+        throw new TRPCError({
+          code: 'INTERNAL_SERVER_ERROR',
+          message: error.message || 'Erro ao processar sua pergunta.'
+        });
+      }
+    })
+});
+
 export const appRouter = router({
   system: systemRouter,
   finance: financeRouter,
@@ -543,6 +664,7 @@ export const appRouter = router({
   championships: championshipRouter,
   competitor: competitorRouter,
   storage: storageRouter,
+  zequinha: zequinhaRouter,
 
   organizerMembers: router({
     invite: organizerProcedure
