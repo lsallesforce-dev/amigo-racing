@@ -538,12 +538,12 @@ export const competitorRouter = router({
 
 // --- ZEQUINHA AI AGENT LOGIC ---
 async function generateGeminiEmbedding(text: string) {
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-2-preview:embedContent?key=${ENV.geminiApiKey}`;
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/text-embedding-004:embedContent?key=${ENV.geminiApiKey}`;
   const response = await fetch(url, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      model: "models/gemini-embedding-2-preview",
+      model: "models/text-embedding-004",
       content: { parts: [{ text }] },
       task_type: "RETRIEVAL_DOCUMENT",
     })
@@ -559,7 +559,7 @@ async function generateGeminiEmbedding(text: string) {
 }
 
 async function generateGeminiResponse(prompt: string, systemPrompt: string, history: { role: 'user' | 'model', content: string }[]) {
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key=${ENV.geminiApiKey}`;
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${ENV.geminiApiKey}`;
   
   const contents = [
     ...history.map(h => ({
