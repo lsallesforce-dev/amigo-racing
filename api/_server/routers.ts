@@ -566,7 +566,7 @@ async function generateGeminiResponse(prompt: string, systemPrompt: string, hist
   if (!ENV.geminiApiKey) {
     throw new Error('Configuração de IA incompleta (Chave faltando)');
   }
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-001:generateContent?key=${ENV.geminiApiKey}`;
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${ENV.geminiApiKey}`;
   
   const contents = [
     ...history.map(h => ({
