@@ -538,6 +538,10 @@ export const competitorRouter = router({
 
 // --- ZEQUINHA AI AGENT LOGIC ---
 async function generateGeminiEmbedding(text: string) {
+  if (!ENV.geminiApiKey) {
+    console.error('[Gemini] ERRO: Chave GEMINI_API_KEY não encontrada no ENV');
+    throw new Error('Configuração de IA incompleta (Chave faltando)');
+  }
   const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:embedContent?key=${ENV.geminiApiKey}`;
   const response = await fetch(url, {
     method: "POST",
@@ -559,6 +563,9 @@ async function generateGeminiEmbedding(text: string) {
 }
 
 async function generateGeminiResponse(prompt: string, systemPrompt: string, history: { role: 'user' | 'model', content: string }[]) {
+  if (!ENV.geminiApiKey) {
+    throw new Error('Configuração de IA incompleta (Chave faltando)');
+  }
   const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${ENV.geminiApiKey}`;
   
   const contents = [
