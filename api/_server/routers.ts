@@ -559,7 +559,7 @@ async function generateGeminiEmbedding(text: string) {
 }
 
 async function generateGeminiResponse(prompt: string, systemPrompt: string, history: { role: 'user' | 'model', content: string }[]) {
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key=${ENV.geminiApiKey}`;
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${ENV.geminiApiKey}`;
   
   const contents = [
     ...history.map(h => ({
