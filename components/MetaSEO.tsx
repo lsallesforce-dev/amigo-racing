@@ -77,6 +77,8 @@ export default function MetaSEO({
     };
 
     const absoluteImage = getAbsoluteUrl(ogImage);
+    console.log("[MetaSEO] ogImage:", ogImage);
+    console.log("[MetaSEO] absoluteImage:", absoluteImage);
 
     // Update OpenGraph Image
     if (absoluteImage) {

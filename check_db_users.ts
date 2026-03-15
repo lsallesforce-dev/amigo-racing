@@ -1,6 +1,5 @@
-
-import { getDb } from "./api/_server/db.js";
-import { users, type User } from "./api/_server/schema.js";
+import { getDb } from "./api/_server/db";
+import { users } from "./api/_server/schema";
 import { eq } from "drizzle-orm";
 
 async function checkUser(openId: string) {
@@ -24,7 +23,7 @@ async function listUsers() {
 
     const allUsers = await db.select().from(users).limit(10);
     console.log("Users in DB:");
-    allUsers.forEach((u: User) => console.log(`ID: ${u.id}, Name: ${u.name}, Phone: ${u.phone}`));
+    allUsers.forEach(u => console.log(`ID: ${u.id}, Name: ${u.name}, Phone: ${u.phone}`));
 }
 
 // checkUser("YOUR_OPENID");
