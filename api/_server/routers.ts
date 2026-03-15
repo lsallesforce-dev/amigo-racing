@@ -619,11 +619,11 @@ const zequinhaRouter = router({
 
         const vectorString = `[${embedding.join(",")}]`;
         const matches = await dbInstance.execute(sql`
-          SELECT content, 1 - (embedding <=> ${vectorString}::vector) as similarity
-          FROM knowledge_chunks
-          WHERE 1 - (embedding <=> ${vectorString}::vector) > 0.4
-          ORDER BY similarity DESC
-          LIMIT 4
+          SELECT * FROM match_knowledge_chunks(
+            ${vectorString}::vector,
+            0.4,
+            4
+          )
         `) as any[];
 
         const context = matches.map(m => m.content).join("\n\n---\n\n");
