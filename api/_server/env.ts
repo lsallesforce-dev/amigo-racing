@@ -62,5 +62,6 @@ console.log("[Env] Status Check:", {
   supabaseUrl: ENV.supabaseUrl,
   supabaseKey: mask(ENV.supabaseServiceKey),
   supabaseAnonKey: mask(process.env.SUPABASE_ANON_KEY),
+  geminiKey: mask(ENV.geminiApiKey),
   siteUrl: ENV.siteUrl
 });
