@@ -347,6 +347,45 @@ export default function EventDetails() {
     );
   }
 
+  const eventSchema = event ? {
+    "@context": "https://schema.org",
+    "@type": "Event",
+    "name": event.name,
+    "description": event.description || `Participe do ${event.name} em ${event.city}, ${event.state}. Inscrições abertas na Amigo Racing!`,
+    "startDate": event.startDate,
+    "endDate": event.endDate || event.startDate,
+    "eventStatus": "https://schema.org/EventScheduled",
+    "eventAttendanceMode": "https://schema.org/OfflineEventAttendanceMode",
+    "location": {
+      "@type": "Place",
+      "name": event.location || event.city,
+      "address": {
+        "@type": "PostalAddress",
+        "addressLocality": event.city,
+        "addressRegion": event.state || "SP",
+        "addressCountry": "BR"
+      }
+    },
+    "image": [
+      eventId === 1 
+        ? "https://rjcdkasnipxcdrlmkskm.supabase.co/storage/v1/object/public/amigo-racing/uploads/event_main_1_1773530911750_i4z0e6.jpg" 
+        : (Array.isArray(event.gallery) && event.gallery.length > 0 ? event.gallery[0] : event.imageUrl)
+    ].filter(Boolean),
+    "organizer": {
+      "@type": "Organization",
+      "name": (event as any).organizer?.name || "Amigo Racing",
+      "url": "https://www.amigoracing.com.br"
+    },
+    "offers": categories && categories.length > 0 ? {
+      "@type": "AggregateOffer",
+      "lowPrice": Math.min(...categories.filter(c => c.price !== null).map(c => c.price || 0)),
+      "highPrice": Math.max(...categories.filter(c => c.price !== null).map(c => c.price || 0)),
+      "priceCurrency": "BRL",
+      "availability": event.status === 'open' ? "https://schema.org/InStock" : "https://schema.org/OutOfStock",
+      "url": `https://www.amigoracing.com.br/events/${eventId}`
+    } : undefined
+  } : undefined;
+
   return (
     <div className="min-h-screen bg-background">
       <MetaSEO 
@@ -355,6 +394,7 @@ export default function EventDetails() {
         ogTitle={event.name}
         ogDescription={event.description || `Participe do ${event.name} em ${event.city}, ${event.state}.`}
         ogImage={eventId === 1 ? "https://rjcdkasnipxcdrlmkskm.supabase.co/storage/v1/object/public/amigo-racing/uploads/event_main_1_1773530911750_i4z0e6.jpg" : ((Array.isArray(event.gallery) && event.gallery.length > 0) ? (event.gallery[0] as string) : (event.imageUrl || undefined))}
+        jsonLd={eventSchema}
       />
       <Navbar />
 

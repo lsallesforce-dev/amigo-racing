@@ -7,6 +7,7 @@ interface MetaSEOProps {
   ogDescription?: string;
   ogType?: string;
   ogImage?: string;
+  jsonLd?: object;
 }
 
 export default function MetaSEO({
@@ -16,8 +17,20 @@ export default function MetaSEO({
   ogDescription,
   ogType = "website",
   ogImage,
+  jsonLd,
 }: MetaSEOProps) {
   useEffect(() => {
+    // Inject JSON-LD
+    if (jsonLd) {
+      let script = document.querySelector('script[type="application/ld+json"]');
+      if (!script) {
+        script = document.createElement("script");
+        script.setAttribute("type", "application/ld+json");
+        document.head.appendChild(script);
+      }
+      script.textContent = JSON.stringify(jsonLd);
+    }
+
     // Update Document Title
     if (title) {
       document.title = `${title} | Amigo Racing`;
