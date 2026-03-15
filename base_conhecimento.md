@@ -78,3 +78,67 @@ R: É um recurso disponível no menu que permite ajustar finamente o fator do Od
 
 **Q10: O que devo fazer logo após cruzar a linha de chegada?**
 R: Primeiro, acesse as configurações e clique em "Fechar Planilha". Em seguida, vá ao menu principal do evento, entre em "Dataloggers" e certifique-se de clicar em enviar o seu arquivo para que a organização calcule seus pontos.
+
+***
+
+# 6. Regulamento Oficial – Campeonato de Rally de Regularidade 2026
+
+## 6.1. Preâmbulo e Objetivo
+*   **Definição:** A competição é um evento esportivo de regularidade para veículos 4x4, 4x2 e motocicletas, baseado no cumprimento de médias de velocidade definidas em planilha.
+*   **Classificação:** Determinada pela precisão no cumprimento do tempo e do percurso estabelecidos.
+*   **Soberania:** Este regulamento é a norma soberana do evento, sendo de observância obrigatória para todos os participantes.
+*   **Aceite Digital:** A inscrição realizada através do site oficial possui valor de assinatura digital, vinculando o competidor a todas as cláusulas deste Regulamento e do Termo de Responsabilidade.
+
+## 6.2. Organização e Autoridade
+*   **Gestão:** O evento é gerido por uma Comissão Organizadora própria.
+*   **Diretor de Prova:** Autoridade máxima com autonomia para interpretar o regulamento e deliberar sobre casos omissos.
+
+## 6.3. Calendário e Formato
+*   **Temporada:** Composta por 5 eventos, cada um com 3 provas, totalizando 15 provas válidas para o Campeonato.
+*   **Validade:** Uma prova só será válida caso cumpra, no mínimo, 50% da quilometragem prevista.
+
+## 6.4. Categorias e Promoção
+*   **Veículos:** Master, Graduado, Turismo e Rally (exclusiva para iniciantes).
+*   **Motocicletas:** Moto Graduado e Moto Turismo.
+*   **Ascensão:** Campeões de categoria e competidores com duas vitórias na temporada poderão ser promovidos.
+*   **Zequinhas:** Nas categorias Master e Graduado, é vedada a participação de auxiliares com experiência prévia em rally.
+
+## 6.5. Tecnologia e Navegação
+*   **Uso Livre:** Permitido para Master, Graduado, Turismo e Motos.
+*   **Restrição Rally:** Proibido o uso de sensores conectados ao veículo; permitido apenas dispositivos que operem exclusivamente via GPS.
+
+## 6.6. Inscrições e Trânsito
+*   **Inscrições:** Via formulário oficial (WhatsForm) até um dia antes da prova.
+*   **Cancelamento:** Não confere direito a reembolso ou transferência.
+*   **Legislação:** Todos os veículos devem respeitar o Código de Trânsito Brasileiro, salvo exceções autorizadas para SSVs e Motos.
+
+## 6.7. Cronometragem e Apuração (Sistema Kraken)
+*   **Ferramenta:** Apuração realizada pelo aplicativo Kraken instalado nos dispositivos dos competidores.
+*   **Responsabilidade:** O competidor deve possuir hardware compatível e enviar os dados (dataloggers).
+*   **Horário Oficial:** Registrado no sistema Kraken.
+*   **Pontuação de Erro:**
+    *   **Master/Graduado:** 10 pontos por segundo de erro (1 ponto por décimo).
+    *   **Demais categorias:** 1 ponto por segundo de erro.
+*   **Penalidade Máxima:** Erros superiores a 10 minutos ou não passagem por um PC geram penalidade fixa de 6.000 pontos.
+
+## 6.8. Controle de Velocidade
+*   **Limites:** Informados no briefing ou na planilha.
+*   **Tolerância:** Margem de 10% sobre o limite estabelecido.
+*   **Penalidades:** Exceder a tolerância gera 1.000 pontos de penalidade. A terceira infração resulta em desclassificação automática.
+
+## 6.9. Planilhas e Roteiro
+*   **Disponibilidade:** Planilhas digitais enviadas até às 18h da véspera.
+*   **Prioridade Visual:** Em caso de divergência, a tulipa prevalece sobre o texto descritivo.
+
+## 6.10. Classificação e Desempate
+*   **Descarte (PC):** Aplicação dos critérios N-i e N-x para descartar os piores resultados de passagens.
+*   **Descarte (Campeonato):** Descarte de até 2 provas das 15 totais.
+*   **Empate:** Prioridade para a menor pontuação antes dos descartes, seguida pelo maior número de PCs zerados.
+
+## 6.11. Direitos e Conduta
+*   **Uso de Imagem:** O competidor autoriza o uso gratuito de seu nome e imagem captados no evento para divulgação do Amigo Racing.
+*   **Penalidades:** Desrespeito aos adesivos de patrocinadores, descarte de lixo no percurso ou não uso da camiseta oficial resultará em punição ou desclassificação.
+
+## 6.12. Disposições Finais e Foro
+*   **Recursos:** Reclamações devem ser apresentadas até 1 hora antes da premiação.
+*   **Foro:** Foro da Comarca de São José do Rio Preto, SP.
