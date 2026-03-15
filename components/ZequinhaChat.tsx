@@ -55,8 +55,8 @@ export default function ZequinhaChat() {
         <Card className="w-[350px] md:w-[400px] h-[550px] flex flex-col shadow-2xl border-primary/20 bg-neutral-950 animate-in slide-in-from-bottom-5 duration-300">
           <CardHeader className="bg-primary/10 border-b border-primary/10 p-4 flex flex-row items-center justify-between shrink-0 rounded-t-xl">
             <CardTitle className="text-lg flex items-center gap-2 text-white">
-              <div className="bg-primary h-8 w-8 rounded-full flex items-center justify-center">
-                <Bot className="h-5 w-5 text-white" />
+              <div className="bg-primary h-10 w-10 rounded-full flex items-center justify-center overflow-hidden border-2 border-white/20 shadow-inner">
+                <img src="/zequinha.png" alt="Zequinha" className="h-full w-full object-cover" />
               </div>
               <div className="flex flex-col">
                 <span className="font-black leading-none uppercase italic text-sm">Zequinha AI</span>
@@ -85,10 +85,14 @@ export default function ZequinhaChat() {
                   )}
                 >
                   <div className={cn(
-                    "h-8 w-8 rounded-full flex items-center justify-center shrink-0 border",
+                    "h-8 w-8 rounded-full flex items-center justify-center shrink-0 border overflow-hidden",
                     msg.role === "user" ? "bg-white/5 border-white/10" : "bg-primary/10 border-primary/20"
                   )}>
-                    {msg.role === "user" ? <User className="h-4 w-4 text-white/50" /> : <Bot className="h-4 w-4 text-primary" />}
+                    {msg.role === "user" ? (
+                      <User className="h-4 w-4 text-white/50" />
+                    ) : (
+                      <img src="/zequinha.png" alt="Zequinha" className="h-full w-full object-cover" />
+                    )}
                   </div>
                   <div className={cn(
                     "p-3 rounded-2xl text-sm leading-relaxed h-auto",
@@ -102,8 +106,8 @@ export default function ZequinhaChat() {
               ))}
               {askMutation.isPending && (
                 <div className="flex gap-3 max-w-[85%] mr-auto">
-                  <div className="h-8 w-8 rounded-full bg-primary/10 border border-primary/20 flex items-center justify-center shrink-0">
-                    <Bot className="h-4 w-4 text-primary" />
+                  <div className="h-8 w-8 rounded-full bg-primary/10 border border-primary/20 flex items-center justify-center shrink-0 overflow-hidden">
+                    <img src="/zequinha.png" alt="Zequinha" className="h-full w-full object-cover opacity-50" />
                   </div>
                   <div className="bg-white/5 border border-white/10 p-3 rounded-2xl rounded-tl-none flex items-center gap-2">
                     <Loader2 className="h-4 w-4 text-primary animate-spin" />
@@ -144,16 +148,23 @@ export default function ZequinhaChat() {
         size="lg"
         onClick={() => setIsOpen(!isOpen)}
         className={cn(
-          "h-16 w-16 rounded-full shadow-[0_0_20px_rgba(234,88,12,0.4)] hover:shadow-[0_0_30px_rgba(234,88,12,0.6)] transition-all flex items-center justify-center p-0 overflow-hidden group border-none",
-          isOpen ? "bg-neutral-900 ring-2 ring-white/10" : "bg-primary"
+          "h-20 w-20 rounded-full shadow-2xl transition-all flex items-center justify-center p-0 overflow-hidden group border-4",
+          isOpen 
+            ? "bg-neutral-900 border-white/10" 
+            : "bg-primary border-primary/40 animate-pulse-glow"
         )}
       >
         {isOpen ? (
-          <X className="h-6 w-6 text-white group-hover:scale-110 transition-transform" />
+          <X className="h-8 w-8 text-white group-hover:scale-110 transition-transform" />
         ) : (
-          <div className="relative">
-             <MessageSquare className="h-8 w-8 text-white group-hover:scale-110 transition-transform" />
-             <span className="absolute -top-1 -right-1 bg-white text-primary text-[10px] font-black px-1.5 rounded-full animate-bounce uppercase">AI</span>
+          <div className="relative h-full w-full flex items-center justify-center">
+             <img 
+               src="/zequinha.png" 
+               alt="Zequinha" 
+               className="h-[120%] w-[120%] max-w-none object-cover transform scale-110 group-hover:scale-125 transition-transform duration-500" 
+             />
+             <div className="absolute inset-0 bg-gradient-to-t from-primary/60 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
+             <span className="absolute bottom-2 bg-white text-primary text-[10px] font-black px-2 py-0.5 rounded-full shadow-lg uppercase tracking-tighter">Zequinha</span>
           </div>
         )}
       </Button>
