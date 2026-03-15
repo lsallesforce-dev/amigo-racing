@@ -1,3 +1,4 @@
+import "dotenv/config";
 import { getDb } from "./api/_server/db";
 import { users } from "./api/_server/schema";
 import { eq } from "drizzle-orm";
