@@ -447,7 +447,7 @@ export function EventEditDialog({ open, onOpenChange, event, onSuccess }: EventE
                                 className="h-4 w-4 rounded border-gray-300"
                             />
                             <Label htmlFor="edit-accepts-credit-card" className="text-sm font-normal cursor-pointer">
-                                Aceitar pagamento via Cartão de Crédito (PagSeguro)
+                                Aceitar cartão de crédito para pagamento (taxa 3,89%)
                             </Label>
                         </div>
                         <div className="border-t pt-4 mt-4 space-y-4">
