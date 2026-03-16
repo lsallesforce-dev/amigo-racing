@@ -1,4 +1,4 @@
-﻿import { NOT_ADMIN_ERR_MSG, UNAUTHED_ERR_MSG } from "../const.js";
+import { NOT_ADMIN_ERR_MSG, UNAUTHED_ERR_MSG } from "../const.js";
 import { initTRPC, TRPCError } from "@trpc/server";
 import superjson from "superjson";
 import type { TrpcContext } from "../context.js";
@@ -30,6 +30,8 @@ const requireUser = t.middleware(async opts => {
 
 export const protectedProcedure = t.procedure.use(requireUser);
 
+
+
 export const adminProcedure = t.procedure.use(
   t.middleware(async opts => {
     const { ctx, next } = opts;
@@ -46,3 +48,11 @@ export const adminProcedure = t.procedure.use(
     });
   }),
 );
+
+export const organizerProcedure = protectedProcedure.use(({ ctx, next }) => {
+  const user = ctx.user as any;
+  if (user?.role !== 'organizer' && user?.role !== 'admin') {
+    throw new TRPCError({ code: 'FORBIDDEN', message: 'You must be an organizer' });
+  }
+  return next({ ctx });
+});

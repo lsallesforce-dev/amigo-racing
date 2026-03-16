@@ -1,6 +1,5 @@
 import { z } from "zod";
-import { router } from "../_core/trpc.js";
-import { organizerProcedure } from "../routers.js";
+import { router, organizerProcedure } from "../_core/trpc.js";
 import { TRPCError } from "@trpc/server";
 import { getDb } from "../db.js";
 import { registrations, events } from "../schema.js";
