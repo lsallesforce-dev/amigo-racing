@@ -1085,7 +1085,7 @@ export default function OrganizerPanel() {
             <CardHeader>
               <CardTitle>Configurações de Pagamento</CardTitle>
               <CardDescription>
-                Configure seus dados bancários para receber repasses automáticos (95% do valor das inscrições)
+                Configure seus dados bancários para receber repasses automáticos de 95% (Tarifa bancária: Pix -1,09% | Cartão -3,89%)
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -1101,8 +1101,8 @@ export default function OrganizerPanel() {
                   </div>
                   <div className="p-4 bg-muted rounded-lg">
                     <p className="text-sm text-muted-foreground mb-2">
-                      Sua conta de recebedor foi configurada com sucesso no Pagar.me.
-                      Você receberá automaticamente 95% do valor de cada inscrição.
+                      Sua conta de recebedor foi configurada com sucesso no Pagar.me. Você receberá automaticamente 95% do valor de cada inscrição.
+                      <span className="block mt-1 font-semibold text-amber-600 dark:text-amber-400">Tarifas bancárias: Pix: -1,09% | Cartão de Crédito: -3,89% (se aceito no evento).</span>
                     </p>
                     <p className="text-xs text-muted-foreground">
                       Por questões de segurança, os dados bancários completos não são exibidos.
