@@ -462,6 +462,7 @@ export default function OrganizerFinance() {
                                 <CardContent className="flex flex-col gap-3">
                                     <p className="text-xs text-muted-foreground">
                                         Transfira o saldo disponível para sua conta bancária cadastrada.
+                                        <span className="block mt-1 font-semibold text-amber-600 dark:text-amber-400">Taxa de R$ 3,67 por saque.</span>
                                     </p>
                                     <Dialog open={isPayoutOpen} onOpenChange={setIsPayoutOpen}>
                                         <DialogTrigger asChild>
@@ -479,6 +480,7 @@ export default function OrganizerFinance() {
                                                 <DialogTitle>Confirmar Transferência</DialogTitle>
                                                 <DialogDescription>
                                                     Será solicitada a transferência de todo o saldo disponível ({formatCurrency(pagarmeBalance?.availableBalance || 0)}) para sua conta bancária cadastrada no Pagar.me.
+                                                    <span className="block mt-2 font-bold text-black dark:text-white">Atenção: É cobrada uma taxa de R$ 3,67 por saque.</span>
                                                 </DialogDescription>
                                             </DialogHeader>
                                             <DialogFooter>
