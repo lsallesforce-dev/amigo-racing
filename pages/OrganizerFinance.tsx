@@ -174,9 +174,9 @@ export default function OrganizerFinance() {
                 ["Vendas Avulsas (Loja)", formatCurrency(summary?.storeIncome || 0)],
                 ["Despesas Pagas", formatCurrency(summary?.expense || 0)],
                 ["Saldo Atual (Caixa)", formatCurrency((summary?.manualBalance || 0) + (pagarmeBalance?.availableBalance || 0))],
-                ["A Receber (Restante Líquido)", formatCurrency(((summary?.pendingRegistrations || 0) + (summary?.pendingStoreIncome || 0)) * 0.9)],
+                ["A Receber (Restante Líquido)", formatCurrency(((summary?.pendingRegistrations || 0) + (summary?.pendingStoreIncome || 0)) * 0.95)],
                 ["A Pagar (Agendado)", formatCurrency(summary?.pendingExpense || 0)],
-                ["Previsão de Lucro Final", formatCurrency((summary?.manualBalance || 0) + (pagarmeBalance?.totalBalance || 0) + ((summary?.pendingRegistrations || 0) + (summary?.pendingStoreIncome || 0)) * 0.9 - (summary?.pendingExpense || 0))],
+                ["Previsão de Lucro Final", formatCurrency((summary?.manualBalance || 0) + (pagarmeBalance?.totalBalance || 0) + ((summary?.pendingRegistrations || 0) + (summary?.pendingStoreIncome || 0)) * 0.95 - (summary?.pendingExpense || 0))],
             ];
 
             autoTable(doc, {
@@ -435,7 +435,7 @@ export default function OrganizerFinance() {
                                     <div className="text-2xl font-bold text-[#00695c]">
                                         {isLoadingBalance ? <Loader2 className="h-5 w-5 animate-spin" /> : formatCurrency(pagarmeBalance?.totalBalance || 0)}
                                     </div>
-                                    <p className="text-xs text-muted-foreground mt-1">Total acumulado (90% das inscrições)</p>
+                                    <p className="text-xs text-muted-foreground mt-1">Total acumulado (95% das inscrições)</p>
                                 </CardContent>
                             </Card>
 
@@ -614,8 +614,8 @@ export default function OrganizerFinance() {
                             <TrendingUp className="h-4 w-4 text-primary" />
                         </CardHeader>
                         <CardContent>
-                            <div className={`text-2xl font-bold ${((summary?.manualBalance || 0) + (pagarmeBalance?.totalBalance || 0) + ((summary?.pendingRegistrations || 0) + (summary?.pendingStoreIncome || 0)) * 0.9 - (summary?.pendingExpense || 0)) >= 0 ? 'text-green-600 dark:text-green-500' : 'text-red-600 dark:text-red-500'}`}>
-                                {isLoadingSummary ? "..." : formatCurrency((summary?.manualBalance || 0) + (pagarmeBalance?.totalBalance || 0) + ((summary?.pendingRegistrations || 0) + (summary?.pendingStoreIncome || 0)) * 0.9 - (summary?.pendingExpense || 0))}
+                            <div className={`text-2xl font-bold ${((summary?.manualBalance || 0) + (pagarmeBalance?.totalBalance || 0) + ((summary?.pendingRegistrations || 0) + (summary?.pendingStoreIncome || 0)) * 0.95 - (summary?.pendingExpense || 0)) >= 0 ? 'text-green-600 dark:text-green-500' : 'text-red-600 dark:text-red-500'}`}>
+                                {isLoadingSummary ? "..." : formatCurrency((summary?.manualBalance || 0) + (pagarmeBalance?.totalBalance || 0) + ((summary?.pendingRegistrations || 0) + (summary?.pendingStoreIncome || 0)) * 0.95 - (summary?.pendingExpense || 0))}
                             </div>
                             <p className="text-xs text-muted-foreground mt-1">
                                 Saldo Real + Expectativa Líquida do Site

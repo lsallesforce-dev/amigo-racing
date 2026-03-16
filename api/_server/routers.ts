@@ -1538,8 +1538,8 @@ export const appRouter = router({
 
           // Split logic: Prioritize Organizer (90%), fallback to Platform (10%), or throw error.
           if (organizerRecipientId && platformRecipientId && organizerRecipientId !== platformRecipientId) {
-            // Split: 90% Organizer, 10% Platform
-            const platformFeePercentage = 10;
+            // Split: 95% Organizer, 5% Platform
+            const platformFeePercentage = 5;
             const platformAmount = Math.round(totalAmountCents * (platformFeePercentage / 100));
             const organizerAmount = totalAmountCents - platformAmount;
 
@@ -1564,7 +1564,7 @@ export const appRouter = router({
                 liable: false
               }
             });
-            console.log(`[createPayment] DYNAMIC SPLIT CONFIGURED: 90% -> ${organizerRecipientId}, 10% -> ${platformRecipientId}`);
+            console.log(`[createPayment] DYNAMIC SPLIT CONFIGURED: 95% -> ${organizerRecipientId}, 5% -> ${platformRecipientId}`);
           } else if (organizerRecipientId || platformRecipientId) {
             // Solo payment to whoever is available (Organizer takes priority)
             const finalRecipientId = organizerRecipientId || platformRecipientId;
