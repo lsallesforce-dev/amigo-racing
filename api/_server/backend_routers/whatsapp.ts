@@ -37,23 +37,20 @@ export const whatsappRouter = router({
         });
       }
 
-      // 2. Buscar inscritos pagos (status = 'paid')
-      const paidRegistrations = await db.select({
+      // 2. Buscar todos os inscritos do evento
+      const eventRegistrations = await db.select({
         phone: registrations.phone,
         pilotName: registrations.pilotName,
       })
       .from(registrations)
-      .where(and(
-        eq(registrations.eventId, input.eventId),
-        eq(registrations.status, "paid")
-      ));
+      .where(eq(registrations.eventId, input.eventId));
 
-      if (paidRegistrations.length === 0) {
-        return { success: true, count: 0, message: "Nenhum inscrito pago encontrado para este evento." };
+      if (eventRegistrations.length === 0) {
+        return { success: true, count: 0, message: "Nenhum inscrito encontrado para este evento." };
       }
 
       // 3. Filtrar números únicos e válidos
-      const uniquePhones = [...new Set(paidRegistrations
+      const uniquePhones = [...new Set(eventRegistrations
         .map(r => r.phone?.replace(/\D/g, ""))
         .filter(p => !!p && p.length >= 10)
       )];

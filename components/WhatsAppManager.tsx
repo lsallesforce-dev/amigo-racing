@@ -7,7 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import { MessageSquare, Send, Loader2, Info } from "lucide-react";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Alert, AlertDescription, AlertTitle } from "./ui/alert";
 
 export function WhatsAppManager() {
   const [selectedEventId, setSelectedEventId] = useState<string>("");
@@ -41,7 +41,7 @@ export function WhatsAppManager() {
     const event = events?.find(e => e.id.toString() === selectedEventId);
     if (!event) return;
 
-    if (confirm(`Deseja enviar esta mensagem para TODOS os inscritos com pagamento confirmado no evento "${event.name}"?`)) {
+    if (confirm(`Deseja enviar esta mensagem para TODOS os inscritos no evento "${event.name}"?`)) {
       setIsSending(true);
       sendMutation.mutate({
         eventId: parseInt(selectedEventId),
@@ -67,7 +67,7 @@ export function WhatsAppManager() {
             <CardTitle>Avisos via WhatsApp</CardTitle>
           </div>
           <CardDescription>
-            Envie comunicados rápidos para todos os pilotos e navegadores inscritos (pagos) no seu evento.
+            Envie comunicados rápidos para todos os pilotos e navegadores inscritos no seu evento.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -141,7 +141,7 @@ export function WhatsAppManager() {
         </CardHeader>
         <CardContent className="text-sm text-muted-foreground space-y-2">
           <ul className="list-disc pl-4 space-y-1">
-            <li>As mensagens são enviadas apenas para inscritos com status <strong>PAGO</strong>.</li>
+            <li>As mensagens são enviadas para <strong>TODOS</strong> os inscritos do evento.</li>
             <li>O número oficial de disparo é o da Amigo Racing.</li>
             <li>Não utilize este sistema para fins não relacionados ao evento.</li>
             <li>Se houver muitos contatos, o processo pode levar alguns minutos para concluir.</li>
