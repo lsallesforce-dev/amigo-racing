@@ -17,6 +17,7 @@ import { eq, sql, and, inArray, ne } from "drizzle-orm";
 import { ENV } from "./env.js";
 import { adminProcedure as baseAdminProcedure } from "./_core/trpc.js";
 import { championshipRouter, calculateChampionshipStandings } from "./backend_routers/championship.js";
+import { whatsappRouter } from "./backend_routers/whatsapp.js";
 
 
 
@@ -32,7 +33,7 @@ const adminProcedure = protectedProcedure.use(({ ctx, next }) => {
   return next({ ctx });
 });
 
-const organizerProcedure = protectedProcedure.use(({ ctx, next }) => {
+export const organizerProcedure = protectedProcedure.use(({ ctx, next }) => {
   const user = ctx.user as any;
   if (user?.role !== 'organizer' && user?.role !== 'admin') {
     throw new TRPCError({ code: 'FORBIDDEN', message: 'You must be an organizer' });
@@ -672,6 +673,7 @@ export const appRouter = router({
   competitor: competitorRouter,
   storage: storageRouter,
   zequinha: zequinhaRouter,
+  whatsapp: whatsappRouter,
 
   organizerMembers: router({
     invite: organizerProcedure

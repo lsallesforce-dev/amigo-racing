@@ -24,6 +24,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { compressImage } from '@/lib/imageCompression';
 import Navbar from "@/components/Navbar";
 import { EventEditDialog } from "@/components/events/EventEditDialog";
+import { WhatsAppManager } from "@/components/WhatsAppManager";
 
 // Type for event with categories (extended from base type)
 type EventWithCategories = {
@@ -1284,6 +1285,12 @@ export default function OrganizerPanel() {
               >
                 Campeonatos
               </TabsTrigger>
+              <TabsTrigger
+                value="whatsapp"
+                className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent px-4 py-2 font-semibold transition-none shadow-none"
+              >
+                WhatsApp
+              </TabsTrigger>
             </TabsList>
             
             <div className="flex items-center space-x-2 pb-2 sm:pb-0 px-4">
@@ -1635,6 +1642,10 @@ export default function OrganizerPanel() {
                 </CardContent>
               </Card>
             )}
+          </TabsContent>
+
+          <TabsContent value="whatsapp">
+            <WhatsAppManager />
           </TabsContent>
         </Tabs>
 

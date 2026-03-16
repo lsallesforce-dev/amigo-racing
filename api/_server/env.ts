@@ -45,6 +45,11 @@ export const ENV = {
   allowedOrigins: process.env.ALLOWED_ORIGINS
     ? process.env.ALLOWED_ORIGINS.split(',').map(o => o.trim())
     : ['http://localhost:3000', 'http://localhost:5173', 'https://amigo-racing.vercel.app'],
+
+  // Evolution API (WhatsApp)
+  evolutionApiUrl: process.env.EVOLUTION_API_URL || "https://api-whatsapp-amigoracing.onrender.com",
+  evolutionApiKey: process.env.EVOLUTION_API_KEY || "2411weLL123456@",
+  evolutionInstanceName: process.env.EVOLUTION_INSTANCE_NAME || "AmigoRacing_Oficial",
 };
 
 const mask = (str: string | undefined) => {
@@ -63,5 +68,7 @@ console.log("[Env] Status Check:", {
   supabaseKey: mask(ENV.supabaseServiceKey),
   supabaseAnonKey: mask(process.env.SUPABASE_ANON_KEY),
   geminiKey: mask(ENV.geminiApiKey),
+  evolutionUrl: ENV.evolutionApiUrl,
+  evolutionInstance: ENV.evolutionInstanceName,
   siteUrl: ENV.siteUrl
 });
