@@ -48,7 +48,7 @@ export const ENV = {
 
   // Evolution API (WhatsApp)
   evolutionApiUrl: process.env.EVOLUTION_API_URL || "https://api-whatsapp-amigoracing.onrender.com",
-  evolutionApiKey: process.env.EVOLUTION_API_KEY || "2411weLL123456@",
+  evolutionApiKey: process.env.EVOLUTION_API_KEY || "2411welL123456@",
   evolutionInstanceName: process.env.EVOLUTION_INSTANCE_NAME || "AmigoRacing_Oficial",
 };
 
