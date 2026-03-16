@@ -1468,6 +1468,7 @@ export default function EventDetails() {
             amount={pendingPaymentAmount}
             eventName={event?.name || ""}
             categoryName={pendingCategoryName}
+            acceptsCreditCard={(event as any)?.accepts_credit_card}
           />
         )
       }

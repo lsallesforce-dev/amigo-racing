@@ -139,6 +139,7 @@ export function EventEditDialog({ open, onOpenChange, event, onSuccess }: EventE
                 documents: event.documents || "[]",
                 terms: event.terms || "",
                 navigationFiles: event.navigationFiles || [],
+                accepts_credit_card: event.accepts_credit_card ?? true,
             });
 
             // We need to fetch the stage link separately or have it passed
@@ -435,6 +436,18 @@ export function EventEditDialog({ open, onOpenChange, event, onSuccess }: EventE
                             />
                             <Label htmlFor="edit-has-shirts" className="text-sm font-normal cursor-pointer">
                                 Evento possui camiseta (Habilita a escolha de tamanhos na inscrição)
+                            </Label>
+                        </div>
+                        <div className="flex items-center space-x-2">
+                            <input
+                                type="checkbox"
+                                id="edit-accepts-credit-card"
+                                checked={editingEvent.accepts_credit_card ?? true}
+                                onChange={(e) => setEditingEvent({ ...editingEvent, accepts_credit_card: e.target.checked })}
+                                className="h-4 w-4 rounded border-gray-300"
+                            />
+                            <Label htmlFor="edit-accepts-credit-card" className="text-sm font-normal cursor-pointer">
+                                Aceitar pagamento via Cartão de Crédito (PagSeguro)
                             </Label>
                         </div>
                         <div className="border-t pt-4 mt-4 space-y-4">

@@ -804,6 +804,7 @@ export const appRouter = router({
         hasShirts: z.boolean().optional(),
         notificationEmail: z.string().email().optional(),
         externalUrl: z.string().url().optional().nullable(),
+        accepts_credit_card: z.boolean().optional(),
       }))
       .mutation(async ({ ctx, input }) => {
         const user = ctx.user as any;
@@ -834,6 +835,7 @@ export const appRouter = router({
             status: 'open',
             isExternal: input.isExternal || false,
             hasShirts: input.hasShirts !== false, // Defaults to true
+            accepts_credit_card: input.accepts_credit_card !== false, // Defaults to true
           } as any);
 
           console.log(`[Events.create] Evento criado com sucesso. ID extraído de:`, result);
@@ -933,6 +935,7 @@ export const appRouter = router({
         sponsors: z.array(z.string()).optional(),
         gallery: z.array(z.string()).optional(),
         navigationFiles: z.array(z.any()).optional(),
+        accepts_credit_card: z.boolean().optional().nullable(),
       }))
       .mutation(async ({ ctx, input }) => {
         const { id, championshipId, ...data } = input;
@@ -946,6 +949,7 @@ export const appRouter = router({
         if (data.showInListing !== undefined) updateData.showInListing = data.showInListing;
         if (data.showRegistrations !== undefined) updateData.showRegistrations = data.showRegistrations;
         if (data.hasShirts !== undefined && data.hasShirts !== null) updateData.hasShirts = data.hasShirts;
+        if (data.accepts_credit_card !== undefined && data.accepts_credit_card !== null) updateData.accepts_credit_card = data.accepts_credit_card;
 
         const result = await db.updateEvent(id, updateData);
 

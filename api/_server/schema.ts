@@ -113,7 +113,7 @@ export const events = pgTable("events", {
   sponsors: json("sponsors"), // Array of strings (image URLs)
   gallery: json("gallery"), // Array of strings (image URLs)
   navigationFiles: json("navigationFiles"), // JSON: [{name, url, type}]
-  externalUrl: text("externalUrl"),
+  accepts_credit_card: boolean("accepts_credit_card").default(true).notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().notNull(),
 });

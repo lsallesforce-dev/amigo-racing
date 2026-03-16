@@ -18,6 +18,7 @@ interface PaymentModalProps {
     amount: number;
     eventName: string;
     categoryName: string;
+    acceptsCreditCard?: boolean;
 }
 
 export function PaymentModal({
@@ -28,6 +29,7 @@ export function PaymentModal({
     amount,
     eventName,
     categoryName,
+    acceptsCreditCard = true,
 }: PaymentModalProps) {
     const [paymentMethod, setPaymentMethod] = useState<'pix' | 'credit_card'>('pix');
     const [step, setStep] = useState<'select' | 'processing' | 'pix_waiting' | 'success'>('select');
@@ -284,20 +286,34 @@ export function PaymentModal({
                                     </CardContent>
                                 </Card>
 
-                                <Card className={`cursor-pointer transition-colors ${paymentMethod === 'credit_card' ? 'border-primary' : ''}`}>
-                                    <CardContent className="p-4">
-                                        <div className="flex items-center space-x-3">
-                                            <RadioGroupItem value="credit_card" id="credit_card" />
-                                            <Label htmlFor="credit_card" className="flex items-center gap-2 cursor-pointer flex-1">
-                                                <CreditCard className="h-5 w-5 text-primary" />
-                                                <div>
-                                                    <div className="font-semibold">Cartão de Crédito</div>
-                                                    <div className="text-sm text-muted-foreground">Aprovação imediata</div>
+                                {acceptsCreditCard && (
+                                    <Card className={`relative overflow-hidden transition-all duration-300 border-2 ${paymentMethod === 'credit_card' ? 'border-primary bg-primary/5 shadow-md scale-[1.02]' : 'border-muted hover:border-primary/30'}`}>
+                                        <CardContent className="p-0">
+                                            <RadioGroupItem
+                                                value="credit_card"
+                                                id="credit_card"
+                                                className="peer sr-only"
+                                            />
+                                            <Label
+                                                htmlFor="credit_card"
+                                                className="flex items-center gap-4 p-4 cursor-pointer"
+                                            >
+                                                <div className={`p-3 rounded-full transition-colors ${paymentMethod === 'credit_card' ? 'bg-primary text-white shadow-lg' : 'bg-muted text-muted-foreground'}`}>
+                                                    <CreditCard className="h-6 w-6" />
                                                 </div>
+                                                <div className="flex-1">
+                                                    <p className="font-bold text-base">Cartão de Crédito</p>
+                                                    <p className="text-xs text-muted-foreground">Pague em até 1x sem juros</p>
+                                                </div>
+                                                {paymentMethod === 'credit_card' && (
+                                                    <div className="bg-primary/20 p-1 rounded-full text-primary">
+                                                        <CheckCircle2 className="h-4 w-4" />
+                                                    </div>
+                                                )}
                                             </Label>
-                                        </div>
-                                    </CardContent>
-                                </Card>
+                                        </CardContent>
+                                    </Card>
+                                )}
                             </RadioGroup>
                         </div>
 

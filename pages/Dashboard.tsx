@@ -934,6 +934,7 @@ export default function Dashboard() {
               amount={selectedRegistrationForPayment.categoryPrice || 0}
               eventName={selectedRegistrationForPayment.eventName || ''}
               categoryName={selectedRegistrationForPayment.categoryName || ''}
+              acceptsCreditCard={selectedRegistrationForPayment.acceptsCreditCard}
             />
           )
         }
