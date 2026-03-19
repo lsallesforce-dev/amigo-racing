@@ -58,16 +58,15 @@ export const whatsappRouter = router({
       // 4. Formatar mensagem
       const formattedMessage = `*${event.name}*\n\n${input.message}`;
 
-      // 5. Enviar via Evolution API com delay
-      const evolutionUrl = ENV.evolutionApiUrl;
-      const evolutionKey = ENV.evolutionApiKey;
-      const instance = ENV.evolutionInstanceName;
+      // 5. Enviar via Z-API com delay
+      const instanceId = ENV.zapiInstanceId;
+      const token = ENV.zapiToken;
 
-      if (!evolutionUrl || !evolutionKey || !instance) {
-        console.error("[WhatsApp] Erro de configuração da Evolution API:", { evolutionUrl: !!evolutionUrl, evolutionKey: !!evolutionKey, instance });
+      if (!instanceId || !token) {
+        console.error("[WhatsApp] Erro de configuração da Z-API:", { instanceId: !!instanceId, token: !!token });
         throw new TRPCError({
           code: "PRECONDITION_FAILED",
-          message: "O sistema de WhatsApp não está configurado no servidor.",
+          message: "O sistema de WhatsApp (Z-API) não está configurado no servidor.",
         });
       }
 
@@ -88,21 +87,15 @@ export const whatsappRouter = router({
             // Formatar para padrão internacional se necessário (Evolution costuma aceitar 55...)
             const jid = phone.startsWith("55") ? phone : `55${phone}`;
             
-            const response = await fetch(`${evolutionUrl}/message/sendText/${instance}`, {
+            const response = await fetch(`https://api.z-api.io/instances/${instanceId}/token/${token}/send-text`, {
               method: "POST",
               headers: {
-                "Content-Type": "application/json",
-                "apikey": evolutionKey
+                "Content-Type": "application/json"
               },
               body: JSON.stringify({
-                number: jid,
-                options: {
-                  delay: 1200,
-                  presence: "composing"
-                },
-                textMessage: {
-                  text: formattedMessage
-                }
+                phone: jid,
+                message: formattedMessage,
+                delayMessage: 1 // Adiciona um pequeno delay orgânico pela própria Z-API
               })
             });
 

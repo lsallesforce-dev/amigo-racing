@@ -46,10 +46,9 @@ export const ENV = {
     ? process.env.ALLOWED_ORIGINS.split(',').map(o => o.trim())
     : ['http://localhost:3000', 'http://localhost:5173', 'https://amigo-racing.vercel.app'],
 
-  // Evolution API (WhatsApp)
-  evolutionApiUrl: process.env.EVOLUTION_API_URL || "https://api-whatsapp-amigoracing.onrender.com",
-  evolutionApiKey: process.env.EVOLUTION_API_KEY || "2411welL123456@",
-  evolutionInstanceName: process.env.EVOLUTION_INSTANCE_NAME || "AmigoRacing_Oficial",
+  // Z-API (WhatsApp)
+  zapiInstanceId: process.env.ZAPI_INSTANCE_ID || "3F05C2170EC6D1280EF2EE37F1774CBC",
+  zapiToken: process.env.ZAPI_TOKEN || "20A1AB4294C073352D1E13F8",
 };
 
 const mask = (str: string | undefined) => {
@@ -68,7 +67,6 @@ console.log("[Env] Status Check:", {
   supabaseKey: mask(ENV.supabaseServiceKey),
   supabaseAnonKey: mask(process.env.SUPABASE_ANON_KEY),
   geminiKey: mask(ENV.geminiApiKey),
-  evolutionUrl: ENV.evolutionApiUrl,
-  evolutionInstance: ENV.evolutionInstanceName,
+  zapiInstanceId: ENV.zapiInstanceId,
   siteUrl: ENV.siteUrl
 });
