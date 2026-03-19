@@ -61,12 +61,13 @@ export const whatsappRouter = router({
       // 5. Enviar via Z-API com delay
       const instanceId = ENV.zapiInstanceId;
       const token = ENV.zapiToken;
+      const clientToken = ENV.zapiClientToken;
 
-      if (!instanceId || !token) {
-        console.error("[WhatsApp] Erro de configuração da Z-API:", { instanceId: !!instanceId, token: !!token });
+      if (!instanceId || !token || !clientToken) {
+        console.error("[WhatsApp] Erro de configuração da Z-API:", { instanceId: !!instanceId, token: !!token, clientToken: !!clientToken });
         throw new TRPCError({
           code: "PRECONDITION_FAILED",
-          message: "O sistema de WhatsApp (Z-API) não está configurado no servidor.",
+          message: "A chave extra de segurança (Client-Token) da Z-API não está configurada.",
         });
       }
 
@@ -90,7 +91,8 @@ export const whatsappRouter = router({
             const response = await fetch(`https://api.z-api.io/instances/${instanceId}/token/${token}/send-text`, {
               method: "POST",
               headers: {
-                "Content-Type": "application/json"
+                "Content-Type": "application/json",
+                "Client-Token": clientToken
               },
               body: JSON.stringify({
                 phone: jid,

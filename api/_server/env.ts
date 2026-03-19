@@ -49,6 +49,7 @@ export const ENV = {
   // Z-API (WhatsApp)
   zapiInstanceId: process.env.ZAPI_INSTANCE_ID || "3F05C2170EC6D1280EF2EE37F1774CBC",
   zapiToken: process.env.ZAPI_TOKEN || "20A1AB4294C073352D1E13F8",
+  zapiClientToken: process.env.ZAPI_CLIENT_TOKEN || "",
 };
 
 const mask = (str: string | undefined) => {
