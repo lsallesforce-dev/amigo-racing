@@ -79,52 +79,49 @@ export const whatsappRouter = router({
       let sentCount = 0;
       let errorCount = 0;
 
-      // Executamos de forma assíncrona para retornar logo pro frontend
-      (async () => {
-        console.log(`[WhatsApp] Iniciando disparos para ${uniquePhones.length} contatos do evento ${event.name}`);
-        
-        for (const phone of uniquePhones) {
-          try {
-            // Formatar para padrão internacional se necessário (Evolution costuma aceitar 55...)
-            const jid = phone.startsWith("55") ? phone : `55${phone}`;
-            
-            const response = await fetch(`https://api.z-api.io/instances/${instanceId}/token/${token}/send-text`, {
-              method: "POST",
-              headers: {
-                "Content-Type": "application/json",
-                "Client-Token": clientToken
-              },
-              body: JSON.stringify({
-                phone: jid,
-                message: formattedMessage,
-                delayMessage: 1 // Adiciona um pequeno delay orgânico pela própria Z-API
-              })
-            });
-
-            if (response.ok) {
-              sentCount++;
-              console.log(`[WhatsApp] Mensagem enviada para ${jid}`);
-            } else {
-              errorCount++;
-              const errText = await response.text();
-              console.error(`[WhatsApp] Erro ao enviar para ${jid}:`, errText);
-            }
-          } catch (error) {
-            errorCount++;
-            console.error(`[WhatsApp] Erro na requisição para ${phone}:`, error);
-          }
+      console.log(`[WhatsApp] Iniciando disparos para ${uniquePhones.length} contatos do evento ${event.name}`);
+      
+      for (const phone of uniquePhones) {
+        try {
+          const jid = phone.startsWith("55") ? phone : `55${phone}`;
           
-          // Delay de 3 segundos entre contatos
-          await delay(3000);
+          const response = await fetch(`https://api.z-api.io/instances/${instanceId}/token/${token}/send-text`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "Client-Token": clientToken
+            },
+            body: JSON.stringify({
+              phone: jid,
+              message: formattedMessage,
+              delayMessage: 1
+            })
+          });
+
+          if (response.ok) {
+            sentCount++;
+          } else {
+            errorCount++;
+            const errText = await response.text();
+            console.error(`[WhatsApp] Erro ao enviar para ${jid}:`, errText);
+          }
+        } catch (error) {
+          errorCount++;
+          console.error(`[WhatsApp] Erro na requisição para ${phone}:`, error);
         }
         
-        console.log(`[WhatsApp] Disparos finalizados. Sucesso: ${sentCount}, Erros: ${errorCount}`);
-      })();
+        // Delay reduzido para 250ms para não estourar o limite da Vercel (10s-60s)
+        // Isso permite enviar ~40 mensagens em 10 segundos.
+        await delay(250);
+      }
+      
+      console.log(`[WhatsApp] Disparos finalizados. Sucesso: ${sentCount}, Erros: ${errorCount}`);
 
       return { 
         success: true, 
-        count: uniquePhones.length, 
-        message: `Disparos iniciados para ${uniquePhones.length} inscritos. O processo levará aproximadamente ${(uniquePhones.length * 3) / 60} minutos.` 
+        count: sentCount, 
+        errorCount,
+        message: `Disparos concluídos. Sucesso: ${sentCount}, Erros: ${errorCount}.` 
       };
     }),
 });
