@@ -27,7 +27,8 @@ export default function Login() {
 
         try {
             const endpoint = isLogin ? "/api/auth/login" : "/api/auth/register";
-            const payload = isLogin ? { email, password } : { email, password, name };
+            const normalizedEmail = email.trim().toLowerCase();
+            const payload = isLogin ? { email: normalizedEmail, password } : { email: normalizedEmail, password, name };
 
             const res = await fetch(endpoint, {
                 method: "POST",

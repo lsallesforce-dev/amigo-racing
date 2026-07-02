@@ -287,10 +287,12 @@ class SDKServer {
       throw new ForbiddenError("User not found in local DB");
     }
 
-    await db.upsertUser({
+    // Fire-and-forget: nunca deixar uma falha nesse write (cold start/timeout do Neon)
+    // derrubar a sessão do usuário. Isso já derrubou sessão válida antes.
+    db.upsertUser({
       openId: user.openId,
       lastSignedIn: signedInAt,
-    });
+    }).catch(err => console.warn("[Auth] Falha ao atualizar lastSignedIn (ignorado):", err));
 
     return user;
   }

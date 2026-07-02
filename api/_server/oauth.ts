@@ -7,6 +7,11 @@ import { randomBytes, scryptSync, timingSafeEqual } from "crypto";
 import { ENV } from "./env.js";
 import { sendEmail } from "./email.js";
 
+// E-mail é o openId: normalizar sempre, senão "Foo@X.com" e "foo@x.com" viram contas diferentes
+function normalizeEmail(email: string): string {
+  return email.trim().toLowerCase();
+}
+
 // Local password hashing util using scrypt
 export function hashPassword(password: string): string {
   const salt = randomBytes(16).toString("hex");
@@ -33,10 +38,12 @@ export function registerOAuthRoutes(app: Express) {
 
   app.post("/api/auth/register", async (req, res) => {
     try {
-      const { email, password, name } = req.body;
+      const { password, name } = req.body;
+      let { email } = req.body;
       if (!email || !password || !name) {
         return res.status(400).json({ error: "Missing email, password, or name" });
       }
+      email = normalizeEmail(email);
 
       // Check if user already exists
       const existingUser = await getUserByOpenId(email);
@@ -77,12 +84,14 @@ export function registerOAuthRoutes(app: Express) {
 
   app.post("/api/auth/login", async (req, res) => {
     try {
-      const { email, password } = req.body;
+      const { password } = req.body;
+      let { email } = req.body;
       console.log("[Auth] Login attempt:", JSON.stringify({ email, emailLen: email?.length, pwdLen: password?.length }));
       if (!email || !password) {
         console.log("[Auth] Missing email or password in request body");
         return res.status(400).json({ error: "Missing email or password" });
       }
+      email = normalizeEmail(email);
 
       const user = await getUserByOpenId(email);
       console.log("[Auth] User found in DB:", user ? "YES" : "NO", "Email used:", JSON.stringify(email));
@@ -125,8 +134,9 @@ export function registerOAuthRoutes(app: Express) {
 
   app.post("/api/auth/request-reset", async (req, res) => {
     try {
-      const { email } = req.body;
+      let { email } = req.body;
       if (!email) return res.status(400).json({ error: "Missing email" });
+      email = normalizeEmail(email);
 
       const user = await getUserByOpenId(email);
       if (!user) {
