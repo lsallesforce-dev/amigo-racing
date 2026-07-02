@@ -38,8 +38,13 @@ export function setupMetaRoutes(app: Express) {
       try {
         const db = await getDb();
         if (db && id) {
-            const numericId = Number(id);
-            if (isEvent) {
+            // /events/1 (id numérico) ou /events/rallydocavalo (slug amigável)
+            let numericId = /^\d+$/.test(id) ? Number(id) : undefined;
+            if (isEvent && numericId === undefined) {
+              const [bySlug] = await db.select({ id: events.id }).from(events).where(eq(events.slug, id));
+              numericId = bySlug?.id;
+            }
+            if (isEvent && numericId !== undefined) {
               const [event] = await db.select().from(events).where(eq(events.id, numericId));
               if (event) {
                 title = `${event.name} - Amigo Racing`;

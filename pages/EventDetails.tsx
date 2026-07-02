@@ -59,10 +59,22 @@ const BRAZILIAN_STATES = [
 
 export default function EventDetails() {
   const { id } = useParams<{ id: string }>();
-  const eventId = parseInt(id || "0");
+  const isNumericParam = /^\d+$/.test(id || "");
+
+  // URL pode vir como /events/1 (id numérico) ou /events/rallydocavalo (slug amigável)
+  const slugQuery = trpc.events.resolveSlug.useQuery(
+    { slug: id || "" },
+    { enabled: !isNumericParam && !!id }
+  );
+  const resolvingSlug = !isNumericParam && !slugQuery.data && !slugQuery.isError;
+
+  const eventId = isNumericParam ? parseInt(id || "0") : (slugQuery.data?.id || 0);
   const { user, isAuthenticated } = useAuth();
 
-  const { data: event, isLoading: eventLoading } = trpc.events.get.useQuery({ id: eventId });
+  const { data: event, isLoading: eventLoading } = trpc.events.get.useQuery(
+    { id: eventId },
+    { enabled: eventId > 0 }
+  );
   const { data: categories, isLoading: categoriesLoading } = trpc.categories.listByEvent.useQuery({ eventId });
   const { data: vehicles } = trpc.vehicles.list.useQuery(undefined, { enabled: isAuthenticated });
   const registrationsQuery = trpc.registrations.listByEvent.useQuery(
@@ -348,7 +360,7 @@ export default function EventDetails() {
     });
   };
 
-  if (eventLoading) {
+  if (eventLoading || resolvingSlug) {
     return (
       <div className="min-h-screen bg-background">
         <div className="container py-8">

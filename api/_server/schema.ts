@@ -89,6 +89,7 @@ export type InsertOrganizerMember = typeof organizerMembers.$inferInsert;
  */
 export const events = pgTable("events", {
   id: serial("id").primaryKey(),
+  slug: varchar("slug", { length: 150 }).unique(),
   name: varchar("name", { length: 200 }).notNull(),
   description: text("description"),
   startDate: timestamp("startDate").notNull(),

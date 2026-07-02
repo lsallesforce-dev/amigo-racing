@@ -765,6 +765,12 @@ export const appRouter = router({
     }),
   }),
   events: router({
+    resolveSlug: publicProcedure
+      .input(z.object({ slug: z.string() }))
+      .query(async ({ input }) => {
+        const id = await db.getEventIdBySlug(input.slug);
+        return id ? { id } : null;
+      }),
     list: publicProcedure.query(async () => await db.getAllEvents() || []),
     listAll: publicProcedure.query(async () => {
       try {
