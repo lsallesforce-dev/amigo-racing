@@ -22,6 +22,35 @@ import { PaymentModal } from "@/components/PaymentModal";
 import Navbar from "@/components/Navbar";
 import MetaSEO from "@/components/MetaSEO";
 
+const SHIRT_SIZES = ["PP", "P", "M", "G", "GG", "G1", "G2", "G3", "G4", "Infantil"];
+
+function ShirtSizeCard({ label, htmlId, value, onChange, imageUrl }: { label: string; htmlId: string; value: string; onChange: (v: string) => void; imageUrl?: string | null }) {
+  return (
+    <div className="flex gap-3 p-3 border rounded-lg bg-card items-center">
+      {imageUrl ? (
+        <img src={imageUrl} alt={label} className="w-16 h-16 object-cover rounded-md border shrink-0" />
+      ) : (
+        <div className="w-16 h-16 bg-muted/30 rounded-md border flex items-center justify-center shrink-0">
+          <ShoppingBag className="h-6 w-6 text-muted-foreground/30" />
+        </div>
+      )}
+      <div className="flex-1 min-w-0 space-y-1.5">
+        <Label htmlFor={htmlId} className="text-sm">{label}</Label>
+        <Select value={value} onValueChange={onChange}>
+          <SelectTrigger id={htmlId} className="w-full">
+            <SelectValue placeholder="Escolha o tamanho" />
+          </SelectTrigger>
+          <SelectContent>
+            {SHIRT_SIZES.map(s => (
+              <SelectItem key={s} value={s.toLowerCase()}>{s}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+    </div>
+  );
+}
+
 const BRAZILIAN_STATES = [
   "AC", "AL", "AP", "AM", "BA", "CE", "DF", "ES", "GO", "MA",
   "MT", "MS", "MG", "PA", "PB", "PR", "PE", "PI", "RJ", "RN",
@@ -935,70 +964,41 @@ export default function EventDetails() {
                   {/* Equipe e Camisetas */}
                   <div className="space-y-4">
                     <h3 className="font-semibold">Informações Adicionais</h3>
-                    <div className="grid grid-cols-3 gap-4">
-                      <div className="space-y-2">
-                        <Label htmlFor="form_team">Equipe</Label>
-                        <Input
-                          id="form_team"
-                          value={formData.team}
-                          onChange={(e) => setFormData({ ...formData, team: e.target.value })}
-                          placeholder="Nome da equipe"
-                        />
-                      </div>
-                      {(event as any)?.hasShirts !== false && (
-                        <>
-                          <div className="space-y-2">
-                            <Label htmlFor="pilot_shirt_trigger">Camiseta Piloto *</Label>
-                            <Select
-                              value={formData.pilot_shirt}
-                              onValueChange={(value) => setFormData({ ...formData, pilot_shirt: value })}
-                            >
-                              <SelectTrigger id="pilot_shirt_trigger">
-                                <SelectValue placeholder="Selecione" />
-                              </SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="pp">PP</SelectItem>
-                                <SelectItem value="p">P</SelectItem>
-                                <SelectItem value="m">M</SelectItem>
-                                <SelectItem value="g">G</SelectItem>
-                                <SelectItem value="gg">GG</SelectItem>
-                                <SelectItem value="g1">G1</SelectItem>
-                                <SelectItem value="g2">G2</SelectItem>
-                                <SelectItem value="g3">G3</SelectItem>
-                                <SelectItem value="g4">G4</SelectItem>
-                                <SelectItem value="infantil">Infantil</SelectItem>
-                              </SelectContent>
-                            </Select>
-                          </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="form_team">Equipe</Label>
+                      <Input
+                        id="form_team"
+                        value={formData.team}
+                        onChange={(e) => setFormData({ ...formData, team: e.target.value })}
+                        placeholder="Nome da equipe"
+                      />
+                    </div>
+
+                    {(event as any)?.hasShirts !== false && (() => {
+                      const kitShirtImageUrl = availableProducts?.find(p => p.name.toLowerCase().includes('camis'))?.imageUrl;
+
+                      return (
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                          <ShirtSizeCard
+                            label="Camiseta Piloto *"
+                            htmlId="pilot_shirt_trigger"
+                            value={formData.pilot_shirt}
+                            onChange={(value) => setFormData({ ...formData, pilot_shirt: value })}
+                            imageUrl={kitShirtImageUrl}
+                          />
                           {/* Campo Camiseta Navegador - ocultar para Motos */}
                           {!isMotosCategory && (
-                            <div className="space-y-2">
-                              <Label htmlFor="navigator_shirt_trigger">Camiseta Navegador*</Label>
-                              <Select
-                                value={formData.navigator_shirt}
-                                onValueChange={(value) => setFormData({ ...formData, navigator_shirt: value })}
-                              >
-                                <SelectTrigger id="navigator_shirt_trigger">
-                                  <SelectValue placeholder="Selecione" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  <SelectItem value="pp">PP</SelectItem>
-                                  <SelectItem value="p">P</SelectItem>
-                                  <SelectItem value="m">M</SelectItem>
-                                  <SelectItem value="g">G</SelectItem>
-                                  <SelectItem value="gg">GG</SelectItem>
-                                  <SelectItem value="g1">G1</SelectItem>
-                                  <SelectItem value="g2">G2</SelectItem>
-                                  <SelectItem value="g3">G3</SelectItem>
-                                  <SelectItem value="g4">G4</SelectItem>
-                                  <SelectItem value="infantil">Infantil</SelectItem>
-                                </SelectContent>
-                              </Select>
-                            </div>
+                            <ShirtSizeCard
+                              label="Camiseta Navegador *"
+                              htmlId="navigator_shirt_trigger"
+                              value={formData.navigator_shirt}
+                              onChange={(value) => setFormData({ ...formData, navigator_shirt: value })}
+                              imageUrl={kitShirtImageUrl}
+                            />
                           )}
-                        </>
-                      )}
-                    </div>
+                        </div>
+                      );
+                    })()}
                   </div>
 
                   {/* Loja Oficial */}
@@ -1029,14 +1029,14 @@ export default function EventDetails() {
                                     <ShoppingBag className="h-8 w-8 text-muted-foreground/30" />
                                   </div>
                                 )}
-                                <div className="flex-1 space-y-1">
-                                  <div className="flex justify-between">
+                                <div className="flex-1 min-w-0 space-y-1">
+                                  <div className="flex justify-between gap-2 flex-wrap">
                                     <h4 className="font-semibold">{p.name}</h4>
-                                    <span className="font-bold text-primary">R$ {p.price.toFixed(2)}</span>
+                                    <span className="font-bold text-primary whitespace-nowrap">R$ {p.price.toFixed(2)}</span>
                                   </div>
                                   <p className="text-xs text-muted-foreground line-clamp-2">{p.description}</p>
 
-                                  <div className="flex items-center gap-4 mt-3 pt-2">
+                                  <div className="flex flex-wrap items-center gap-3 mt-3 pt-2">
                                     <div className="flex items-center gap-2">
                                       <Label className="text-xs">Qtd:</Label>
                                       <Select
