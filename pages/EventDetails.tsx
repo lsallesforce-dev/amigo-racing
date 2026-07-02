@@ -489,63 +489,6 @@ export default function EventDetails() {
 
 
 
-          {/* Loja Oficial (Standalone Purchases) */}
-          {!event.isExternal && availableProducts && availableProducts.length > 0 && (
-            <div className="mt-8">
-              <div className="flex items-center gap-2 mb-4">
-                <ShoppingBag className="w-5 h-5 text-primary" />
-                <h2 className="text-xl font-bold tracking-tight">Loja Oficial do Evento</h2>
-              </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {availableProducts.map((product) => {
-                  const sizes = product.availableSizes ? product.availableSizes.split(',').map(s => s.trim()) : [];
-                  const needsSize = sizes.length > 0 || product.name.toLowerCase().includes('camis');
-
-                  return (
-                    <Card key={product.id} className="overflow-hidden flex flex-col border border-primary/10 shadow-sm hover:shadow-md transition-shadow">
-                      {product.imageUrl && (
-                        <div className="aspect-video w-full overflow-hidden bg-muted">
-                          <img src={product.imageUrl} alt={product.name} className="w-full h-full object-cover" />
-                        </div>
-                      )}
-                      <CardHeader className="p-4 pb-2">
-                        <div className="flex justify-between items-start gap-4">
-                          <div>
-                            <CardTitle className="text-lg">{product.name}</CardTitle>
-                            {product.description && (
-                              <CardDescription className="line-clamp-2 mt-1">{product.description}</CardDescription>
-                            )}
-                          </div>
-                          <Badge variant="secondary" className="font-bold text-sm shrink-0">
-                            R$ {product.price.toFixed(2)}
-                          </Badge>
-                        </div>
-                      </CardHeader>
-                      <CardFooter className="p-4 pt-2 mt-auto">
-                        {product.stock > 0 ? (
-                          <Button
-                            className="w-full flex items-center justify-center gap-2"
-                            onClick={() => {
-                              setStandaloneProduct(product);
-                              setStandaloneQuantity(1);
-                              setStandaloneSizes(needsSize ? [""] : []);
-                            }}
-                          >
-                            <ShoppingBag className="w-4 h-4" /> Comprar Agora
-                          </Button>
-                        ) : (
-                          <Button className="w-full" variant="outline" disabled>
-                            Esgotado
-                          </Button>
-                        )}
-                      </CardFooter>
-                    </Card>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-
           {event.isExternal && (event as any).externalUrl && (
             <div className="mt-8">
               <Card className="bg-primary/5 border-primary/20">
@@ -715,6 +658,63 @@ export default function EventDetails() {
               </CardContent>
             </Card>
           ))}
+
+          {/* Loja Oficial (Standalone Purchases) */}
+          {!event.isExternal && availableProducts && availableProducts.length > 0 && (
+            <div className="mt-8">
+              <div className="flex items-center gap-2 mb-4">
+                <ShoppingBag className="w-5 h-5 text-primary" />
+                <h2 className="text-xl font-bold tracking-tight">Loja Oficial do Evento</h2>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {availableProducts.map((product) => {
+                  const sizes = product.availableSizes ? product.availableSizes.split(',').map(s => s.trim()) : [];
+                  const needsSize = sizes.length > 0 || product.name.toLowerCase().includes('camis');
+
+                  return (
+                    <Card key={product.id} className="overflow-hidden flex flex-col border border-primary/10 shadow-sm hover:shadow-md transition-shadow">
+                      {product.imageUrl && (
+                        <div className="aspect-video w-full overflow-hidden bg-muted">
+                          <img src={product.imageUrl} alt={product.name} className="w-full h-full object-cover" />
+                        </div>
+                      )}
+                      <CardHeader className="p-4 pb-2">
+                        <div className="flex justify-between items-start gap-4">
+                          <div>
+                            <CardTitle className="text-lg">{product.name}</CardTitle>
+                            {product.description && (
+                              <CardDescription className="line-clamp-2 mt-1">{product.description}</CardDescription>
+                            )}
+                          </div>
+                          <Badge variant="secondary" className="font-bold text-sm shrink-0">
+                            R$ {product.price.toFixed(2)}
+                          </Badge>
+                        </div>
+                      </CardHeader>
+                      <CardFooter className="p-4 pt-2 mt-auto">
+                        {product.stock > 0 ? (
+                          <Button
+                            className="w-full flex items-center justify-center gap-2"
+                            onClick={() => {
+                              setStandaloneProduct(product);
+                              setStandaloneQuantity(1);
+                              setStandaloneSizes(needsSize ? [""] : []);
+                            }}
+                          >
+                            <ShoppingBag className="w-4 h-4" /> Comprar Agora
+                          </Button>
+                        ) : (
+                          <Button className="w-full" variant="outline" disabled>
+                            Esgotado
+                          </Button>
+                        )}
+                      </CardFooter>
+                    </Card>
+                  );
+                })}
+              </div>
+            </div>
+          )}
 
           <EventSponsors sponsors={(event as any).sponsors} />
           <EventGallery eventId={eventId} images={(event as any).gallery} />
