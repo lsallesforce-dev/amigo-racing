@@ -18,7 +18,7 @@
             "destination": "/api/index.ts"
         },
         {
-            "source": "/events/:id(\\d+)",
+            "source": "/events/:id([\\w-]+)",
             "has": [{ "type": "header", "key": "user-agent", "value": ".*(WhatsApp|Facebot|facebookexternalhit|Twitterbot|Slackbot|LinkedInBot|TelegramBot|Discordbot).*" }],
             "destination": "/api/index.ts"
         },
