@@ -109,13 +109,21 @@ export function setupMetaRoutes(app: Express) {
         { name: "twitter:image", content: image }
       ];
 
+      const escapeAttr = (value: string) =>
+        value.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+
       metaTags.forEach(tag => {
         const attr = tag.name ? `name="${tag.name}"` : `property="${tag.property}"`;
-        const regex = new RegExp(`<meta ${attr} content=".*?" \/>`, "i");
+        const safeContent = escapeAttr(String(tag.content));
+        // [\s\S] em vez de "." e \s+ em vez de espaço fixo: a tag original do index.html
+        // quebra "content=" numa linha separada, e "." não casa quebra de linha - isso fazia
+        // cair sempre no else (append) e deixar DUAS tags og:description/description no head,
+        // e o WhatsApp/Facebook sempre usa a PRIMEIRA (a genérica, errada).
+        const regex = new RegExp(`<meta\\s+${attr}\\s+content="[\\s\\S]*?"\\s*\\/?>`, "i");
         if (html.match(regex)) {
-          html = html.replace(regex, `<meta ${attr} content="${tag.content}" />`);
+          html = html.replace(regex, `<meta ${attr} content="${safeContent}" />`);
         } else {
-          html = html.replace("</head>", `  <meta ${attr} content="${tag.content}" />\n</head>`);
+          html = html.replace("</head>", `  <meta ${attr} content="${safeContent}" />\n</head>`);
         }
       });
 
