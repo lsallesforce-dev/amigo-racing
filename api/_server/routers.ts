@@ -15,6 +15,7 @@ import { getDb } from "./db.js";
 import { products, productOrders, organizerMembers, registrations, events, payments, championshipStages, championshipRequests, users, championships, organizers } from "./schema.js";
 import { eq, sql, and, inArray, ne } from "drizzle-orm";
 import { ENV } from "./env.js";
+import { sendEmail } from "./email.js";
 
 import { championshipRouter, calculateChampionshipStandings } from "./backend_routers/championship.js";
 import { whatsappRouter } from "./backend_routers/whatsapp.js";
@@ -669,12 +670,37 @@ export const appRouter = router({
         const dbInstance = await getDb();
         if (!dbInstance) throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'DB fail' });
 
+        const memberEmail = input.email.toLowerCase().trim();
+
         // Ensure no cyclic or duplicate invitations
-        return await dbInstance.insert(organizerMembers).values({
+        const result = await dbInstance.insert(organizerMembers).values({
           organizerId: user.id, // Only Principal can invite
-          memberEmail: input.email.toLowerCase(),
+          memberEmail,
           permissions: JSON.stringify(input.permissions),
         }).returning();
+
+        const loginUrl = `${ENV.siteUrl}/login`;
+        const emailHtml = `
+          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; color: #333;">
+            <h2 style="color: #ea580c;">Você foi convidado como organizador</h2>
+            <p>Olá,</p>
+            <p><strong>${user.name || user.email}</strong> te deu acesso ao painel de organizador no Amigo Racing.</p>
+            <p>Entre com o e-mail <strong>${memberEmail}</strong> pra acessar as áreas liberadas pra você.</p>
+            <div style="text-align: center; margin: 30px 0;">
+              <a href="${loginUrl}" style="background-color: #ea580c; color: white; padding: 12px 24px; text-decoration: none; border-radius: 4px; font-weight: bold;">Acessar o Painel</a>
+            </div>
+            <p style="color: #666; font-size: 14px;">Se você ainda não tem conta com esse e-mail, crie uma em ${loginUrl} antes de entrar.</p>
+            <hr style="border: none; border-top: 1px solid #eee; margin: 20px 0;" />
+            <p style="color: #999; font-size: 12px; text-align: center;">🏁 Equipe Amigo Racing</p>
+          </div>
+        `;
+
+        const emailSent = await sendEmail(memberEmail, "Você foi convidado como organizador - Amigo Racing", emailHtml);
+        if (!emailSent) {
+          console.warn(`[organizerMembers.invite] Convite salvo no banco mas e-mail NÃO enviado para ${memberEmail}`);
+        }
+
+        return result;
       }),
 
     list: organizerProcedure
