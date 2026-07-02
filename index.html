@@ -21,6 +21,14 @@
 
 <body>
   <div id="root"></div>
+  <script>
+    window.addEventListener('error', function (event) {
+      document.body.innerHTML += '<div style="color:red; background:white; padding:20px; z-index:9999; position:absolute; top:0; left:0; width:100%; border-bottom: 2px solid red;"><strong>Global Error:</strong> ' + event.error?.message + '<br/><pre>' + event.error?.stack + '</pre></div>';
+    });
+    window.addEventListener('unhandledrejection', function (event) {
+      document.body.innerHTML += '<div style="color:red; background:white; padding:20px; z-index:9999; position:absolute; top:0; left:0; width:100%; border-bottom: 2px solid red;"><strong>Unhandled Promise Rejection:</strong> ' + event.reason?.message + '<br/><pre>' + event.reason?.stack + '</pre></div>';
+    });
+  </script>
   <script type="module" src="/main.tsx"></script>
 </body>
 

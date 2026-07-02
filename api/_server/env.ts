@@ -33,10 +33,12 @@ export const ENV = {
   pagarmeApiUrl: process.env.PAGARME_API_URL || "https://api.pagar.me/core/v5",
   pagarmePlatformRecipientId: process.env.PAGARME_PLATFORM_RECIPIENT_ID || "",
 
-  // Supabase Storage
-  supabaseUrl: process.env.SUPABASE_URL || "https://rjcdkasnipxcdrlmkskm.supabase.co",
-  supabaseServiceKey: process.env.SUPABASE_SERVICE_ROLE_KEY || "",
-  supabaseAnonKey: process.env.SUPABASE_ANON_KEY || "",
+  // Cloudflare R2 Storage
+  r2AccountId: process.env.R2_ACCOUNT_ID || "",
+  r2AccessKeyId: process.env.R2_ACCESS_KEY_ID || "",
+  r2SecretAccessKey: process.env.R2_SECRET_ACCESS_KEY || "",
+  r2BucketName: process.env.R2_BUCKET_NAME || "amigo-racing",
+  r2PublicUrl: process.env.R2_PUBLIC_URL || "",
 
   // Gemini AI
   geminiApiKey: process.env.GEMINI_API_KEY || "",
@@ -64,9 +66,8 @@ console.log("[Env] Status Check:", {
   jwtSecret: ENV.cookieSecret === "uma-senha-muito-segura-e-longa-de-32-caracteres" ? "FALLBACK_DETECTED" : "LOADED_OK",
   oAuthUrl: ENV.oAuthServerUrl,
   allowedOrigins: ENV.allowedOrigins,
-  supabaseUrl: ENV.supabaseUrl,
-  supabaseKey: mask(ENV.supabaseServiceKey),
-  supabaseAnonKey: mask(process.env.SUPABASE_ANON_KEY),
+  r2AccountId: ENV.r2AccountId,
+  r2BucketName: ENV.r2BucketName,
   geminiKey: mask(ENV.geminiApiKey),
   zapiInstanceId: ENV.zapiInstanceId,
   siteUrl: ENV.siteUrl

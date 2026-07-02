@@ -37,9 +37,7 @@ const storageRouter = router({
       return { 
         ...config, 
         path: relativePath, 
-        publicUrl,
-        supabaseUrl: ENV.supabaseUrl,
-        anonKey: ENV.supabaseAnonKey
+        publicUrl
       };
     }),
 });

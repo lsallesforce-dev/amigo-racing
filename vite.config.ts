@@ -20,10 +20,10 @@ export default defineConfig({
     },
     server: {
         host: true,
-        port: 3000,
-        strictPort: true,
+        port: 5173,
+        strictPort: false,
         proxy: {
-            '/api': {
+            '^/api/(trpc|auth|oauth|raw-test|webhooks|images|qr-code|upload)': {
                 target: 'http://127.0.0.1:3000',
                 changeOrigin: true,
             },

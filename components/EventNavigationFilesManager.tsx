@@ -37,14 +37,12 @@ export function EventNavigationFilesManager({ eventId, files: filesProp, categor
                 filename: file.name 
             });
 
-            // 2. Upload DIRECTLY to Supabase from Browser
+            // 2. Upload DIRECTLY to S3/R2 from Browser
             const uploadResponse = await fetch(url, {
-                method: "PUT", // Supabase signed URLs work best with PUT
+                method: "PUT",
                 body: file,
                 headers: {
-                    "Content-Type": file.type || "application/octet-stream",
-                    "Authorization": `Bearer ${anonKey || token}`,
-                    "apikey": anonKey || ""
+                    "Content-Type": file.type || "application/octet-stream"
                 }
             });
 

@@ -1,23 +1,25 @@
-// Uses Supabase Storage REST API
+import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
+import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { ENV } from './env.js';
 
-const BUCKET_NAME = "amigo-racing";
-
-function getSupabaseConfig() {
-  const url = ENV.supabaseUrl;
-  const key = ENV.supabaseServiceKey;
-
-  if (!url || !key) {
+function getS3Client() {
+  if (!ENV.r2AccountId || !ENV.r2AccessKeyId || !ENV.r2SecretAccessKey) {
     throw new Error(
-      "Supabase Storage credentials missing: set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY"
+      "R2 Storage credentials missing: set R2_ACCOUNT_ID, R2_ACCESS_KEY_ID and R2_SECRET_ACCESS_KEY"
     );
   }
 
-  return { 
-    baseUrl: url.replace(/\/+$/, ""), 
-    apiKey: key 
-  };
+  return new S3Client({
+    region: "auto",
+    endpoint: `https://${ENV.r2AccountId}.r2.cloudflarestorage.com`,
+    credentials: {
+      accessKeyId: ENV.r2AccessKeyId,
+      secretAccessKey: ENV.r2SecretAccessKey,
+    },
+  });
 }
+
+const BUCKET_NAME = ENV.r2BucketName;
 
 function normalizeKey(relKey: string): string {
   return relKey.replace(/^\/+/, "");
@@ -27,90 +29,53 @@ function normalizeKey(relKey: string): string {
  * Generates a signed URL for direct client-side upload (Bypass Vercel 5MB limit)
  */
 export async function createSignedUploadUrl(relKey: string): Promise<{ url: string; token: string }> {
-  const { baseUrl, apiKey } = getSupabaseConfig();
+  const client = getS3Client();
   const safePath = normalizeKey(relKey);
   
-  // Supabase REST API for signed upload URL:
-  // POST /storage/v1/object/upload/sign/[bucket]/[path]
-  const url = `${baseUrl}/storage/v1/object/upload/sign/${BUCKET_NAME}/${safePath}`;
-
-  const response = await fetch(url, {
-    method: "POST",
-    headers: {
-      "Authorization": `Bearer ${apiKey}`,
-      "Content-Type": "application/json"
-    },
-    body: JSON.stringify({ expiresIn: 3600 }) // 1 hour
+  const command = new PutObjectCommand({ 
+    Bucket: BUCKET_NAME, 
+    Key: safePath 
   });
-
-  if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(`Failed to create signed upload URL (${response.status}): ${errorText}`);
-  }
-
-  const data = await response.json();
-  // Supabase returns { url: "/object/upload/sign/..." } which is relative to /storage/v1
-  // We MUST ensure the full URL includes /storage/v1
-  const relativeUrl = data.url.startsWith('/') ? data.url : `/${data.url}`;
   
-  // Extract token from URL more robustly
-  const urlParts = relativeUrl.split('?');
-  const queryParams = new URLSearchParams(urlParts[1] || "");
-  const token = queryParams.get('token') || "";
+  const url = await getSignedUrl(client, command, { expiresIn: 3600 }); // 1 hour
 
   return {
-    url: `${baseUrl}/storage/v1${relativeUrl}`,
-    token
+    url,
+    token: "" // Not needed for AWS/R2 signed URLs, but kept for interface compatibility
   };
 }
 
 /**
- * Uploads a file to Supabase Storage
+ * Uploads a file to R2 Storage (Server-side upload)
  */
 export async function storagePut(
   relKey: string,
   data: Buffer | ArrayBuffer | string,
   options?: { contentType?: string }
 ): Promise<void> {
-  const { baseUrl, apiKey } = getSupabaseConfig();
+  const client = getS3Client();
   const safePath = normalizeKey(relKey);
   
-  // URL: https://[project-id].supabase.co/storage/v1/object/[bucket]/[path]
-  const url = `${baseUrl}/storage/v1/object/${BUCKET_NAME}/${safePath}`;
-
-  const headers: Record<string, string> = {
-    "Authorization": apiKey.startsWith("Bearer ") ? apiKey : `Bearer ${apiKey}`,
-    "apikey": apiKey.replace("Bearer ", ""),
-    "x-upsert": "true"
-  };
-
-  const keyPreview = apiKey.substring(0, 15) + "...";
-  console.log(`[Supabase Storage] Uploading to ${url}. Key prefix: ${keyPreview}, Length: ${apiKey.length}`);
-
-  if (options?.contentType) {
-    headers["Content-Type"] = options.contentType;
-  }
-
-  const response = await fetch(url, {
-    method: "POST",
-    headers,
-    body: data as any,
+  const command = new PutObjectCommand({
+    Bucket: BUCKET_NAME,
+    Key: safePath,
+    Body: data as any,
+    ContentType: options?.contentType
   });
 
-  if (!response.ok) {
-    const errorText = await response.text();
-    console.error(`[Supabase Storage] Upload failed for ${url}. Status: ${response.status}. Error: ${errorText}`);
-    throw new Error(`Supabase storage upload failed (${response.status}): ${errorText}`);
+  try {
+    await client.send(command);
+  } catch (err: any) {
+    console.error(`[R2 Storage] Upload failed for ${safePath}. Error: ${err.message}`);
+    throw new Error(`R2 storage upload failed: ${err.message}`);
   }
 }
 
 /**
- * Gets a public URL for a file in Supabase Storage
+ * Gets a public URL for a file in R2 Storage
  */
 export async function storageGet(relKey: string): Promise<string> {
-  const { baseUrl } = getSupabaseConfig();
   const safePath = normalizeKey(relKey);
-  
-  // URL: https://[project-id].supabase.co/storage/v1/object/public/[bucket]/[path]
-  return `${baseUrl}/storage/v1/object/public/${BUCKET_NAME}/${safePath}`;
+  const publicUrl = ENV.r2PublicUrl.replace(/\/+$/, "");
+  return `${publicUrl}/${safePath}`;
 }

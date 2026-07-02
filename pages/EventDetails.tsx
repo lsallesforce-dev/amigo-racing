@@ -367,9 +367,7 @@ export default function EventDetails() {
       }
     },
     "image": [
-      eventId === 1 
-        ? "https://rjcdkasnipxcdrlmkskm.supabase.co/storage/v1/object/public/amigo-racing/uploads/event_main_1_1773530911750_i4z0e6.jpg" 
-        : (Array.isArray(event.gallery) && event.gallery.length > 0 ? event.gallery[0] : event.imageUrl)
+      Array.isArray(event.gallery) && event.gallery.length > 0 ? event.gallery[0] : event.imageUrl
     ].filter(Boolean),
     "organizer": {
       "@type": "Organization",
@@ -393,7 +391,7 @@ export default function EventDetails() {
         description={event.description || `Participe do ${event.name} em ${event.city}, ${event.state}. Inscrições abertas na Amigo Racing!`}
         ogTitle={event.name}
         ogDescription={event.description || `Participe do ${event.name} em ${event.city}, ${event.state}.`}
-        ogImage={eventId === 1 ? "https://rjcdkasnipxcdrlmkskm.supabase.co/storage/v1/object/public/amigo-racing/uploads/event_main_1_1773530911750_i4z0e6.jpg" : ((Array.isArray(event.gallery) && event.gallery.length > 0) ? (event.gallery[0] as string) : (event.imageUrl || undefined))}
+        ogImage={((Array.isArray(event.gallery) && event.gallery.length > 0) ? (event.gallery[0] as string) : (event.imageUrl || undefined))}
         jsonLd={eventSchema}
       />
       <Navbar />
@@ -448,7 +446,7 @@ export default function EventDetails() {
                   {event.imageUrl && (
                     <div className="w-full md:w-1/3 shrink-0 flex items-center justify-center bg-muted/30 rounded-lg p-2 border border-border/50">
                       <img 
-                        src={eventId === 1 ? "https://rjcdkasnipxcdrlmkskm.supabase.co/storage/v1/object/public/amigo-racing/uploads/event_main_1_1773530911750_i4z0e6.jpg" : event.imageUrl} 
+                        src={event.imageUrl} 
                         alt={event.name} 
                         className="w-full h-auto max-h-[300px] object-contain rounded shadow-sm" 
                       />
