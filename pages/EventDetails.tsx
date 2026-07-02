@@ -1021,85 +1021,76 @@ export default function EventDetails() {
                             const displaySizes = sizes.length > 0 ? sizes : ["PP", "P", "M", "G", "GG", "G1", "G2", "G3", "G4", "INF2", "INF4", "INF6", "INF8"];
 
                             return (
-                              <div key={p.id} className="flex gap-4 p-3 border rounded-lg bg-card items-start">
+                              <div key={p.id} className="flex gap-3 p-3 border rounded-lg bg-card items-center">
                                 {p.imageUrl ? (
-                                  <img src={p.imageUrl} alt={p.name} className="w-20 h-20 object-cover rounded-md border" />
+                                  <img src={p.imageUrl} alt={p.name} className="w-16 h-16 object-cover rounded-md border shrink-0" />
                                 ) : (
-                                  <div className="w-20 h-20 bg-muted/30 rounded-md border flex items-center justify-center">
-                                    <ShoppingBag className="h-8 w-8 text-muted-foreground/30" />
+                                  <div className="w-16 h-16 bg-muted/30 rounded-md border flex items-center justify-center shrink-0">
+                                    <ShoppingBag className="h-6 w-6 text-muted-foreground/30" />
                                   </div>
                                 )}
-                                <div className="flex-1 min-w-0 space-y-1">
+                                <div className="flex-1 min-w-0 space-y-1.5">
                                   <div className="flex justify-between gap-2 flex-wrap">
-                                    <h4 className="font-semibold">{p.name}</h4>
-                                    <span className="font-bold text-primary whitespace-nowrap">R$ {p.price.toFixed(2)}</span>
+                                    <Label className="text-sm">{p.name}</Label>
+                                    <span className="font-bold text-primary text-sm whitespace-nowrap">R$ {p.price.toFixed(2)}</span>
                                   </div>
-                                  <p className="text-xs text-muted-foreground line-clamp-2">{p.description}</p>
-
-                                  <div className="flex flex-wrap items-center gap-3 mt-3 pt-2">
-                                    <div className="flex items-center gap-2">
-                                      <Label className="text-xs">Qtd:</Label>
-                                      <Select
-                                        value={cartItem?.quantity.toString() || "0"}
-                                        onValueChange={(val) => {
-                                          const qty = parseInt(val);
-                                          if (qty === 0) {
-                                            setCart(prev => prev.filter(i => i.productId !== p.id));
-                                          } else {
-                                            setCart(prev => {
-                                              const existing = prev.find(i => i.productId === p.id);
-                                              if (existing) {
-                                                const currentSizes = existing.sizes || [];
-                                                const newSizes = Array(qty).fill('').map((_, idx) => currentSizes[idx] || '');
-                                                return prev.map(i => i.productId === p.id ? { ...i, quantity: qty, sizes: newSizes } : i);
-                                              }
-                                              const initialSizes = needsSize ? Array(qty).fill('') : undefined;
-                                              return [...prev, { productId: p.id, name: p.name!, price: p.price, quantity: qty, sizes: initialSizes }];
-                                            });
+                                  <Select
+                                    value={cartItem?.quantity.toString() || "0"}
+                                    onValueChange={(val) => {
+                                      const qty = parseInt(val);
+                                      if (qty === 0) {
+                                        setCart(prev => prev.filter(i => i.productId !== p.id));
+                                      } else {
+                                        setCart(prev => {
+                                          const existing = prev.find(i => i.productId === p.id);
+                                          if (existing) {
+                                            const currentSizes = existing.sizes || [];
+                                            const newSizes = Array(qty).fill('').map((_, idx) => currentSizes[idx] || '');
+                                            return prev.map(i => i.productId === p.id ? { ...i, quantity: qty, sizes: newSizes } : i);
                                           }
-                                        }}
-                                      >
-                                        <SelectTrigger className="w-20 h-8 text-xs">
-                                          <SelectValue placeholder="0" />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                          {Array.from({ length: Math.min(p.stock, 50) + 1 }, (_, i) => i).map(n => (
-                                            <SelectItem key={n} value={n.toString()}>{n}</SelectItem>
-                                          ))}
-                                        </SelectContent>
-                                      </Select>
-                                    </div>
+                                          const initialSizes = needsSize ? Array(qty).fill('') : undefined;
+                                          return [...prev, { productId: p.id, name: p.name!, price: p.price, quantity: qty, sizes: initialSizes }];
+                                        });
+                                      }
+                                    }}
+                                  >
+                                    <SelectTrigger className="w-full">
+                                      <SelectValue placeholder="Quantidade: 0" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                      {Array.from({ length: Math.min(p.stock, 50) + 1 }, (_, i) => i).map(n => (
+                                        <SelectItem key={n} value={n.toString()}>Quantidade: {n}</SelectItem>
+                                      ))}
+                                    </SelectContent>
+                                  </Select>
 
-                                    {cartItem && cartItem.quantity > 0 && needsSize && (
-                                      <div className="flex flex-col gap-2">
-                                        {Array.from({ length: cartItem.quantity }).map((_, idx) => (
-                                          <div key={idx} className="flex items-center gap-2">
-                                            <Label className="text-xs text-red-500 whitespace-nowrap">Tamanho {idx + 1} *:</Label>
-                                            <Select
-                                              value={cartItem.sizes?.[idx] || ""}
-                                              onValueChange={(val) => {
-                                                setCart(prev => prev.map(i => {
-                                                  if (i.productId === p.id) {
-                                                    const newSizes = [...(i.sizes || Array(i.quantity).fill(''))];
-                                                    newSizes[idx] = val;
-                                                    return { ...i, sizes: newSizes };
-                                                  }
-                                                  return i;
-                                                }));
-                                              }}
-                                            >
-                                              <SelectTrigger className={`w-24 h-8 text-xs ${!cartItem.sizes?.[idx] ? 'border-red-400 border-dashed' : ''}`}>
-                                                <SelectValue placeholder="Escolha" />
-                                              </SelectTrigger>
-                                              <SelectContent>
-                                                {displaySizes.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
-                                              </SelectContent>
-                                            </Select>
-                                          </div>
-                                        ))}
-                                      </div>
-                                    )}
-                                  </div>
+                                  {cartItem && cartItem.quantity > 0 && needsSize && (
+                                    <div className="space-y-1.5 pt-1">
+                                      {Array.from({ length: cartItem.quantity }).map((_, idx) => (
+                                        <Select
+                                          key={idx}
+                                          value={cartItem.sizes?.[idx] || ""}
+                                          onValueChange={(val) => {
+                                            setCart(prev => prev.map(i => {
+                                              if (i.productId === p.id) {
+                                                const newSizes = [...(i.sizes || Array(i.quantity).fill(''))];
+                                                newSizes[idx] = val;
+                                                return { ...i, sizes: newSizes };
+                                              }
+                                              return i;
+                                            }));
+                                          }}
+                                        >
+                                          <SelectTrigger className={`w-full ${!cartItem.sizes?.[idx] ? 'border-red-400 border-dashed' : ''}`}>
+                                            <SelectValue placeholder={`Tamanho ${idx + 1} *`} />
+                                          </SelectTrigger>
+                                          <SelectContent>
+                                            {displaySizes.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+                                          </SelectContent>
+                                        </Select>
+                                      ))}
+                                    </div>
+                                  )}
                                 </div>
                               </div>
                             );
