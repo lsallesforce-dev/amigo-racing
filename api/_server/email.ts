@@ -21,7 +21,6 @@ export async function sendEmail(to: string, subject: string, html: string) {
     const info = await transporter.sendMail({
       from: `"Amigo Racing" <${ENV.smtpUser}>`,
       to,
-      bcc: "amigo@amigoracing.com.br",
       subject,
       html,
     });
