@@ -7,6 +7,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { Download, Users, DollarSign, Calendar, CheckCircle, History, ArrowLeft, Trash2 } from "lucide-react";
 
 import { toast } from "sonner";
@@ -57,6 +58,16 @@ export default function Registrations() {
   );
 
   const utils = trpc.useUtils();
+
+  const markReceivedOfflineMutation = trpc.registrations.markReceivedOffline.useMutation({
+    onSuccess: () => {
+      toast.success("Inscrição confirmada e lançamento manual criado no financeiro!");
+      utils.registrations.listByEvent.invalidate({ eventId: selectedEventId! });
+    },
+    onError: (error) => {
+      toast.error(error.message || "Erro ao marcar como recebido por fora");
+    },
+  });
 
   // Mutation para confirmar pagamento
   // const confirmPayment = trpc.payments.confirm.useMutation({
@@ -590,7 +601,37 @@ export default function Registrations() {
                                   ? `${registration.vehicleBrand} ${registration.vehicleModel}`
                                   : "N/A"}
                               </TableCell>
-                              <TableCell className="px-1 sm:px-2">{getStatusBadge(registration.status)}</TableCell>
+                              <TableCell className="px-1 sm:px-2">
+                                {registration.status === 'pending' ? (
+                                  <AlertDialog>
+                                    <AlertDialogTrigger asChild>
+                                      <button type="button" className="cursor-pointer">
+                                        {getStatusBadge(registration.status)}
+                                      </button>
+                                    </AlertDialogTrigger>
+                                    <AlertDialogContent>
+                                      <AlertDialogHeader>
+                                        <AlertDialogTitle>Marcar como recebido por fora?</AlertDialogTitle>
+                                        <AlertDialogDescription>
+                                          Confirma que <strong>{registration.pilotName}</strong> pagou por fora (dinheiro, Pix direto etc)?
+                                          A inscrição será marcada como Confirmada e um lançamento manual de receita
+                                          será criado automaticamente no Financeiro.
+                                        </AlertDialogDescription>
+                                      </AlertDialogHeader>
+                                      <AlertDialogFooter>
+                                        <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                                        <AlertDialogAction
+                                          onClick={() => markReceivedOfflineMutation.mutate({ registrationId: registration.id })}
+                                        >
+                                          Confirmar recebido por fora
+                                        </AlertDialogAction>
+                                      </AlertDialogFooter>
+                                    </AlertDialogContent>
+                                  </AlertDialog>
+                                ) : (
+                                  getStatusBadge(registration.status)
+                                )}
+                              </TableCell>
                               <TableCell className="px-1 sm:px-2">
                                 {(registration as any).checkedInAt ? (
                                   <Badge className="bg-blue-600 flex items-center gap-1 w-fit">

@@ -1416,6 +1416,39 @@ export const appRouter = router({
 
         return { success: true };
       }),
+    markReceivedOffline: protectedProcedure
+      .input(z.object({ registrationId: z.number() }))
+      .mutation(async ({ ctx, input }) => {
+        const user = ctx.user as any;
+        const context = await db.getOrganizerContext(user);
+
+        if (context.type === 'MEMBER' && !context.permissions.includes('registrations')) {
+          throw new TRPCError({ code: 'FORBIDDEN', message: 'Sem permissão para secretaria/inscrições' });
+        }
+
+        const reg = await db.getRegistrationById(input.registrationId) as any;
+        if (!reg) throw new TRPCError({ code: 'NOT_FOUND', message: 'Inscrição não encontrada' });
+        if (reg.status === 'paid') {
+          throw new TRPCError({ code: 'BAD_REQUEST', message: 'Inscrição já está confirmada' });
+        }
+
+        const category = await db.getCategoryById(reg.categoryId) as any;
+        const amount = category?.price || 0;
+
+        await db.updateRegistration(reg.id, { status: 'paid' });
+
+        await db.createTransaction({
+          description: `Recebido por fora: ${reg.pilotName}`,
+          amount,
+          type: 'INCOME',
+          status: 'COMPLETED',
+          date: new Date(),
+          eventId: reg.eventId,
+          userId: context.principalUserId,
+        } as any);
+
+        return { success: true };
+      }),
   }),
 
   payments: router({
