@@ -10,17 +10,41 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Separator } from "@/components/ui/separator";
 import { getLoginUrl } from "@/api/_server/const";
 import { trpc } from "@/lib/trpc";
-import { Calendar, MapPin, ArrowLeft, Users, DollarSign, Car, Trash2, Pencil, ShoppingBag, Trophy, Plus, Loader2, ArrowRight } from "lucide-react";
+import { Calendar, MapPin, ArrowLeft, Users, DollarSign, Car, Trash2, Pencil, ShoppingBag, Trophy, Plus, Loader2, ArrowRight, GripVertical } from "lucide-react";
 import { Link, useParams } from "wouter";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { useState } from "react";
+import { useState, useEffect, type ReactNode } from "react";
 import { toast } from "sonner";
 import { EventGallery } from "@/components/EventGallery";
 import { EventSponsors } from "@/components/EventSponsors";
 import { PaymentModal } from "@/components/PaymentModal";
 import Navbar from "@/components/Navbar";
 import MetaSEO from "@/components/MetaSEO";
+import { DndContext, closestCenter, PointerSensor, TouchSensor, useSensor, useSensors, type DragEndEvent } from "@dnd-kit/core";
+import { SortableContext, useSortable, rectSortingStrategy, arrayMove } from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
+
+function SortableCategoryCard({ id, disabled, children }: { id: number; disabled: boolean; children: (dragHandle: ReactNode) => ReactNode }) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id, disabled });
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.4 : 1,
+  };
+  const dragHandle = !disabled ? (
+    <button
+      type="button"
+      {...attributes}
+      {...listeners}
+      className="cursor-grab active:cursor-grabbing text-muted-foreground hover:text-foreground touch-none"
+      title="Arrastar para reordenar"
+    >
+      <GripVertical className="h-4 w-4" />
+    </button>
+  ) : null;
+  return <div ref={setNodeRef} style={style}>{children(dragHandle)}</div>;
+}
 
 const SHIRT_SIZES = ["PP", "P", "M", "G", "GG", "G1", "G2", "G3", "G4", "Infantil"];
 
@@ -147,6 +171,38 @@ export default function EventDetails() {
     (event as any).organizer?.ownerId === user.openId ||
     user.role === 'admin'
   );
+
+  // Ordenação manual dos cards de categoria (arrastar pra reordenar)
+  const [localCategoryOrder, setLocalCategoryOrder] = useState<number[] | null>(null);
+  useEffect(() => {
+    setLocalCategoryOrder(null);
+  }, [categories]);
+
+  const reorderCategories = trpc.categories.reorder.useMutation({
+    onError: () => {
+      toast.error("Erro ao salvar a nova ordem das categorias");
+      setLocalCategoryOrder(null);
+    },
+  });
+
+  const dragSensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 200, tolerance: 5 } })
+  );
+
+  const handleCategoryDragEnd = (subcategories: any[]) => (event: DragEndEvent) => {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+
+    const ids = subcategories.map(c => c.id);
+    const oldIndex = ids.indexOf(active.id as number);
+    const newIndex = ids.indexOf(over.id as number);
+    if (oldIndex === -1 || newIndex === -1) return;
+
+    const newOrder = arrayMove(ids, oldIndex, newIndex);
+    setLocalCategoryOrder(newOrder);
+    reorderCategories.mutate({ orderedIds: newOrder });
+  };
 
   // Estado para edição de categoria
   const [editingCategory, setEditingCategory] = useState<any>(null);
@@ -534,134 +590,150 @@ export default function EventDetails() {
                 </Card>
               ))}
             </div>
-          ) : categories && categories.length > 0 ? (
-            <div className="grid gap-4 grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
-              {/* Mostrar subcategorias como cards individuais */}
-              {categories.filter(c => c.parentId !== null && c.price !== null).map((subcategory) => {
-                const parentCategory = categories.find(c => c.id === subcategory.parentId);
+          ) : categories && categories.length > 0 ? (() => {
+            const subcategoriesList = categories.filter(c => c.parentId !== null && c.price !== null);
+            const orderedSubcategories = localCategoryOrder
+              ? (localCategoryOrder.map(id => subcategoriesList.find(c => c.id === id)).filter(Boolean) as typeof subcategoriesList)
+              : subcategoriesList;
 
-                if (!parentCategory) return null;
+            return (
+              <DndContext sensors={dragSensors} collisionDetection={closestCenter} onDragEnd={handleCategoryDragEnd(orderedSubcategories)}>
+                <SortableContext items={orderedSubcategories.map(c => c.id)} strategy={rectSortingStrategy}>
+                  <div className="grid gap-4 grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
+                    {/* Mostrar subcategorias como cards individuais */}
+                    {orderedSubcategories.map((subcategory) => {
+                      const parentCategory = categories.find(c => c.id === subcategory.parentId);
 
-                return (
-                  <Card key={subcategory.id} className="relative">
-                    <CardHeader>
-                      <CardTitle className="text-2xl flex items-center gap-2">
-                        <span>📁</span>
-                        <span>{parentCategory.name}</span>
-                      </CardTitle>
+                      if (!parentCategory) return null;
 
-                      {/* Botões de editar e deletar - visíveis apenas para organizador */}
-                      {isOrganizer && (
-                        <div className="absolute top-2 right-2 flex gap-1">
-                          {/* Botão de editar */}
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-8 w-8 text-muted-foreground hover:text-primary"
-                            onClick={() => handleEditCategory(subcategory)}
-                          >
-                            <Pencil className="h-4 w-4" />
-                          </Button>
+                      return (
+                        <SortableCategoryCard key={subcategory.id} id={subcategory.id} disabled={!isOrganizer}>
+                          {(dragHandle) => (
+                            <Card className="relative">
+                              <CardHeader>
+                                <CardTitle className="text-2xl flex items-center gap-2">
+                                  {dragHandle}
+                                  <span>📁</span>
+                                  <span>{parentCategory.name}</span>
+                                </CardTitle>
 
-                          {/* Botão de deletar */}
-                          <AlertDialog>
-                            <AlertDialogTrigger asChild>
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                className="h-8 w-8 text-muted-foreground hover:text-destructive"
-                              >
-                                <Trash2 className="h-4 w-4" />
-                              </Button>
-                            </AlertDialogTrigger>
-                            <AlertDialogContent>
-                              <AlertDialogHeader>
-                                <AlertDialogTitle>Deletar categoria?</AlertDialogTitle>
-                                <AlertDialogDescription>
-                                  Tem certeza que deseja deletar a categoria "{subcategory.name}"?
-                                  Todas as inscrições associadas também serão removidas.
-                                  Esta ação não pode ser desfeita.
-                                </AlertDialogDescription>
-                              </AlertDialogHeader>
-                              <AlertDialogFooter>
-                                <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                                <AlertDialogAction
-                                  onClick={() => deleteCategory.mutate({ id: subcategory.id })}
-                                  className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                                >
-                                  Deletar
-                                </AlertDialogAction>
-                              </AlertDialogFooter>
-                            </AlertDialogContent>
-                          </AlertDialog>
-                        </div>
-                      )}
-                      {/* Nome da subcategoria */}
-                      <CardDescription className="text-base font-medium mt-2">
-                        {subcategory.name}
-                      </CardDescription>
-                    </CardHeader>
-                    <CardContent className="space-y-2">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                          <DollarSign className="h-4 w-4" />
-                          <span>R$ {(subcategory.price || 0).toFixed(2)} - R$ {(subcategory.price || 0).toFixed(2)}</span>
-                        </div>
-                        <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                          <Users className="h-4 w-4" />
-                          <span>{subcategory.slots || 0} vagas</span>
-                        </div>
-                      </div>
-                      <p className="text-xs text-muted-foreground mt-2">
-                        1 categoria disponível
-                      </p>
-                    </CardContent>
-                    <CardFooter>
-                      {(event as any).isExternal ? (
-                        <div className="w-full text-center text-muted-foreground">
-                          <Badge variant="secondary" className="mb-2">Evento Externo</Badge>
-                          <p className="text-sm">Este evento não permite inscrição pelo site</p>
-                        </div>
-                      ) : isAuthenticated ? (
-                        event.status === 'open' ? (
-                          <Button
-                            className="w-full"
-                            onClick={() => {
-                              setSelectedParentCategoryId(parentCategory.id.toString());
-                              // Pré-preencher com primeiro veículo se houver
-                              const firstVehicle = vehicles?.[0];
-                              setFormData(prev => ({
-                                ...prev,
-                                categoryId: subcategory.id.toString(),
-                                pilot_vehicle_brand: firstVehicle?.brand || "",
-                                pilot_vehicle_model: firstVehicle?.model || "",
-                                vehicleId: firstVehicle?.id?.toString() || "",
-                              }));
-                              setDialogOpen(true);
-                            }}
-                          >
-                            Inscrever-se
-                          </Button>
-                        ) : (
-                          <Button className="w-full" disabled>
-                            Inscrições Encerradas
-                          </Button>
-                        )
-                      ) : (
-                        <Button
-                          className="w-full"
-                          variant="outline"
-                          asChild
-                        >
-                          <a href={getLoginUrl()}>Entrar para se inscrever</a>
-                        </Button>
-                      )}
-                    </CardFooter>
-                  </Card>
-                );
-              })}
-            </div>
-          ) : (
+                                {/* Botões de editar e deletar - visíveis apenas para organizador */}
+                                {isOrganizer && (
+                                  <div className="absolute top-2 right-2 flex gap-1">
+                                    {/* Botão de editar */}
+                                    <Button
+                                      variant="ghost"
+                                      size="icon"
+                                      className="h-8 w-8 text-muted-foreground hover:text-primary"
+                                      onClick={() => handleEditCategory(subcategory)}
+                                    >
+                                      <Pencil className="h-4 w-4" />
+                                    </Button>
+
+                                    {/* Botão de deletar */}
+                                    <AlertDialog>
+                                      <AlertDialogTrigger asChild>
+                                        <Button
+                                          variant="ghost"
+                                          size="icon"
+                                          className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                                        >
+                                          <Trash2 className="h-4 w-4" />
+                                        </Button>
+                                      </AlertDialogTrigger>
+                                      <AlertDialogContent>
+                                        <AlertDialogHeader>
+                                          <AlertDialogTitle>Deletar categoria?</AlertDialogTitle>
+                                          <AlertDialogDescription>
+                                            Tem certeza que deseja deletar a categoria "{subcategory.name}"?
+                                            Todas as inscrições associadas também serão removidas.
+                                            Esta ação não pode ser desfeita.
+                                          </AlertDialogDescription>
+                                        </AlertDialogHeader>
+                                        <AlertDialogFooter>
+                                          <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                                          <AlertDialogAction
+                                            onClick={() => deleteCategory.mutate({ id: subcategory.id })}
+                                            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                                          >
+                                            Deletar
+                                          </AlertDialogAction>
+                                        </AlertDialogFooter>
+                                      </AlertDialogContent>
+                                    </AlertDialog>
+                                  </div>
+                                )}
+                                {/* Nome da subcategoria */}
+                                <CardDescription className="text-base font-medium mt-2">
+                                  {subcategory.name}
+                                </CardDescription>
+                              </CardHeader>
+                              <CardContent className="space-y-2">
+                                <div className="flex items-center justify-between">
+                                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                                    <DollarSign className="h-4 w-4" />
+                                    <span>R$ {(subcategory.price || 0).toFixed(2)} - R$ {(subcategory.price || 0).toFixed(2)}</span>
+                                  </div>
+                                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                                    <Users className="h-4 w-4" />
+                                    <span>{subcategory.slots || 0} vagas</span>
+                                  </div>
+                                </div>
+                                <p className="text-xs text-muted-foreground mt-2">
+                                  1 categoria disponível
+                                </p>
+                              </CardContent>
+                              <CardFooter>
+                                {(event as any).isExternal ? (
+                                  <div className="w-full text-center text-muted-foreground">
+                                    <Badge variant="secondary" className="mb-2">Evento Externo</Badge>
+                                    <p className="text-sm">Este evento não permite inscrição pelo site</p>
+                                  </div>
+                                ) : isAuthenticated ? (
+                                  event.status === 'open' ? (
+                                    <Button
+                                      className="w-full"
+                                      onClick={() => {
+                                        setSelectedParentCategoryId(parentCategory.id.toString());
+                                        // Pré-preencher com primeiro veículo se houver
+                                        const firstVehicle = vehicles?.[0];
+                                        setFormData(prev => ({
+                                          ...prev,
+                                          categoryId: subcategory.id.toString(),
+                                          pilot_vehicle_brand: firstVehicle?.brand || "",
+                                          pilot_vehicle_model: firstVehicle?.model || "",
+                                          vehicleId: firstVehicle?.id?.toString() || "",
+                                        }));
+                                        setDialogOpen(true);
+                                      }}
+                                    >
+                                      Inscrever-se
+                                    </Button>
+                                  ) : (
+                                    <Button className="w-full" disabled>
+                                      Inscrições Encerradas
+                                    </Button>
+                                  )
+                                ) : (
+                                  <Button
+                                    className="w-full"
+                                    variant="outline"
+                                    asChild
+                                  >
+                                    <a href={getLoginUrl()}>Entrar para se inscrever</a>
+                                  </Button>
+                                )}
+                              </CardFooter>
+                            </Card>
+                          )}
+                        </SortableCategoryCard>
+                      );
+                    })}
+                  </div>
+                </SortableContext>
+              </DndContext>
+            );
+          })() : (
             <Card>
               <CardContent className="py-12 text-center">
                 <p className="text-lg text-muted-foreground">

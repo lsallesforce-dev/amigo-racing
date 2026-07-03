@@ -135,6 +135,7 @@ export const categories = pgTable("categories", {
   slots: integer("slots"),
   parentId: integer("parentId"),
   eventId: integer("eventId").notNull(),
+  sortOrder: integer("sortOrder").default(0).notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 });
 

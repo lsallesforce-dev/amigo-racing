@@ -12,7 +12,7 @@ import { TRPCError } from '@trpc/server';
 import { z } from "zod";
 import * as db from "./db.js";
 import { getDb } from "./db.js";
-import { products, productOrders, organizerMembers, registrations, events, payments, championshipStages, championshipRequests, users, championships, organizers } from "./schema.js";
+import { products, productOrders, organizerMembers, registrations, events, payments, championshipStages, championshipRequests, users, championships, organizers, categories } from "./schema.js";
 import { eq, sql, and, inArray, ne } from "drizzle-orm";
 import { ENV } from "./env.js";
 import { sendEmail } from "./email.js";
@@ -1162,6 +1162,20 @@ export const appRouter = router({
         });
       }),
     listCategories: publicProcedure.input(z.any()).query(async () => []),
+    reorder: protectedProcedure
+      .input(z.object({ orderedIds: z.array(z.number()) }))
+      .mutation(async ({ input }) => {
+        const dbInstance = await getDb();
+        if (!dbInstance) throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'DB fail' });
+
+        await Promise.all(
+          input.orderedIds.map((id, index) =>
+            dbInstance.update(categories).set({ sortOrder: index }).where(eq(categories.id, id))
+          )
+        );
+
+        return { success: true };
+      }),
   }),
   registrations: router({
     create: protectedProcedure

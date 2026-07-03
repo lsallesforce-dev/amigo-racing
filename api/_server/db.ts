@@ -460,7 +460,7 @@ export async function getCategoriesByEventId(eventId: number) {
   const db = await getDb();
   if (!db) return [];
 
-  return await db.select().from(categories).where(eq(categories.eventId, eventId));
+  return await db.select().from(categories).where(eq(categories.eventId, eventId)).orderBy(categories.sortOrder, categories.id);
 }
 
 export async function getCategoryById(id: number) {
