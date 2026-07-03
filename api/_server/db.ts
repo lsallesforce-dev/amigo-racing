@@ -569,6 +569,7 @@ export async function getRegistrationsByUserId(userId: number) {
       eventAllowCancellation: sql<boolean | null>`events."allowCancellation"`,
       eventNotificationEmail: sql<string | null>`events."notificationEmail"`,
       eventHasShirts: events.hasShirts,
+      acceptsCreditCard: events.accepts_credit_card,
       championshipId: championshipStages.championshipId,
     })
     .from(registrations)
