@@ -301,6 +301,30 @@ export async function getRecipientBalance(recipientId: string) {
 }
 
 /**
+ * Busca as transferências (TED/saque) reais de um recebedor no Pagar.me,
+ * com valor bruto, taxa e valor líquido efetivamente transferido.
+ */
+export async function getTransfers(recipientId: string) {
+  const url = `${ENV.pagarmeApiUrl}/transfers?recipient_id=${recipientId}`;
+  const apiKey = ENV.pagarmeApiKey;
+
+  if (!apiKey) throw new Error('PAGARME_API_KEY não configurada');
+
+  const response = await fetch(url, {
+    method: 'GET',
+    headers: {
+      'Authorization': `Basic ${Buffer.from(`${apiKey}:`).toString('base64')}`,
+    },
+  });
+
+  if (!response.ok) {
+    throw new Error(`Erro ao buscar transferências: ${response.status}`);
+  }
+
+  return await response.json();
+}
+
+/**
  * Busca os payables (recebíveis) de um recebedor ou transação no Pagar.me.
  * Retorna o campo `payment_date` com a data exata de liquidação do valor.
  *

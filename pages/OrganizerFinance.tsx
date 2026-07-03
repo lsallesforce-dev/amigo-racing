@@ -85,10 +85,16 @@ export default function OrganizerFinance() {
         refetchInterval: 60_000, // refresh every 60s
     });
 
+    const { data: pagarmeTransfers } = trpc.finance.getPagarmeTransfers.useQuery(undefined, {
+        enabled: isAuthenticated && (user?.role === 'organizer' || user?.role === 'admin'),
+    });
+
     const payoutMutation = trpc.finance.requestPayout.useMutation({
         onSuccess: () => {
             toast.success('Transferência solicitada com sucesso! O valor será creditado em até 1 dia útil.');
             setIsPayoutOpen(false);
+            utils.finance.getPagarmeTransfers.invalidate();
+            utils.finance.getPagarmeBalance.invalidate();
         },
         onError: (err) => {
             toast.error(err.message || 'Erro ao solicitar transferência');
@@ -499,6 +505,24 @@ export default function OrganizerFinance() {
                                 </CardContent>
                             </Card>
                         </div>
+
+                        {pagarmeTransfers && pagarmeTransfers.length > 0 && (
+                            <div className="mt-4 space-y-2">
+                                <h3 className="text-sm font-semibold text-muted-foreground">Transferências (dado real do Pagar.me)</h3>
+                                {pagarmeTransfers.map((t) => (
+                                    <div key={t.id} className="flex flex-wrap items-center justify-between gap-2 p-3 border rounded-lg bg-card text-sm">
+                                        <div className="text-muted-foreground">
+                                            #{t.id} · {t.dateCreated ? new Date(t.dateCreated).toLocaleDateString('pt-BR') : '-'} · {t.status}
+                                        </div>
+                                        <div className="flex gap-4">
+                                            <span>Solicitado: <strong>{formatCurrency(t.grossAmount)}</strong></span>
+                                            <span className="text-red-500">Taxa: <strong>-{formatCurrency(t.fee)}</strong></span>
+                                            <span className="text-green-600">Transferido: <strong>{formatCurrency(t.netAmount)}</strong></span>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
                     </div>
                 )}
 

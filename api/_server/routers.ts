@@ -177,6 +177,33 @@ const financeRouter = router({
       }
     }),
 
+  // Transferências (TED/saque) reais já feitas - valor bruto, taxa e líquido vêm direto do Pagar.me
+  getPagarmeTransfers: organizerProcedure
+    .query(async ({ ctx }) => {
+      const user = ctx.user as any;
+      const freshUser = await db.getUserById(user.id);
+      const recipientId = freshUser?.recipientId || user.recipientId;
+
+      if (!recipientId) return [];
+
+      try {
+        const transfers = await pagarme.getTransfers(recipientId);
+        const list = Array.isArray(transfers) ? transfers : [];
+        return list.map((t: any) => ({
+          id: t.id,
+          grossAmount: Math.round((t.amount || 0) + (t.fee || 0)) / 100,
+          fee: Math.round(t.fee || 0) / 100,
+          netAmount: Math.round(t.amount || 0) / 100,
+          status: t.status,
+          dateCreated: t.date_created,
+          fundingDate: t.funding_date || t.funding_estimated_date,
+        }));
+      } catch (err: any) {
+        console.error('[finance.getPagarmeTransfers] Erro:', err.message);
+        return [];
+      }
+    }),
+
   // Solicita transferência (payout) para o organizador
   requestPayout: organizerProcedure
     .input(z.object({
