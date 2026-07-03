@@ -89,6 +89,11 @@ export default function OrganizerFinance() {
         enabled: isAuthenticated && (user?.role === 'organizer' || user?.role === 'admin'),
     });
 
+    // Taxa de saque (R$3,67 por TED) só é cobrada na transferência em si, não no payable da
+    // inscrição - sem descontar isso, "Recebido (Pagar.me)" não bate com o que caiu no banco.
+    const totalTransferFees = (pagarmeTransfers || []).reduce((sum, t) => sum + t.fee, 0);
+    const netReceived = (pagarmeBalance?.totalReceived || 0) - totalTransferFees;
+
     const payoutMutation = trpc.finance.requestPayout.useMutation({
         onSuccess: () => {
             toast.success('Transferência solicitada com sucesso! O valor será creditado em até 1 dia útil.');
@@ -604,10 +609,10 @@ export default function OrganizerFinance() {
                         </CardHeader>
                         <CardContent>
                             <div className="text-2xl font-bold text-green-600">
-                                {isLoadingBalance ? <Loader2 className="h-5 w-5 animate-spin" /> : formatCurrency(pagarmeBalance?.totalReceived || 0)}
+                                {isLoadingBalance ? <Loader2 className="h-5 w-5 animate-spin" /> : formatCurrency(netReceived)}
                             </div>
                             <p className="text-xs text-muted-foreground mt-1">
-                                Total real via inscrições, já transferido ou não
+                                Líquido de taxas de saque, já transferido ou não
                             </p>
                         </CardContent>
                     </Card>
