@@ -210,9 +210,14 @@ export default function Dashboard() {
       return;
     }
 
-    // Preparação de dados
+    // Preparação de dados - só os campos que este formulário realmente edita.
+    // "hasShirts" é estado só de UI (não é coluna da tabela) e team/notes/
+    // navigatorCity/navigatorState não têm campo nesta tela: mandar null pra
+    // eles aqui apagava esses dados silenciosamente a cada edição, mesmo sem
+    // o usuário ter tocado neles.
+    const { hasShirts, team, notes, navigatorCity, navigatorState, ...formFields } = editForm;
     const submitData = {
-      ...editForm,
+      ...formFields,
       // Limpeza de campos de texto (remover formatação)
       pilotCpf: editForm.pilotCpf.replace(/\D/g, ''),
       navigatorCpf: editForm.navigatorCpf ? editForm.navigatorCpf.replace(/\D/g, '') : null,
@@ -223,16 +228,12 @@ export default function Dashboard() {
       // Garantir que opcionais vazios vão como null para o backend
       navigatorName: editForm.navigatorName || null,
       navigatorEmail: editForm.navigatorEmail || null,
-      navigatorCity: editForm.navigatorCity || null,
-      navigatorState: editForm.navigatorState || null,
       vehicleBrand: editForm.vehicleBrand || null,
       vehicleModel: editForm.vehicleModel || null,
       vehicleColor: editForm.vehicleColor || null,
       vehiclePlate: editForm.vehiclePlate || null,
-      team: editForm.team || null,
-      notes: editForm.notes || null,
-      pilotShirtSize: editForm.hasShirts ? editForm.pilotShirtSize : null,
-      navigatorShirtSize: (editForm.hasShirts && editForm.navigatorName) ? editForm.navigatorShirtSize : null,
+      pilotShirtSize: hasShirts ? editForm.pilotShirtSize : null,
+      navigatorShirtSize: (hasShirts && editForm.navigatorName) ? editForm.navigatorShirtSize : null,
     };
 
     updateRegistration.mutate(submitData);
