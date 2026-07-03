@@ -266,13 +266,14 @@ export default function Registrations() {
       });
 
       sortedSubcats.forEach(category => {
+        // Config de ordem de largada é opcional - a lista de inscritos não pode
+        // ficar em branco só porque o organizador ainda não configurou a largada.
         const config = startConfigs.find(c => c.categoryId === category.id);
-        if (!config) return;
 
         let categoryRegs = registrations.filter(r => r.categoryId === category.id && r.status !== 'cancelled');
 
         // registrationOrder logic
-        if (config.registrationOrder) {
+        if (config?.registrationOrder) {
           try {
             const order = typeof config.registrationOrder === 'string' ? JSON.parse(config.registrationOrder) : config.registrationOrder;
             if (Array.isArray(order) && order.length > 0) {
@@ -287,8 +288,8 @@ export default function Registrations() {
           sortedItems.push({
             ...reg,
             categoryName: parent ? `${parent.name} - ${category.name}` : category.name,
-            number: config.numberStart + index,
-            startTime: calculateStartTime(config.startTime || "08:00", index, config.intervalSeconds)
+            number: config ? config.numberStart + index : index + 1,
+            startTime: config ? calculateStartTime(config.startTime || "08:00", index, config.intervalSeconds) : '-'
           });
         });
       });
