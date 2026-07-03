@@ -133,7 +133,7 @@ const financeRouter = router({
       const recipientId = freshUser?.recipientId || user.recipientId;
 
       if (!recipientId) {
-        return { totalBalance: 0, availableBalance: 0, waitingBalance: 0, hasRecipient: false };
+        return { totalBalance: 0, availableBalance: 0, waitingBalance: 0, totalReceived: 0, hasRecipient: false };
       }
 
       try {
@@ -158,15 +158,22 @@ const financeRouter = router({
 
         const waitingBalance = totalBalance - availableBalance;
 
+        // Total histórico já recebido via Pagar.me, incluindo o que já foi transferido pro banco
+        // (status 'paid') - distinto do saldo ainda retido acima.
+        const totalReceived = payables
+          .filter((p: any) => p.status === 'waiting_funds' || p.status === 'prepaid' || p.status === 'paid')
+          .reduce((sum: number, p: any) => sum + (p.net_amount || 0), 0);
+
         return {
           totalBalance: Math.round(totalBalance) / 100, // centavos -> reais
           availableBalance: Math.round(availableBalance) / 100,
           waitingBalance: Math.round(waitingBalance) / 100,
+          totalReceived: Math.round(totalReceived) / 100,
           hasRecipient: true,
         };
       } catch (err: any) {
         console.error('[finance.getPagarmeBalance] Erro:', err.message);
-        return { totalBalance: 0, availableBalance: 0, waitingBalance: 0, hasRecipient: true, error: err.message };
+        return { totalBalance: 0, availableBalance: 0, waitingBalance: 0, totalReceived: 0, hasRecipient: true, error: err.message };
       }
     }),
 

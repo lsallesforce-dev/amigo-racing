@@ -571,6 +571,22 @@ export default function OrganizerFinance() {
                             </p>
                         </CardContent>
                     </Card>
+                    <Card>
+                        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                            <CardTitle className="text-sm font-medium">
+                                Recebido (Pagar.me)
+                            </CardTitle>
+                            <Wallet className="h-4 w-4 text-[#00a19c]" />
+                        </CardHeader>
+                        <CardContent>
+                            <div className="text-2xl font-bold text-green-600">
+                                {isLoadingBalance ? <Loader2 className="h-5 w-5 animate-spin" /> : formatCurrency(pagarmeBalance?.totalReceived || 0)}
+                            </div>
+                            <p className="text-xs text-muted-foreground mt-1">
+                                Total real via inscrições, já transferido ou não
+                            </p>
+                        </CardContent>
+                    </Card>
                 </div>
 
                 {/* Cenário Futuro (Previsão) */}
