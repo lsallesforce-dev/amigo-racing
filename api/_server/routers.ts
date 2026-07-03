@@ -141,9 +141,11 @@ const financeRouter = router({
         const result = await pagarme.getPayables({ recipientId, size: 100 });
         const payables = result.data || [];
 
-        // Saldo total = soma de todos os payables com status 'waiting_funds' ou 'prepaid'
+        // Saldo total = soma dos payables ainda retidos no Pagar.me (waiting_funds/prepaid).
+        // 'paid' significa que o valor já foi transferido pro banco - não é mais saldo,
+        // e antes ficava contado pra sempre, fazendo o card nunca refletir um saque feito.
         const totalBalance = payables
-          .filter((p: any) => p.status === 'waiting_funds' || p.status === 'prepaid' || p.status === 'paid')
+          .filter((p: any) => p.status === 'waiting_funds' || p.status === 'prepaid')
           .reduce((sum: number, p: any) => sum + (p.net_amount || 0), 0);
 
         // Disponível para saque = payables que já passaram da data de liquidação
