@@ -2,6 +2,7 @@ import { useAuth } from "@/_core/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -725,20 +726,36 @@ export default function OrganizerFinance() {
                                                         </Button>
                                                     )}
                                                     {typeof tx.id === 'string' && !tx.id.startsWith('org-') && !tx.id.startsWith('store-') && (
-                                                        <Button
-                                                            variant="ghost"
-                                                            size="sm"
-                                                            className="h-8 text-red-600 hover:text-red-700 hover:bg-red-100 dark:hover:bg-red-900/20"
-                                                            onClick={() => {
-                                                                if (confirm("Deseja realmente excluir este lançamento?")) {
-                                                                    deleteMutation.mutate({ id: tx.id as string });
-                                                                }
-                                                            }}
-                                                            disabled={deleteMutation.isPending}
-                                                            title="Excluir"
-                                                        >
-                                                            <Trash2 className="h-4 w-4" />
-                                                        </Button>
+                                                        <AlertDialog>
+                                                            <AlertDialogTrigger asChild>
+                                                                <Button
+                                                                    variant="ghost"
+                                                                    size="sm"
+                                                                    className="h-8 text-red-600 hover:text-red-700 hover:bg-red-100 dark:hover:bg-red-900/20"
+                                                                    disabled={deleteMutation.isPending}
+                                                                    title="Excluir"
+                                                                >
+                                                                    <Trash2 className="h-4 w-4" />
+                                                                </Button>
+                                                            </AlertDialogTrigger>
+                                                            <AlertDialogContent>
+                                                                <AlertDialogHeader>
+                                                                    <AlertDialogTitle>Excluir lançamento?</AlertDialogTitle>
+                                                                    <AlertDialogDescription>
+                                                                        Deseja realmente excluir este lançamento? Esta ação não pode ser desfeita.
+                                                                    </AlertDialogDescription>
+                                                                </AlertDialogHeader>
+                                                                <AlertDialogFooter>
+                                                                    <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                                                                    <AlertDialogAction
+                                                                        onClick={() => deleteMutation.mutate({ id: tx.id as string })}
+                                                                        className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                                                                    >
+                                                                        Excluir
+                                                                    </AlertDialogAction>
+                                                                </AlertDialogFooter>
+                                                            </AlertDialogContent>
+                                                        </AlertDialog>
                                                     )}
                                                     {typeof tx.id === 'string' && (tx.id.startsWith('org-') || tx.id.startsWith('store-')) && (
                                                         <span className="text-xs text-muted-foreground" title="Transações do sistema são gerenciadas automaticamente">-</span>
