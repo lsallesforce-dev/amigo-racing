@@ -561,6 +561,7 @@ export async function getRegistrationsByUserId(userId: number) {
       createdAt: registrations.createdAt,
       updatedAt: registrations.updatedAt,
       cancellationReason: registrations.cancellationReason,
+      purchasedProducts: registrations.purchasedProducts,
       categoryPrice: categories.price,
       categoryName: categories.name,
       eventName: events.name,

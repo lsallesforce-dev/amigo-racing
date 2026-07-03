@@ -19,6 +19,31 @@ import { PaymentModal } from "@/components/PaymentModal";
 import { EventDocumentsViewer } from "@/components/EventDocumentsViewer";
 import Navbar from "@/components/Navbar";
 
+function parsePurchasedProducts(purchasedProducts: any): { name: string; price: number; quantity: number; sizes?: string[] }[] {
+  if (!purchasedProducts) return [];
+  try {
+    const items = typeof purchasedProducts === 'string' ? JSON.parse(purchasedProducts) : purchasedProducts;
+    return Array.isArray(items) ? items : [];
+  } catch {
+    return [];
+  }
+}
+
+function getExtrasTotal(purchasedProducts: any): number {
+  return parsePurchasedProducts(purchasedProducts).reduce((sum, item) => sum + (item.price || 0) * (item.quantity || 0), 0);
+}
+
+function formatExtras(purchasedProducts: any): string {
+  const items = parsePurchasedProducts(purchasedProducts);
+  if (items.length === 0) return '';
+  return items.map(item => {
+    if (item.sizes && Array.isArray(item.sizes) && item.sizes.length > 0) {
+      return `${item.quantity}x ${item.name} (${item.sizes.filter(Boolean).join(', ')})`;
+    }
+    return `${item.quantity}x ${item.name}`;
+  }).join(' | ');
+}
+
 export default function Dashboard() {
   const { user, isAuthenticated, loading, logout } = useAuth();
   const [, navigate] = useLocation();
@@ -339,6 +364,12 @@ export default function Dashboard() {
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
                           </svg>
                           <span>Horário de Largada: {reg.startTime.substring(0, 5)}</span>
+                        </div>
+                      )}
+                      {formatExtras((reg as any).purchasedProducts) && (
+                        <div className="flex items-start gap-2 text-sm">
+                          <ShoppingBag className="h-4 w-4 text-muted-foreground mt-0.5" />
+                          <span>Extras: {formatExtras((reg as any).purchasedProducts)}</span>
                         </div>
                       )}
                     </CardContent>
@@ -931,7 +962,7 @@ export default function Dashboard() {
               open={paymentModalOpen}
               onOpenChange={setPaymentModalOpen}
               registrationId={selectedRegistrationForPayment.id}
-              amount={selectedRegistrationForPayment.categoryPrice || 0}
+              amount={(selectedRegistrationForPayment.categoryPrice || 0) + getExtrasTotal(selectedRegistrationForPayment.purchasedProducts)}
               eventName={selectedRegistrationForPayment.eventName || ''}
               categoryName={selectedRegistrationForPayment.categoryName || ''}
               acceptsCreditCard={selectedRegistrationForPayment.acceptsCreditCard}
