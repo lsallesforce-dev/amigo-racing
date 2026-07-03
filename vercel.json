@@ -4,6 +4,12 @@
             "includeFiles": "api/_server/**"
         }
     },
+    "crons": [
+        {
+            "path": "/api/keep-alive",
+            "schedule": "*/5 * * * *"
+        }
+    ],
     "rewrites": [
         {
             "source": "/api/:path*",

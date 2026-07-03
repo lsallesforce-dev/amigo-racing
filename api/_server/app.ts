@@ -16,6 +16,7 @@ import { qrCodeProxyHandler } from "./qrCodeProxy.js";
 import pagarmeWebhook from "./pagarme.js";
 import uploadRoute from "./uploadRoute.js";
 import { setupMetaRoutes } from "./metaRoute.js";
+import { sql } from "drizzle-orm";
 
 export async function createExpressApp() {
     const app = express();
@@ -36,6 +37,20 @@ export async function createExpressApp() {
     });
 
     app.use(express.static(path.join(process.cwd(), "public")));
+
+    // Keep-alive pro Vercel Cron: mantém o compute do Neon acordado (autosuspend
+    // por inatividade é quem causa aquele login de 20-30s quando ninguém acessa
+    // o site por um tempo). Rota pública, leve, sem auth.
+    app.get('/api/keep-alive', async (req, res) => {
+        try {
+            const dbInstance = await getDb();
+            if (!dbInstance) return res.status(503).json({ ok: false, error: "No DB connection" });
+            await dbInstance.execute(sql`select 1`);
+            res.json({ ok: true, timestamp: new Date().toISOString() });
+        } catch (err: any) {
+            res.status(500).json({ ok: false, error: err.message });
+        }
+    });
 
     // Raw DB Test Route to bypass TRPC and see exact postgres.js error
     app.get('/api/raw-test', async (req, res) => {
