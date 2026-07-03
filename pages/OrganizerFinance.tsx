@@ -184,10 +184,10 @@ export default function OrganizerFinance() {
                 ["Recebido (Manual)", formatCurrency(summary?.manualIncome || 0)],
                 ["Vendas Avulsas (Loja)", formatCurrency(summary?.storeIncome || 0)],
                 ["Despesas Pagas", formatCurrency(summary?.expense || 0)],
-                ["Saldo Atual (Caixa)", formatCurrency((summary?.manualBalance || 0) + (pagarmeBalance?.availableBalance || 0))],
+                ["Saldo Atual (Caixa)", formatCurrency((summary?.manualBalance || 0) + netReceived)],
                 ["A Receber (Restante Líquido)", formatCurrency(((summary?.pendingRegistrations || 0) + (summary?.pendingStoreIncome || 0)) * 0.95)],
                 ["A Pagar (Agendado)", formatCurrency(summary?.pendingExpense || 0)],
-                ["Previsão de Lucro Final", formatCurrency((summary?.manualBalance || 0) + (pagarmeBalance?.totalBalance || 0) + ((summary?.pendingRegistrations || 0) + (summary?.pendingStoreIncome || 0)) * 0.95 - (summary?.pendingExpense || 0))],
+                ["Previsão de Lucro Final", formatCurrency((summary?.manualBalance || 0) + netReceived + ((summary?.pendingRegistrations || 0) + (summary?.pendingStoreIncome || 0)) * 0.95 - (summary?.pendingExpense || 0))],
             ];
 
             autoTable(doc, {
@@ -548,23 +548,7 @@ export default function OrganizerFinance() {
                                 {isLoadingSummary ? "..." : formatCurrency(summary?.manualIncome || 0)}
                             </div>
                             <p className="text-xs text-muted-foreground mt-1">
-                                Lançamentos manuais pagos
-                            </p>
-                        </CardContent>
-                    </Card>
-                    <Card>
-                        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                            <CardTitle className="text-sm font-medium">
-                                Loja
-                            </CardTitle>
-                            <ShoppingBag className="h-4 w-4 text-green-500" />
-                        </CardHeader>
-                        <CardContent>
-                            <div className="text-2xl font-bold text-green-600">
-                                {isLoadingSummary ? "..." : formatCurrency(summary?.storeIncome || 0)}
-                            </div>
-                            <p className="text-xs text-muted-foreground mt-1">
-                                Vendas avulsas pagas
+                                Lançamentos manuais recebidos
                             </p>
                         </CardContent>
                     </Card>
@@ -592,11 +576,11 @@ export default function OrganizerFinance() {
                             <TrendingUp className="h-4 w-4 text-primary" />
                         </CardHeader>
                         <CardContent>
-                            <div className={`text-2xl font-bold ${((summary?.manualBalance || 0) + (pagarmeBalance?.availableBalance || 0)) >= 0 ? 'text-green-600 dark:text-green-500' : 'text-red-600 dark:text-red-500'}`}>
-                                {isLoadingSummary ? "..." : formatCurrency((summary?.manualBalance || 0) + (pagarmeBalance?.availableBalance || 0))}
+                            <div className={`text-2xl font-bold ${((summary?.manualBalance || 0) + netReceived) >= 0 ? 'text-green-600 dark:text-green-500' : 'text-red-600 dark:text-red-500'}`}>
+                                {isLoadingSummary ? "..." : formatCurrency((summary?.manualBalance || 0) + netReceived)}
                             </div>
                             <p className="text-xs text-muted-foreground mt-1">
-                                Saldo manual + Pagar.me disponível
+                                Saldo manual + recebido via Pagar.me (líquido)
                             </p>
                         </CardContent>
                     </Card>
@@ -661,8 +645,8 @@ export default function OrganizerFinance() {
                             <TrendingUp className="h-4 w-4 text-primary" />
                         </CardHeader>
                         <CardContent>
-                            <div className={`text-2xl font-bold ${((summary?.manualBalance || 0) + (pagarmeBalance?.totalBalance || 0) + ((summary?.pendingRegistrations || 0) + (summary?.pendingStoreIncome || 0)) * 0.95 - (summary?.pendingExpense || 0)) >= 0 ? 'text-green-600 dark:text-green-500' : 'text-red-600 dark:text-red-500'}`}>
-                                {isLoadingSummary ? "..." : formatCurrency((summary?.manualBalance || 0) + (pagarmeBalance?.totalBalance || 0) + ((summary?.pendingRegistrations || 0) + (summary?.pendingStoreIncome || 0)) * 0.95 - (summary?.pendingExpense || 0))}
+                            <div className={`text-2xl font-bold ${((summary?.manualBalance || 0) + netReceived + ((summary?.pendingRegistrations || 0) + (summary?.pendingStoreIncome || 0)) * 0.95 - (summary?.pendingExpense || 0)) >= 0 ? 'text-green-600 dark:text-green-500' : 'text-red-600 dark:text-red-500'}`}>
+                                {isLoadingSummary ? "..." : formatCurrency((summary?.manualBalance || 0) + netReceived + ((summary?.pendingRegistrations || 0) + (summary?.pendingStoreIncome || 0)) * 0.95 - (summary?.pendingExpense || 0))}
                             </div>
                             <p className="text-xs text-muted-foreground mt-1">
                                 Saldo Real + Expectativa Líquida do Site
