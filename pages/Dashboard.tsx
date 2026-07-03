@@ -833,8 +833,8 @@ export default function Dashboard() {
                 </div>
               </div>
 
-              {/* Seção de Navegador - sempre visível se houver dados */}
-              {(
+              {/* Seção de Navegador - ocultar para categorias de Motos (não tem navegador) */}
+              {editingRegistration?.parentCategoryName !== "Motos" && (
                 <div className="space-y-2">
                   <h3 className="font-semibold">Dados do Navegador</h3>
                   <div className="grid grid-cols-2 gap-4">
