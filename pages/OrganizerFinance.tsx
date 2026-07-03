@@ -535,7 +535,7 @@ export default function OrganizerFinance() {
                 <h2 className="text-lg font-semibold mb-4 text-foreground/80 flex items-center gap-2">
                     <Check className="h-4 w-4 text-green-500" /> Cenário Atual (Realizado)
                 </h2>
-                <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 mb-8">
+                <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 mb-8">
                     <Card>
                         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                             <CardTitle className="text-sm font-medium">
