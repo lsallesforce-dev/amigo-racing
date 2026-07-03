@@ -762,6 +762,23 @@ export const appRouter = router({
         return { success: true };
       }),
 
+    updatePermissions: organizerProcedure
+      .input(z.object({
+        id: z.number(),
+        permissions: z.array(z.string())
+      }))
+      .mutation(async ({ ctx, input }) => {
+        const user = ctx.user as any;
+        const dbInstance = await getDb();
+        if (!dbInstance) throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'DB fail' });
+
+        await dbInstance.update(organizerMembers)
+          .set({ permissions: JSON.stringify(input.permissions) })
+          .where(and(eq(organizerMembers.id, input.id), eq(organizerMembers.organizerId, user.id)));
+
+        return { success: true };
+      }),
+
     myContext: protectedProcedure
       .query(async ({ ctx }) => {
         const user = ctx.user as any;
