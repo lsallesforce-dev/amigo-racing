@@ -1540,6 +1540,22 @@ export async function deleteTransaction(id: string, userId: number) {
 /**
  * Get transactions for a user with optional filters
  */
+// Extras da loja comprados junto da inscrição (registrations.purchasedProducts).
+// O valor pago real de uma inscrição é categoria + extras; ignorar isso fazia o
+// financeiro mostrar R$80 numa inscrição que pagou R$230 (caso Eric, 2 camisetas).
+function sumPurchasedProducts(purchased: unknown): { total: number; label: string } {
+  if (!purchased) return { total: 0, label: "" };
+  try {
+    const items = typeof purchased === 'string' ? JSON.parse(purchased) : purchased;
+    if (!Array.isArray(items) || items.length === 0) return { total: 0, label: "" };
+    const total = items.reduce((sum: number, i: any) => sum + (Number(i.price) || 0) * (Number(i.quantity) || 0), 0);
+    const label = items.map((i: any) => `${i.quantity}x ${i.name}`).join(' + ');
+    return { total, label };
+  } catch {
+    return { total: 0, label: "" };
+  }
+}
+
 export async function getTransactions(userId: number, filters?: { type?: "INCOME" | "EXPENSE", month?: number, year?: number }) {
   const db = await getDb();
   if (!db) return [];
@@ -1587,13 +1603,11 @@ export async function getTransactions(userId: number, filters?: { type?: "INCOME
 
   const organicData = await db
     .select({
-      id: sql<string>`'org-' || ${registrations.id}`,
-      description: sql<string>`'Inscrição: ' || ${registrations.pilotName} || ' - ' || ${categories.name}`,
-      amount: categories.price,
-      type: sql<"INCOME" | "EXPENSE">`'INCOME'`,
-      date: registrations.createdAt,
-      status: sql<"PENDING" | "COMPLETED">`'COMPLETED'`,
-      userId: sql<number>`${userId}`,
+      regId: registrations.id,
+      pilotName: registrations.pilotName,
+      categoryName: categories.name,
+      price: categories.price,
+      purchasedProducts: registrations.purchasedProducts,
       eventId: registrations.eventId,
       createdAt: registrations.createdAt,
       updatedAt: registrations.updatedAt,
@@ -1603,10 +1617,21 @@ export async function getTransactions(userId: number, filters?: { type?: "INCOME
     .innerJoin(events, eq(registrations.eventId, events.id))
     .where(and(...organicConditions));
 
-  const organicTxs = organicData.map(tx => ({
-    ...tx,
-    amount: tx.amount || 0
-  })) as typeof manualTxs;
+  const organicTxs = organicData.map(tx => {
+    const extras = sumPurchasedProducts(tx.purchasedProducts);
+    return {
+      id: `org-${tx.regId}`,
+      description: `Inscrição: ${tx.pilotName} - ${tx.categoryName}${extras.label ? ` + ${extras.label}` : ''}`,
+      amount: (tx.price || 0) + extras.total,
+      type: 'INCOME' as const,
+      date: tx.createdAt,
+      status: 'COMPLETED' as const,
+      userId,
+      eventId: tx.eventId,
+      createdAt: tx.createdAt,
+      updatedAt: tx.updatedAt,
+    };
+  }) as typeof manualTxs;
 
   // STORE TRANSACTIONS (Paid Store Orders)
   let storeConditions: any[] = [
@@ -1721,14 +1746,14 @@ export async function getTransactionSummary(userId: number, filters?: { month?: 
   }
 
   const pendingData = await db
-    .select({ price: categories.price })
+    .select({ price: categories.price, purchasedProducts: registrations.purchasedProducts })
     .from(registrations)
     .innerJoin(categories, eq(registrations.categoryId, categories.id))
     .innerJoin(events, eq(registrations.eventId, events.id))
     .where(and(...pendingConditions));
 
   for (const p of pendingData) {
-    pendingRegistrations += Number(p.price || 0);
+    pendingRegistrations += Number(p.price || 0) + sumPurchasedProducts(p.purchasedProducts).total;
   }
 
   // PENDING STORE ORDERS
