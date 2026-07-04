@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
-import { Download, Users, DollarSign, Calendar, CheckCircle, History, ArrowLeft, Trash2 } from "lucide-react";
+import { Download, Users, DollarSign, Calendar, CheckCircle, Clock, History, ArrowLeft, Trash2 } from "lucide-react";
 
 import { toast } from "sonner";
 import { jsPDF } from "jspdf";
@@ -478,7 +478,7 @@ export default function Registrations() {
             {/* Cards de Estatísticas */}
             {selectedEventId && statistics && (
               <>
-                <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
+                <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-5">
                   <Card>
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                       <CardTitle className="text-sm font-medium">Total de Inscritos</CardTitle>
@@ -491,11 +491,34 @@ export default function Registrations() {
 
                   <Card>
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                      <CardTitle className="text-sm font-medium">Inscrições Pagas</CardTitle>
+                      <CheckCircle className="h-4 w-4 text-green-500" />
+                    </CardHeader>
+                    <CardContent>
+                      <div className="text-2xl font-bold text-green-600">{formatCurrency((statistics as any).paidRevenue || 0)}</div>
+                      <p className="text-xs text-muted-foreground mt-1">{(statistics as any).paidRegistrations || 0} confirmadas</p>
+                    </CardContent>
+                  </Card>
+
+                  <Card>
+                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                      <CardTitle className="text-sm font-medium">Inscrições a Receber</CardTitle>
+                      <Clock className="h-4 w-4 text-amber-500" />
+                    </CardHeader>
+                    <CardContent>
+                      <div className="text-2xl font-bold text-amber-600">{formatCurrency((statistics as any).pendingRevenue || 0)}</div>
+                      <p className="text-xs text-muted-foreground mt-1">{(statistics as any).pendingRegistrationsCount || 0} pendentes</p>
+                    </CardContent>
+                  </Card>
+
+                  <Card>
+                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                       <CardTitle className="text-sm font-medium">Receita Total</CardTitle>
                       <DollarSign className="h-4 w-4 text-muted-foreground" />
                     </CardHeader>
                     <CardContent>
                       <div className="text-2xl font-bold">{formatCurrency(statistics.totalRevenue)}</div>
+                      <p className="text-xs text-muted-foreground mt-1">Pagas + a receber</p>
                     </CardContent>
                   </Card>
 

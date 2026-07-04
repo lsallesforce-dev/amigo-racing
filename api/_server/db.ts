@@ -1407,39 +1407,70 @@ export async function getUserByEmail(email: string) {
  */
 export async function getRegistrationsStatistics(eventId: number) {
   const db = await getDb();
-  if (!db) return { byCategory: [], totalRegistrations: 0, totalRevenue: 0 };
+  if (!db) return { byCategory: [], totalRegistrations: 0, totalRevenue: 0, paidRegistrations: 0, paidRevenue: 0, pendingRegistrationsCount: 0, pendingRevenue: 0 };
 
-  const result = await db
+  // Busca linha a linha (não agregado em SQL) pra poder somar os extras da loja
+  // (purchasedProducts, JSON) junto do preço da categoria - mesma correção já
+  // aplicada no financeiro: ignorar os extras subestimava a receita real.
+  const rows = await db
     .select({
       categoryId: registrations.categoryId,
       categoryName: categories.name,
       price: categories.price,
       slots: categories.slots,
-      totalRegistrations: sql<number>`count(*)`,
-      confirmedRegistrations: sql<number>`count(*) filter (where ${registrations.status} = 'paid')`,
-      pendingRegistrations: sql<number>`count(*) filter (where ${registrations.status} = 'pending')`,
-      revenue: sql<number>`sum(case when ${registrations.status} = 'paid' then ${categories.price} else 0 end)`,
+      status: registrations.status,
+      purchasedProducts: registrations.purchasedProducts,
     })
     .from(registrations)
     .innerJoin(categories, eq(registrations.categoryId, categories.id))
-    .where(eq(registrations.eventId, eventId))
-    .groupBy(registrations.categoryId, categories.name, categories.price, categories.slots);
+    .where(eq(registrations.eventId, eventId));
 
-  const totalRegistrations = result.reduce((acc, curr) => acc + Number(curr.totalRegistrations), 0);
-  const totalRevenue = result.reduce((acc, curr) => acc + Number(curr.revenue), 0);
+  const byCategoryMap = new Map<number, {
+    categoryId: number; categoryName: string; price: number | null; slots: number | null;
+    totalRegistrations: number; confirmedRegistrations: number; pendingRegistrations: number; revenue: number;
+  }>();
+
+  let totalRegistrations = 0, paidRegistrations = 0, paidRevenue = 0, pendingRegistrationsCount = 0, pendingRevenue = 0;
+
+  for (const r of rows) {
+    const amount = (r.price || 0) + sumPurchasedProducts(r.purchasedProducts).total;
+
+    if (!byCategoryMap.has(r.categoryId)) {
+      byCategoryMap.set(r.categoryId, {
+        categoryId: r.categoryId, categoryName: r.categoryName, price: r.price, slots: r.slots,
+        totalRegistrations: 0, confirmedRegistrations: 0, pendingRegistrations: 0, revenue: 0,
+      });
+    }
+    const cat = byCategoryMap.get(r.categoryId)!;
+    cat.totalRegistrations++;
+    totalRegistrations++;
+
+    if (r.status === 'paid') {
+      cat.confirmedRegistrations++;
+      cat.revenue += amount;
+      paidRegistrations++;
+      paidRevenue += amount;
+    } else if (r.status === 'pending') {
+      cat.pendingRegistrations++;
+      pendingRegistrationsCount++;
+      pendingRevenue += amount;
+    }
+  }
+
+  const byCategory = Array.from(byCategoryMap.values()).map(c => ({
+    ...c,
+    totalSlots: c.slots,
+    availableSlots: c.slots ? Math.max(0, c.slots - c.confirmedRegistrations) : null,
+  }));
 
   return {
-    byCategory: result.map(r => ({
-      ...r,
-      totalRegistrations: Number(r.totalRegistrations),
-      confirmedRegistrations: Number(r.confirmedRegistrations),
-      pendingRegistrations: Number(r.pendingRegistrations),
-      revenue: Number(r.revenue || 0),
-      totalSlots: r.slots,
-      availableSlots: r.slots ? Math.max(0, r.slots - Number(r.confirmedRegistrations)) : null
-    })),
+    byCategory,
     totalRegistrations,
-    totalRevenue
+    totalRevenue: paidRevenue + pendingRevenue,
+    paidRegistrations,
+    paidRevenue,
+    pendingRegistrationsCount,
+    pendingRevenue,
   };
 }
 
