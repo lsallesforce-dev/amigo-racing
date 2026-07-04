@@ -137,7 +137,9 @@ export default function Registrations() {
     subcats.forEach(cat => {
       const regs = registrations.filter(r => r.categoryId === cat.id);
       if (regs.length > 0) {
-        groups.push({ categoryId: cat.id, categoryName: cat.name, regs });
+        const parent = categories.find(c => c.id === cat.parentId);
+        const categoryName = parent ? `${parent.name} - ${cat.name}` : cat.name;
+        groups.push({ categoryId: cat.id, categoryName, regs });
       }
     });
 
@@ -625,6 +627,7 @@ export default function Registrations() {
                             <TableHead className="px-1 sm:px-2">Email</TableHead>
                             <TableHead className="px-1 sm:px-2">Categoria</TableHead>
                             <TableHead className="px-1 sm:px-2">Veículo</TableHead>
+                            <TableHead className="px-1 sm:px-2">Navegador</TableHead>
                             <TableHead className="px-1 sm:px-2">Status</TableHead>
                             <TableHead className="px-1 sm:px-2">Check-in</TableHead>
                             <TableHead className="px-1 sm:px-2">Número</TableHead>
@@ -640,7 +643,7 @@ export default function Registrations() {
                           {groupedRegistrations.map((group) => (
                             <Fragment key={group.categoryId}>
                               <TableRow className="hover:bg-transparent">
-                                <TableCell colSpan={14} className="bg-primary/10 font-bold text-primary py-2 px-2">
+                                <TableCell colSpan={15} className="bg-primary/10 font-bold text-primary py-2 px-2">
                                   {group.categoryName}
                                 </TableCell>
                               </TableRow>
@@ -654,6 +657,9 @@ export default function Registrations() {
                                 {registration.vehicleBrand && registration.vehicleModel
                                   ? `${registration.vehicleBrand} ${registration.vehicleModel}`
                                   : "N/A"}
+                              </TableCell>
+                              <TableCell className="px-1 sm:px-2">
+                                {(registration as any).navigatorName || "-"}
                               </TableCell>
                               <TableCell className="px-1 sm:px-2">
                                 {registration.status === 'pending' ? (
