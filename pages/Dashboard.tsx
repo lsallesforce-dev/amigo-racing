@@ -6,6 +6,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { getLoginUrl } from "@/api/_server/const";
 import { trpc } from "@/lib/trpc";
 import { Car, Calendar, MapPin, Plus, Loader2, QrCode, CreditCard, AlertCircle, X, ShoppingBag, Hash, Download, FileText, Trophy } from "lucide-react";
@@ -73,6 +74,11 @@ export default function Dashboard() {
   const [editingRegistration, setEditingRegistration] = useState<any>(null);
   const [editForm, setEditForm] = useState<any>({});
 
+  const { data: editEventProducts } = trpc.store.getAvailable.useQuery(
+    { eventId: editingRegistration?.eventId },
+    { enabled: editDialogOpen && !!editingRegistration?.eventId }
+  );
+
   // Payment modal state
   const [paymentModalOpen, setPaymentModalOpen] = useState(false);
   const [selectedRegistrationForPayment, setSelectedRegistrationForPayment] = useState<any>(null);
@@ -104,6 +110,7 @@ export default function Dashboard() {
       toast.success("Inscrição atualizada com sucesso!");
       setEditDialogOpen(false);
       utils.registrations.myRegistrations.invalidate();
+      utils.store.getAvailable.invalidate();
     },
     onError: (error) => {
       toast.error(error.message || "Erro ao atualizar inscrição");
@@ -163,6 +170,7 @@ export default function Dashboard() {
       vehicleColor: reg.vehicleColor || '',
       vehiclePlate: reg.vehiclePlate || '',
       hasShirts: reg.eventHasShirts !== false,
+      purchasedProducts: parsePurchasedProducts(reg.purchasedProducts),
     });
     setEditDialogOpen(true);
   };
@@ -941,6 +949,100 @@ export default function Dashboard() {
                         onChange={(e) => setEditForm({ ...editForm, vehiclePlate: e.target.value.toUpperCase() })}
                       />
                     </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Camisetas Adicionais (Loja) - só se o evento tiver produtos disponíveis */}
+              {editEventProducts && editEventProducts.length > 0 && (
+                <div className="space-y-2">
+                  <h3 className="font-semibold">Camisetas Adicionais</h3>
+                  <div className="space-y-3">
+                    {editEventProducts.map((p) => {
+                      const sizes = p.availableSizes ? p.availableSizes.split(',').map((s: string) => s.trim()).filter(Boolean) : [];
+                      const needsSize = sizes.length > 0 || p.name.toLowerCase().includes('camis');
+                      const displaySizes = sizes.length > 0 ? sizes : ["PP", "P", "M", "G", "GG", "G1", "G2", "G3", "G4", "INF2", "INF4", "INF6", "INF8"];
+                      const items: any[] = editForm.purchasedProducts || [];
+                      const item = items.find((i) => i.productId === p.id);
+
+                      return (
+                        <div key={p.id} className="flex gap-3 p-3 border rounded-lg items-center">
+                          {p.imageUrl ? (
+                            <img src={p.imageUrl} alt={p.name} className="w-16 h-16 object-cover rounded-md border shrink-0" />
+                          ) : (
+                            <div className="w-16 h-16 bg-muted/30 rounded-md border flex items-center justify-center shrink-0">
+                              <ShoppingBag className="h-6 w-6 text-muted-foreground/30" />
+                            </div>
+                          )}
+                          <div className="flex-1 min-w-0 space-y-1.5">
+                            <div className="flex justify-between gap-2 flex-wrap">
+                              <Label className="text-sm">{p.name}</Label>
+                              <span className="font-bold text-primary text-sm whitespace-nowrap">R$ {p.price.toFixed(2)}</span>
+                            </div>
+                            <Select
+                              value={item?.quantity?.toString() || "0"}
+                              onValueChange={(val) => {
+                                const qty = parseInt(val);
+                                setEditForm((prev: any) => {
+                                  const current: any[] = prev.purchasedProducts || [];
+                                  if (qty === 0) {
+                                    return { ...prev, purchasedProducts: current.filter((i) => i.productId !== p.id) };
+                                  }
+                                  const existing = current.find((i) => i.productId === p.id);
+                                  if (existing) {
+                                    const currentSizes = existing.sizes || [];
+                                    const newSizes = Array(qty).fill('').map((_, idx) => currentSizes[idx] || '');
+                                    return { ...prev, purchasedProducts: current.map((i) => i.productId === p.id ? { ...i, quantity: qty, sizes: newSizes } : i) };
+                                  }
+                                  const initialSizes = needsSize ? Array(qty).fill('') : undefined;
+                                  return { ...prev, purchasedProducts: [...current, { productId: p.id, name: p.name, price: p.price, quantity: qty, sizes: initialSizes }] };
+                                });
+                              }}
+                            >
+                              <SelectTrigger className="w-full">
+                                <SelectValue placeholder="Quantidade: 0" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {Array.from({ length: Math.min(p.stock + (item?.quantity || 0), 50) + 1 }, (_, i) => i).map((n) => (
+                                  <SelectItem key={n} value={n.toString()}>Quantidade: {n}</SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+
+                            {item && item.quantity > 0 && needsSize && (
+                              <div className="space-y-1.5 pt-1">
+                                {Array.from({ length: item.quantity }).map((_, idx) => (
+                                  <Select
+                                    key={idx}
+                                    value={item.sizes?.[idx] || ""}
+                                    onValueChange={(val) => {
+                                      setEditForm((prev: any) => {
+                                        const current: any[] = prev.purchasedProducts || [];
+                                        return {
+                                          ...prev, purchasedProducts: current.map((i) => {
+                                            if (i.productId !== p.id) return i;
+                                            const newSizes = [...(i.sizes || Array(i.quantity).fill(''))];
+                                            newSizes[idx] = val;
+                                            return { ...i, sizes: newSizes };
+                                          })
+                                        };
+                                      });
+                                    }}
+                                  >
+                                    <SelectTrigger className={`w-full ${!item.sizes?.[idx] ? 'border-red-400 border-dashed' : ''}`}>
+                                      <SelectValue placeholder={`Tamanho ${idx + 1} *`} />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                      {displaySizes.map((s: string) => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+                                    </SelectContent>
+                                  </Select>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
               )}

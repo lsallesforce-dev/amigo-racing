@@ -1287,6 +1287,13 @@ export const appRouter = router({
         navigatorState: z.string().nullable().optional(),
         team: z.string().optional(),
         notes: z.string().optional(),
+        purchasedProducts: z.array(z.object({
+          productId: z.string(),
+          name: z.string(),
+          price: z.number(),
+          quantity: z.number(),
+          sizes: z.array(z.string()).optional(),
+        })).optional(),
       }).passthrough())
       .mutation(async ({ ctx, input }) => {
         const { registrationId, ...data } = input;
@@ -1294,6 +1301,34 @@ export const appRouter = router({
         if (!reg || reg.userId !== ctx.user.id) {
           throw new TRPCError({ code: 'UNAUTHORIZED', message: 'Inscrição não encontrada ou sem permissão' });
         }
+
+        // Ajusta estoque pela diferença entre a quantidade antiga e a nova de cada produto
+        if (input.purchasedProducts) {
+          const dbInstance = await getDb();
+          if (dbInstance) {
+            let oldProducts: any[] = [];
+            try {
+              oldProducts = typeof reg.purchasedProducts === 'string' ? JSON.parse(reg.purchasedProducts) : (reg.purchasedProducts as any) || [];
+            } catch { }
+
+            const oldQtyByProduct = new Map<string, number>();
+            oldProducts.forEach((p: any) => oldQtyByProduct.set(p.productId, (oldQtyByProduct.get(p.productId) || 0) + p.quantity));
+
+            const newQtyByProduct = new Map<string, number>();
+            input.purchasedProducts.forEach(p => newQtyByProduct.set(p.productId, (newQtyByProduct.get(p.productId) || 0) + p.quantity));
+
+            const allProductIds = new Set([...oldQtyByProduct.keys(), ...newQtyByProduct.keys()]);
+            for (const productId of allProductIds) {
+              const delta = (newQtyByProduct.get(productId) || 0) - (oldQtyByProduct.get(productId) || 0);
+              if (delta !== 0) {
+                await dbInstance.update(products)
+                  .set({ stock: sql`${products.stock} - ${delta}` })
+                  .where(eq(products.id, productId));
+              }
+            }
+          }
+        }
+
         return await db.updateRegistration(registrationId, {
           ...data,
           updatedAt: new Date()
