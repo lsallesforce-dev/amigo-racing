@@ -278,10 +278,12 @@ export async function getOrderStatus(orderId: string) {
 }
 
 /**
- * Busca o saldo de um recebedor no Pagar.me
+ * Busca o saldo REAL de um recebedor no Pagar.me (endpoint oficial de balance).
+ * Retorna available_amount / waiting_funds_amount / transferred_amount em centavos.
+ * Obs: o path antigo /balance?recipient_id= retorna 404 - nunca funcionou.
  */
 export async function getRecipientBalance(recipientId: string) {
-  const url = `${ENV.pagarmeApiUrl}/balance?recipient_id=${recipientId}`;
+  const url = `${ENV.pagarmeApiUrl}/recipients/${recipientId}/balance`;
   const apiKey = ENV.pagarmeApiKey;
 
   if (!apiKey) throw new Error('PAGARME_API_KEY nÃ£o configurada');

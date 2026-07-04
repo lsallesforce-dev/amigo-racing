@@ -90,10 +90,11 @@ export default function OrganizerFinance() {
         enabled: isAuthenticated && (user?.role === 'organizer' || user?.role === 'admin'),
     });
 
-    // Taxa de saque (R$3,67 por TED) só é cobrada na transferência em si, não no payable da
-    // inscrição - sem descontar isso, "Recebido (Pagar.me)" não bate com o que caiu no banco.
-    const totalTransferFees = (pagarmeTransfers || []).reduce((sum, t) => sum + t.fee, 0);
-    const netReceived = (pagarmeBalance?.totalReceived || 0) - totalTransferFees;
+    // Valores oficiais do balance do Pagar.me (sem cálculo manual):
+    // availableBalance = sacável agora | waitingBalance = a liquidar | transferredToBank = já caiu no banco
+    const availableBalance = pagarmeBalance?.availableBalance || 0;
+    const waitingBalance = pagarmeBalance?.waitingBalance || 0;
+    const transferredToBank = pagarmeBalance?.transferredToBank || 0;
 
     const payoutMutation = trpc.finance.requestPayout.useMutation({
         onSuccess: () => {
@@ -185,10 +186,10 @@ export default function OrganizerFinance() {
                 ["Recebido (Manual)", formatCurrency(summary?.manualIncome || 0)],
                 ["Vendas Avulsas (Loja)", formatCurrency(summary?.storeIncome || 0)],
                 ["Despesas Pagas", formatCurrency(summary?.expense || 0)],
-                ["Saldo Atual (Caixa)", formatCurrency((summary?.manualBalance || 0) + netReceived)],
+                ["Saldo Atual (Caixa)", formatCurrency((summary?.manualBalance || 0) + transferredToBank)],
                 ["A Receber (Restante Líquido)", formatCurrency(((summary?.pendingRegistrations || 0) + (summary?.pendingStoreIncome || 0)) * 0.95)],
                 ["A Pagar (Agendado)", formatCurrency(summary?.pendingExpense || 0)],
-                ["Previsão de Lucro Final", formatCurrency((summary?.manualBalance || 0) + netReceived + ((summary?.pendingRegistrations || 0) + (summary?.pendingStoreIncome || 0)) * 0.95 - (summary?.pendingExpense || 0))],
+                ["Previsão de Lucro Final", formatCurrency((summary?.manualBalance || 0) + transferredToBank + availableBalance + waitingBalance + ((summary?.pendingRegistrations || 0) + (summary?.pendingStoreIncome || 0)) * 0.95 - (summary?.pendingExpense || 0))],
             ];
 
             autoTable(doc, {
@@ -436,36 +437,27 @@ export default function OrganizerFinance() {
                         <h2 className="text-lg font-semibold mb-4 text-foreground/80 flex items-center gap-2">
                             <Wallet className="h-4 w-4 text-[#00a19c]" /> Saldo Pagar.me
                         </h2>
-                        <div className="grid gap-4 grid-cols-1 sm:grid-cols-3">
-                            {/* Card 1: Saldo Total */}
-                            <Card className="border-[#00a19c]/30 bg-gradient-to-br from-[#00a19c]/5 to-[#00a19c]/10">
+                        <div className="grid gap-4 grid-cols-1 sm:grid-cols-2">
+                            {/* Card 1: Saldo Pagar.me = disponível para saque (dado oficial do balance) */}
+                            <Card className="border-green-500 shadow-lg shadow-green-500/20 bg-gradient-to-br from-green-500/10 to-green-600/20 dark:from-green-500/20 dark:to-green-600/10">
                                 <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                                    <CardTitle className="text-sm font-medium text-[#00695c]">Saldo Pagar.me</CardTitle>
-                                    <Wallet className="h-4 w-4 text-[#00a19c]" />
-                                </CardHeader>
-                                <CardContent>
-                                    <div className="text-2xl font-bold text-[#00695c]">
-                                        {isLoadingBalance ? <Loader2 className="h-5 w-5 animate-spin" /> : formatCurrency(pagarmeBalance?.totalBalance || 0)}
-                                    </div>
-                                    <p className="text-xs text-muted-foreground mt-1">Total acumulado (95% das inscrições)</p>
-                                </CardContent>
-                            </Card>
-
-                            {/* Card 2: Disponível para Saque - HIGHLIGHTED */}
-                            <Card className="border-green-500 shadow-lg shadow-green-500/20 bg-gradient-to-br from-green-500/10 to-green-600/20 dark:from-green-500/20 dark:to-green-600/10 scale-105 z-10">
-                                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                                    <CardTitle className="text-sm font-bold text-green-700 dark:text-green-400">Disponível para Saque</CardTitle>
+                                    <CardTitle className="text-sm font-bold text-green-700 dark:text-green-400">Saldo Pagar.me — Disponível para Saque</CardTitle>
                                     <Banknote className="h-5 w-5 text-green-600 animate-pulse" />
                                 </CardHeader>
                                 <CardContent>
                                     <div className="text-3xl font-extrabold text-green-700 dark:text-green-400">
-                                        {isLoadingBalance ? <Loader2 className="h-6 w-6 animate-spin" /> : formatCurrency(pagarmeBalance?.availableBalance || 0)}
+                                        {isLoadingBalance ? <Loader2 className="h-6 w-6 animate-spin" /> : formatCurrency(availableBalance)}
                                     </div>
                                     <p className="text-xs font-medium text-green-600/80 mt-1 italic">Liquidado e pronto para transferência agora</p>
+                                    {waitingBalance > 0 && (
+                                        <p className="text-xs text-muted-foreground mt-1">
+                                            + {formatCurrency(waitingBalance)} a liquidar (aguardando compensação)
+                                        </p>
+                                    )}
                                 </CardContent>
                             </Card>
 
-                            {/* Card 3: Botão Transferir */}
+                            {/* Card 2: Botão Transferir */}
                             <Card className="border-blue-200/50 flex flex-col justify-between">
                                 <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                                     <CardTitle className="text-sm font-medium">Transferência</CardTitle>
@@ -577,11 +569,11 @@ export default function OrganizerFinance() {
                             <TrendingUp className="h-4 w-4 text-primary" />
                         </CardHeader>
                         <CardContent>
-                            <div className={`text-2xl font-bold ${((summary?.manualBalance || 0) + netReceived) >= 0 ? 'text-green-600 dark:text-green-500' : 'text-red-600 dark:text-red-500'}`}>
-                                {isLoadingSummary ? "..." : formatCurrency((summary?.manualBalance || 0) + netReceived)}
+                            <div className={`text-2xl font-bold ${((summary?.manualBalance || 0) + transferredToBank) >= 0 ? 'text-green-600 dark:text-green-500' : 'text-red-600 dark:text-red-500'}`}>
+                                {isLoadingSummary ? "..." : formatCurrency((summary?.manualBalance || 0) + transferredToBank)}
                             </div>
                             <p className="text-xs text-muted-foreground mt-1">
-                                Saldo manual + recebido via Pagar.me (líquido)
+                                Recebido (Pagar.me) + lançamentos manuais recebidos
                             </p>
                         </CardContent>
                     </Card>
@@ -594,10 +586,10 @@ export default function OrganizerFinance() {
                         </CardHeader>
                         <CardContent>
                             <div className="text-2xl font-bold text-green-600">
-                                {isLoadingBalance ? <Loader2 className="h-5 w-5 animate-spin" /> : formatCurrency(netReceived)}
+                                {isLoadingBalance ? <Loader2 className="h-5 w-5 animate-spin" /> : formatCurrency(transferredToBank)}
                             </div>
                             <p className="text-xs text-muted-foreground mt-1">
-                                Líquido de taxas de saque, já transferido ou não
+                                Já transferido para sua conta bancária
                             </p>
                         </CardContent>
                     </Card>
@@ -646,8 +638,8 @@ export default function OrganizerFinance() {
                             <TrendingUp className="h-4 w-4 text-primary" />
                         </CardHeader>
                         <CardContent>
-                            <div className={`text-2xl font-bold ${((summary?.manualBalance || 0) + netReceived + ((summary?.pendingRegistrations || 0) + (summary?.pendingStoreIncome || 0)) * 0.95 - (summary?.pendingExpense || 0)) >= 0 ? 'text-green-600 dark:text-green-500' : 'text-red-600 dark:text-red-500'}`}>
-                                {isLoadingSummary ? "..." : formatCurrency((summary?.manualBalance || 0) + netReceived + ((summary?.pendingRegistrations || 0) + (summary?.pendingStoreIncome || 0)) * 0.95 - (summary?.pendingExpense || 0))}
+                            <div className={`text-2xl font-bold ${((summary?.manualBalance || 0) + transferredToBank + availableBalance + waitingBalance + ((summary?.pendingRegistrations || 0) + (summary?.pendingStoreIncome || 0)) * 0.95 - (summary?.pendingExpense || 0)) >= 0 ? 'text-green-600 dark:text-green-500' : 'text-red-600 dark:text-red-500'}`}>
+                                {isLoadingSummary ? "..." : formatCurrency((summary?.manualBalance || 0) + transferredToBank + availableBalance + waitingBalance + ((summary?.pendingRegistrations || 0) + (summary?.pendingStoreIncome || 0)) * 0.95 - (summary?.pendingExpense || 0))}
                             </div>
                             <p className="text-xs text-muted-foreground mt-1">
                                 Saldo Real + Expectativa Líquida do Site

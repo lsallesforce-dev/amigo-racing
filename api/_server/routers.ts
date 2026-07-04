@@ -133,47 +133,25 @@ const financeRouter = router({
       const recipientId = freshUser?.recipientId || user.recipientId;
 
       if (!recipientId) {
-        return { totalBalance: 0, availableBalance: 0, waitingBalance: 0, totalReceived: 0, hasRecipient: false };
+        return { availableBalance: 0, waitingBalance: 0, transferredToBank: 0, hasRecipient: false };
       }
 
       try {
-        const now = new Date();
-        const result = await pagarme.getPayables({ recipientId, size: 100 });
-        const payables = result.data || [];
-
-        // Saldo total = soma dos payables ainda retidos no Pagar.me (waiting_funds/prepaid).
-        // 'paid' significa que o valor já foi transferido pro banco - não é mais saldo,
-        // e antes ficava contado pra sempre, fazendo o card nunca refletir um saque feito.
-        const totalBalance = payables
-          .filter((p: any) => p.status === 'waiting_funds' || p.status === 'prepaid')
-          .reduce((sum: number, p: any) => sum + (p.net_amount || 0), 0);
-
-        // Disponível para saque = payables que já passaram da data de liquidação
-        const availableBalance = payables
-          .filter((p: any) => {
-            const paymentDate = p.payment_date ? new Date(p.payment_date) : null;
-            return (p.status === 'waiting_funds' || p.status === 'prepaid') && paymentDate && paymentDate <= now;
-          })
-          .reduce((sum: number, p: any) => sum + (p.net_amount || 0), 0);
-
-        const waitingBalance = totalBalance - availableBalance;
-
-        // Total histórico já recebido via Pagar.me, incluindo o que já foi transferido pro banco
-        // (status 'paid') - distinto do saldo ainda retido acima.
-        const totalReceived = payables
-          .filter((p: any) => p.status === 'waiting_funds' || p.status === 'prepaid' || p.status === 'paid')
-          .reduce((sum: number, p: any) => sum + (p.net_amount || 0), 0);
+        // Saldo oficial do Pagar.me (GET /recipients/{id}/balance) - fonte da verdade,
+        // sem recalcular nada por payables (payable 'paid' = liquidado no saldo do
+        // recebedor, NÃO "já sacado"; o cálculo manual antigo confundia os dois e o
+        // painel vivia dessincronizado do dashboard do Pagar.me).
+        const balance = await pagarme.getRecipientBalance(recipientId);
 
         return {
-          totalBalance: Math.round(totalBalance) / 100, // centavos -> reais
-          availableBalance: Math.round(availableBalance) / 100,
-          waitingBalance: Math.round(waitingBalance) / 100,
-          totalReceived: Math.round(totalReceived) / 100,
+          availableBalance: (balance.available_amount || 0) / 100,   // sacável agora
+          waitingBalance: (balance.waiting_funds_amount || 0) / 100, // a liquidar
+          transferredToBank: (balance.transferred_amount || 0) / 100, // já caiu no banco
           hasRecipient: true,
         };
       } catch (err: any) {
         console.error('[finance.getPagarmeBalance] Erro:', err.message);
-        return { totalBalance: 0, availableBalance: 0, waitingBalance: 0, totalReceived: 0, hasRecipient: true, error: err.message };
+        return { availableBalance: 0, waitingBalance: 0, transferredToBank: 0, hasRecipient: true, error: err.message };
       }
     }),
 
