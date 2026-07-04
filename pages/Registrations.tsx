@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, Fragment } from "react";
 import { useLocation } from "wouter";
 import { trpc } from "@/lib/trpc";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -127,6 +127,29 @@ export default function Registrations() {
     const category = categories.find(c => c.id === categoryId);
     return category?.name || "N/A";
   };
+
+  // Agrupa os inscritos por categoria, na mesma ordem definida no drag-and-drop
+  // dos cards de categoria do evento (categories já vem ordenado por sortOrder).
+  const groupedRegistrations = useMemo(() => {
+    const subcats = categories.filter(c => !!c.parentId);
+    const groups: { categoryId: number; categoryName: string; regs: typeof registrations }[] = [];
+
+    subcats.forEach(cat => {
+      const regs = registrations.filter(r => r.categoryId === cat.id);
+      if (regs.length > 0) {
+        groups.push({ categoryId: cat.id, categoryName: cat.name, regs });
+      }
+    });
+
+    // Inscrições cuja categoria não foi encontrada (ex: categoria excluída depois)
+    const knownIds = new Set(subcats.map(c => c.id));
+    const orphanRegs = registrations.filter(r => !knownIds.has(r.categoryId));
+    if (orphanRegs.length > 0) {
+      groups.push({ categoryId: -1, categoryName: "Outras", regs: orphanRegs });
+    }
+
+    return groups;
+  }, [categories, registrations]);
 
   // Mapeamento de registrationId -> { number, time } baseado na configuração de largada
   const startOrderMap = useMemo(() => {
@@ -614,7 +637,14 @@ export default function Registrations() {
                           </TableRow>
                         </TableHeader>
                         <TableBody>
-                          {registrations.map((registration) => (
+                          {groupedRegistrations.map((group) => (
+                            <Fragment key={group.categoryId}>
+                              <TableRow className="hover:bg-transparent">
+                                <TableCell colSpan={14} className="bg-primary/10 font-bold text-primary py-2 px-2">
+                                  {group.categoryName}
+                                </TableCell>
+                              </TableRow>
+                              {group.regs.map((registration) => (
                             <TableRow key={registration.id}>
                               <TableCell className="font-medium px-1 sm:px-2">{registration.pilotName}</TableCell>
                               <TableCell className="px-1 sm:px-2">{(registration as any).pilotAge || '-'}</TableCell>
@@ -775,6 +805,8 @@ export default function Registrations() {
                                 </div>
                               </TableCell>
                             </TableRow>
+                              ))}
+                            </Fragment>
                           ))}
                         </TableBody>
                       </Table>
