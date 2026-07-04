@@ -1574,7 +1574,7 @@ export async function deleteTransaction(id: string, userId: number) {
 // Extras da loja comprados junto da inscrição (registrations.purchasedProducts).
 // O valor pago real de uma inscrição é categoria + extras; ignorar isso fazia o
 // financeiro mostrar R$80 numa inscrição que pagou R$230 (caso Eric, 2 camisetas).
-function sumPurchasedProducts(purchased: unknown): { total: number; label: string } {
+export function sumPurchasedProducts(purchased: unknown): { total: number; label: string } {
   if (!purchased) return { total: 0, label: "" };
   try {
     const items = typeof purchased === 'string' ? JSON.parse(purchased) : purchased;

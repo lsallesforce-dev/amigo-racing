@@ -1477,12 +1477,16 @@ export const appRouter = router({
         }
 
         const category = await db.getCategoryById(reg.categoryId) as any;
-        const amount = category?.price || 0;
+        const extras = db.sumPurchasedProducts(reg.purchasedProducts);
+        const amount = (category?.price || 0) + extras.total;
+        const description = extras.label
+          ? `Recebido por fora: ${reg.pilotName} (${extras.label})`
+          : `Recebido por fora: ${reg.pilotName}`;
 
         await db.updateRegistration(reg.id, { status: 'paid' });
 
         await db.createTransaction({
-          description: `Recebido por fora: ${reg.pilotName}`,
+          description,
           amount,
           type: 'INCOME',
           status: 'COMPLETED',
@@ -1490,6 +1494,26 @@ export const appRouter = router({
           eventId: reg.eventId,
           userId: context.principalUserId,
         } as any);
+
+        return { success: true };
+      }),
+    markConfirmedCourtesy: protectedProcedure
+      .input(z.object({ registrationId: z.number() }))
+      .mutation(async ({ ctx, input }) => {
+        const user = ctx.user as any;
+        const context = await db.getOrganizerContext(user);
+
+        if (context.type === 'MEMBER' && !context.permissions.includes('registrations')) {
+          throw new TRPCError({ code: 'FORBIDDEN', message: 'Sem permissão para secretaria/inscrições' });
+        }
+
+        const reg = await db.getRegistrationById(input.registrationId) as any;
+        if (!reg) throw new TRPCError({ code: 'NOT_FOUND', message: 'Inscrição não encontrada' });
+        if (reg.status === 'paid') {
+          throw new TRPCError({ code: 'BAD_REQUEST', message: 'Inscrição já está confirmada' });
+        }
+
+        await db.updateRegistration(reg.id, { status: 'paid' });
 
         return { success: true };
       }),

@@ -69,6 +69,16 @@ export default function Registrations() {
     },
   });
 
+  const markConfirmedCourtesyMutation = trpc.registrations.markConfirmedCourtesy.useMutation({
+    onSuccess: () => {
+      toast.success("Inscrição confirmada como cortesia (sem lançamento financeiro)!");
+      utils.registrations.listByEvent.invalidate({ eventId: selectedEventId! });
+    },
+    onError: (error) => {
+      toast.error(error.message || "Erro ao confirmar cortesia");
+    },
+  });
+
   // Mutation para confirmar pagamento
   // const confirmPayment = trpc.payments.confirm.useMutation({
   //   onSuccess: async () => {
@@ -671,19 +681,27 @@ export default function Registrations() {
                                     </AlertDialogTrigger>
                                     <AlertDialogContent>
                                       <AlertDialogHeader>
-                                        <AlertDialogTitle>Marcar como recebido por fora?</AlertDialogTitle>
+                                        <AlertDialogTitle>Confirmar inscrição de {registration.pilotName}</AlertDialogTitle>
                                         <AlertDialogDescription>
-                                          Confirma que <strong>{registration.pilotName}</strong> pagou por fora (dinheiro, Pix direto etc)?
-                                          A inscrição será marcada como Confirmada e um lançamento manual de receita
-                                          será criado automaticamente no Financeiro.
+                                          Escolha como confirmar esta inscrição pendente.
                                         </AlertDialogDescription>
                                       </AlertDialogHeader>
-                                      <AlertDialogFooter>
+                                      <div className="text-sm text-muted-foreground space-y-1 py-2">
+                                        <p><strong>Recebido por fora:</strong> pagou em dinheiro/Pix direto — cria lançamento de receita no Financeiro.</p>
+                                        <p><strong>Confirmado (cortesia):</strong> ganhou a inscrição (patrocinador, convidado etc) — NÃO cria lançamento financeiro.</p>
+                                      </div>
+                                      <AlertDialogFooter className="flex-col sm:flex-row gap-2">
                                         <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                                        <AlertDialogAction
+                                          className="bg-muted text-foreground hover:bg-muted/80"
+                                          onClick={() => markConfirmedCourtesyMutation.mutate({ registrationId: registration.id })}
+                                        >
+                                          Confirmado (cortesia)
+                                        </AlertDialogAction>
                                         <AlertDialogAction
                                           onClick={() => markReceivedOfflineMutation.mutate({ registrationId: registration.id })}
                                         >
-                                          Confirmar recebido por fora
+                                          Recebido por fora
                                         </AlertDialogAction>
                                       </AlertDialogFooter>
                                     </AlertDialogContent>
