@@ -10,7 +10,6 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { Download, Users, DollarSign, Calendar, CheckCircle, Clock, History, ArrowLeft, Trash2, Pencil } from "lucide-react";
 
 import { toast } from "sonner";
@@ -693,20 +692,10 @@ export default function Registrations() {
                       <Table>
                         <TableHeader>
                           <TableRow>
+                            <TableHead className="px-1 sm:px-2 w-16">Nº</TableHead>
                             <TableHead className="px-1 sm:px-2">Piloto</TableHead>
-                            <TableHead className="px-1 sm:px-2">Idade</TableHead>
-                            <TableHead className="px-1 sm:px-2">Email</TableHead>
-                            <TableHead className="px-1 sm:px-2">Categoria</TableHead>
-                            <TableHead className="px-1 sm:px-2">Veículo</TableHead>
                             <TableHead className="px-1 sm:px-2">Navegador</TableHead>
-                            <TableHead className="px-1 sm:px-2">Status</TableHead>
-                            <TableHead className="px-1 sm:px-2">Check-in</TableHead>
-                            <TableHead className="px-1 sm:px-2">Número</TableHead>
-                            <TableHead className="px-1 sm:px-2">Horário</TableHead>
-                            <TableHead className="px-1 sm:px-2">Data</TableHead>
-                            <TableHead className="px-1 sm:px-2">Observações</TableHead>
-                            <TableHead>Equipe</TableHead>
-                            <TableHead>Cancelamento</TableHead>
+                            <TableHead className="px-1 sm:px-2">Equipe</TableHead>
                             <TableHead className="text-right px-1 sm:px-2">Ações</TableHead>
                           </TableRow>
                         </TableHeader>
@@ -714,192 +703,54 @@ export default function Registrations() {
                           {groupedRegistrations.map((group) => (
                             <Fragment key={group.categoryId}>
                               <TableRow className="hover:bg-transparent">
-                                <TableCell colSpan={15} className="bg-primary/10 font-bold text-primary py-2 px-2">
+                                <TableCell colSpan={5} className="bg-primary/10 font-bold text-primary py-2 px-2">
                                   {group.categoryName}
                                 </TableCell>
                               </TableRow>
-                              {group.regs.map((registration) => (
-                            <TableRow key={registration.id}>
-                              <TableCell className="font-medium px-1 sm:px-2">{registration.pilotName}</TableCell>
-                              <TableCell className="px-1 sm:px-2">{(registration as any).pilotAge || '-'}</TableCell>
-                              <TableCell className="px-1 sm:px-2">{registration.pilotEmail}</TableCell>
-                              <TableCell className="px-1 sm:px-2">{getCategoryName(registration.categoryId)}</TableCell>
-                              <TableCell className="px-1 sm:px-2">
-                                {registration.vehicleBrand && registration.vehicleModel
-                                  ? `${registration.vehicleBrand} ${registration.vehicleModel}`
-                                  : "N/A"}
-                              </TableCell>
-                              <TableCell className="px-1 sm:px-2">
-                                {(registration as any).navigatorName || "-"}
-                              </TableCell>
-                              <TableCell className="px-1 sm:px-2">
-                                {registration.status === 'pending' ? (
-                                  <AlertDialog>
-                                    <AlertDialogTrigger asChild>
-                                      <button type="button" className="cursor-pointer">
+                              {group.regs.map((registration) => {
+                                const info = startOrderMap.get(registration.id);
+                                const number = info?.number ?? (registration as any).startNumber ?? "-";
+                                return (
+                                  <TableRow key={registration.id}>
+                                    <TableCell className="px-1 sm:px-2 text-muted-foreground">{number}</TableCell>
+                                    <TableCell className="font-medium px-1 sm:px-2">
+                                      <div className="flex items-center gap-2">
+                                        {registration.pilotName}
                                         {getStatusBadge(registration.status)}
-                                      </button>
-                                    </AlertDialogTrigger>
-                                    <AlertDialogContent>
-                                      <AlertDialogHeader>
-                                        <AlertDialogTitle>Confirmar inscrição de {registration.pilotName}</AlertDialogTitle>
-                                        <AlertDialogDescription>
-                                          Escolha como confirmar esta inscrição pendente.
-                                        </AlertDialogDescription>
-                                      </AlertDialogHeader>
-                                      <div className="text-sm text-muted-foreground space-y-1 py-2">
-                                        <p><strong>Recebido por fora:</strong> pagou em dinheiro/Pix direto — cria lançamento de receita no Financeiro.</p>
-                                        <p><strong>Confirmado (cortesia):</strong> ganhou a inscrição (patrocinador, convidado etc) — NÃO cria lançamento financeiro.</p>
                                       </div>
-                                      <AlertDialogFooter className="flex-col sm:flex-row gap-2">
-                                        <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                                        <AlertDialogAction
-                                          className="bg-muted text-foreground hover:bg-muted/80"
-                                          onClick={() => markConfirmedCourtesyMutation.mutate({ registrationId: registration.id })}
+                                    </TableCell>
+                                    <TableCell className="px-1 sm:px-2">
+                                      {(registration as any).navigatorName || "-"}
+                                    </TableCell>
+                                    <TableCell className="px-1 sm:px-2">{registration.team || "-"}</TableCell>
+                                    <TableCell className="text-right px-1 sm:px-2">
+                                      <div className="flex items-center justify-end gap-2">
+                                        <Button
+                                          size="sm"
+                                          variant="outline"
+                                          className="gap-2"
+                                          onClick={() => openEditDialog(registration)}
                                         >
-                                          Confirmado (cortesia)
-                                        </AlertDialogAction>
-                                        <AlertDialogAction
-                                          onClick={() => markReceivedOfflineMutation.mutate({ registrationId: registration.id })}
+                                          <Pencil className="h-4 w-4" />
+                                          Editar
+                                        </Button>
+                                        <Button
+                                          size="icon"
+                                          variant="ghost"
+                                          className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10"
+                                          title="Excluir Inscrição"
+                                          onClick={() => {
+                                            setRegistrationToDelete(registration);
+                                            setDeleteConfirmDialogOpen(true);
+                                          }}
                                         >
-                                          Recebido por fora
-                                        </AlertDialogAction>
-                                      </AlertDialogFooter>
-                                    </AlertDialogContent>
-                                  </AlertDialog>
-                                ) : (
-                                  getStatusBadge(registration.status)
-                                )}
-                              </TableCell>
-                              <TableCell className="px-1 sm:px-2">
-                                {(registration as any).checkedInAt ? (
-                                  <Badge className="bg-blue-600 flex items-center gap-1 w-fit">
-                                    <CheckCircle className="h-3 w-3" />
-                                    {new Date((registration as any).checkedInAt).toLocaleTimeString("pt-BR", {
-                                      hour: "2-digit",
-                                      minute: "2-digit",
-                                    })}
-                                  </Badge>
-                                ) : (
-                                  <span className="text-muted-foreground text-sm">Pendente</span>
-                                )}
-                              </TableCell>
-                              <TableCell className="px-1 sm:px-2">
-                                {(() => {
-                                  const info = startOrderMap.get(registration.id);
-                                  return (
-                                    <input
-                                      type="number"
-                                      className="w-16 px-2 py-1 text-sm border rounded min-h-10 sm:min-h-8 bg-muted/30"
-                                      placeholder="Nº"
-                                      value={info?.number ?? (registration as any).startNumber ?? ""}
-                                      readOnly
-                                    />
-                                  );
-                                })()}
-                              </TableCell>
-                              <TableCell className="px-1 sm:px-2">
-                                {(() => {
-                                  const info = startOrderMap.get(registration.id);
-                                  return (
-                                    <input
-                                      type="time"
-                                      className="w-24 px-2 py-1 text-sm border rounded min-h-10 sm:min-h-8 bg-muted/30"
-                                      value={info?.time ?? (registration as any).startTime ?? ""}
-                                      readOnly
-                                    />
-                                  );
-                                })()}
-                              </TableCell>
-                              <TableCell className="px-1 sm:px-2">{formatDate(registration.createdAt)}</TableCell>
-                              <TableCell className="px-1 sm:px-2">
-                                {(registration as any).notes ? (
-                                  <div className="max-w-xs truncate" title={(registration as any).notes}>
-                                    {(registration as any).notes}
-                                  </div>
-                                ) : (
-                                  <span className="text-muted-foreground text-sm">-</span>
-                                )}
-                              </TableCell>
-                              <TableCell className="px-1 sm:px-2">{registration.team || "-"}</TableCell>
-                              <TableCell className="px-1 sm:px-2">
-                                <div className="flex items-center gap-2 justify-between">
-                                  {registration.status === 'cancellation_requested' ? (
-                                    <div className="flex flex-col gap-1">
-                                      <Badge variant="outline" className="text-orange-600 border-orange-200 bg-orange-50 text-[10px] sm:text-xs">
-                                        Solicitado
-                                      </Badge>
-                                      {registration.cancellationReason && (
-                                        <div className="group relative">
-                                          <span className="text-[10px] text-muted-foreground underline cursor-help">Ver motivo</span>
-                                          <div className="absolute right-0 bottom-full mb-2 hidden group-hover:block z-50 w-64 p-2 bg-popover border rounded-md shadow-lg text-xs break-words whitespace-normal font-normal">
-                                            {registration.cancellationReason}
-                                          </div>
-                                        </div>
-                                      )}
-                                    </div>
-                                  ) : registration.status === 'cancelled' ? (
-                                    <Badge variant="destructive" className="text-[10px] sm:text-xs">Cancelado</Badge>
-                                  ) : (
-                                    <span className="text-xs text-muted-foreground">-</span>
-                                  )}
-
-                                  <Button
-                                    size="icon"
-                                    variant="ghost"
-                                    className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10"
-                                    title="Excluir Inscrição"
-                                    onClick={() => {
-                                      setRegistrationToDelete(registration);
-                                      setDeleteConfirmDialogOpen(true);
-                                    }}
-                                  >
-                                    <Trash2 className="h-4 w-4" />
-                                  </Button>
-                                </div>
-                              </TableCell>
-                              <TableCell className="text-right px-1 sm:px-2">
-                                <div className="flex items-center justify-end gap-2">
-                                  <Button
-                                    size="sm"
-                                    variant="outline"
-                                    className="gap-2"
-                                    onClick={() => openEditDialog(registration)}
-                                  >
-                                    <Pencil className="h-4 w-4" />
-                                    Editar
-                                  </Button>
-                                  <Button
-                                    size="sm"
-                                    variant="ghost"
-                                    className="gap-2"
-                                    onClick={() => {
-                                      setSelectedRegistrationId(registration.id);
-                                      setHistoryDialogOpen(true);
-                                    }}
-                                  >
-                                    <History className="h-4 w-4" />
-                                    Histórico
-                                  </Button>
-                                  {/* {registration.status === "pending" && registration.paymentId ? (
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                className="gap-2"
-                                onClick={() => confirmPayment.mutate({ id: registration.paymentId! })}
-                                disabled={confirmPayment.isPending}
-                              >
-                                <CheckCircle className="h-4 w-4" />
-                                Confirmar Pagamento
-                              </Button>
-                            ) : */}
-                                  {registration.status === "paid" ? (
-                                    <Badge className="bg-green-600">Confirmado</Badge>
-                                  ) : null}
-                                </div>
-                              </TableCell>
-                            </TableRow>
-                              ))}
+                                          <Trash2 className="h-4 w-4" />
+                                        </Button>
+                                      </div>
+                                    </TableCell>
+                                  </TableRow>
+                                );
+                              })}
                             </Fragment>
                           ))}
                         </TableBody>
@@ -996,6 +847,52 @@ export default function Registrations() {
 
             {editForm && (
               <div className="space-y-6 py-2">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  {editForm.status === 'pending' && (
+                    <div className="flex flex-wrap items-center gap-2 p-3 border rounded-md bg-muted/30 w-full">
+                      <span className="text-sm text-muted-foreground mr-auto">Inscrição pendente de pagamento:</span>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        disabled={markConfirmedCourtesyMutation.isPending}
+                        onClick={() => {
+                          markConfirmedCourtesyMutation.mutate({ registrationId: editForm.registrationId });
+                          setEditForm({ ...editForm, status: 'paid' });
+                        }}
+                      >
+                        Confirmado (cortesia)
+                      </Button>
+                      <Button
+                        size="sm"
+                        disabled={markReceivedOfflineMutation.isPending}
+                        onClick={() => {
+                          markReceivedOfflineMutation.mutate({ registrationId: editForm.registrationId });
+                          setEditForm({ ...editForm, status: 'paid' });
+                        }}
+                      >
+                        Recebido por fora
+                      </Button>
+                    </div>
+                  )}
+                  {editForm.status === 'cancellation_requested' && registrations.find((r: any) => r.id === editForm.registrationId)?.cancellationReason && (
+                    <div className="text-sm p-3 border rounded-md bg-orange-50 border-orange-200 text-orange-800 w-full">
+                      <strong>Motivo do cancelamento solicitado:</strong> {registrations.find((r: any) => r.id === editForm.registrationId)?.cancellationReason}
+                    </div>
+                  )}
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="gap-2 ml-auto"
+                    onClick={() => {
+                      setSelectedRegistrationId(editForm.registrationId);
+                      setHistoryDialogOpen(true);
+                    }}
+                  >
+                    <History className="h-4 w-4" />
+                    Ver Histórico
+                  </Button>
+                </div>
+
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div className="space-y-1">
                     <Label>Categoria</Label>
