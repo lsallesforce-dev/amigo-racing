@@ -695,6 +695,7 @@ export default function Registrations() {
                             <TableHead className="px-1 sm:px-2 w-16">Nº</TableHead>
                             <TableHead className="px-1 sm:px-2">Piloto</TableHead>
                             <TableHead className="px-1 sm:px-2">Navegador</TableHead>
+                            <TableHead className="px-1 sm:px-2">Veículo</TableHead>
                             <TableHead className="px-1 sm:px-2">Equipe</TableHead>
                             <TableHead className="text-right px-1 sm:px-2">Ações</TableHead>
                           </TableRow>
@@ -703,7 +704,7 @@ export default function Registrations() {
                           {groupedRegistrations.map((group) => (
                             <Fragment key={group.categoryId}>
                               <TableRow className="hover:bg-transparent">
-                                <TableCell colSpan={5} className="bg-primary/10 font-bold text-primary py-2 px-2">
+                                <TableCell colSpan={6} className="bg-primary/10 font-bold text-primary py-2 px-2">
                                   {group.categoryName}
                                 </TableCell>
                               </TableRow>
@@ -721,6 +722,11 @@ export default function Registrations() {
                                     </TableCell>
                                     <TableCell className="px-1 sm:px-2">
                                       {(registration as any).navigatorName || "-"}
+                                    </TableCell>
+                                    <TableCell className="px-1 sm:px-2">
+                                      {registration.vehicleBrand && registration.vehicleModel
+                                        ? `${registration.vehicleBrand} ${registration.vehicleModel}`
+                                        : "-"}
                                     </TableCell>
                                     <TableCell className="px-1 sm:px-2">{registration.team || "-"}</TableCell>
                                     <TableCell className="text-right px-1 sm:px-2">
