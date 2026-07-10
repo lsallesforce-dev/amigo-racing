@@ -442,12 +442,12 @@ export default function Registrations() {
 
         autoTable(doc, {
           startY: currentY,
-          head: [['Nº', 'Piloto', 'CPF Piloto', 'Camis.', 'Navegador', 'CPF Nav.', 'Camis.', 'Equipe', 'Status', 'Extras']],
+          head: [['Nº', 'Piloto', 'CPF Piloto', 'Cam', 'Navegador', 'CPF Nav.', 'Cam', 'Equipe', 'Status', 'Extras']],
           body: tableBody,
           theme: 'striped',
-          headStyles: { fillColor: [31, 41, 55], textColor: [255, 255, 255], fontSize: 9, fontStyle: 'bold', halign: 'center' },
-          columnStyles: { 0: { cellWidth: 12, halign: 'center' }, 1: { cellWidth: 35 }, 2: { cellWidth: 25 }, 3: { cellWidth: 12, halign: 'center' }, 4: { cellWidth: 35 }, 5: { cellWidth: 25 }, 6: { cellWidth: 12, halign: 'center' }, 7: { cellWidth: 25 }, 8: { cellWidth: 20, halign: 'center' }, 9: { cellWidth: 35 } },
-          styles: { fontSize: 8, cellPadding: 3, valign: 'middle' },
+          headStyles: { fillColor: [31, 41, 55], textColor: [255, 255, 255], fontSize: 11, fontStyle: 'bold', halign: 'center' },
+          columnStyles: { 0: { cellWidth: 12, halign: 'center' }, 1: { cellWidth: 44 }, 2: { cellWidth: 31 }, 3: { cellWidth: 15, halign: 'center' }, 4: { cellWidth: 44 }, 5: { cellWidth: 31 }, 6: { cellWidth: 15, halign: 'center' }, 7: { cellWidth: 30 }, 8: { cellWidth: 26, halign: 'center' }, 9: { cellWidth: 21 } },
+          styles: { fontSize: 10, cellPadding: 3, valign: 'middle' },
           margin: { left: 14, right: 14 }
         });
 
