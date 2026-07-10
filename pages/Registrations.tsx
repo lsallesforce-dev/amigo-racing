@@ -395,22 +395,25 @@ export default function Registrations() {
         categoriesMap.get(item.categoryName)!.push(item);
       });
 
-      let currentY = 60;
+      const pageHeight = doc.internal.pageSize.getHeight();
 
-      categoriesMap.forEach((items, categoryName) => {
-        if (currentY > 165) {
-          doc.addPage();
-          currentY = 20;
-        }
-
+      // Banner (barra) do nome da categoria. Usado tanto na 1ª página da
+      // categoria quanto no topo das páginas de continuação.
+      const drawCategoryBanner = (label: string, baselineY: number) => {
         doc.setFillColor(249, 115, 22, 0.1);
-        doc.rect(14, currentY - 5, pageWidth - 28, 8, 'F');
+        doc.rect(14, baselineY - 5, pageWidth - 28, 8, 'F');
         doc.setTextColor(234, 88, 12);
         doc.setFontSize(12);
         doc.setFont("helvetica", "bold");
-        doc.text(categoryName, 17, currentY);
-        currentY += 5;
+        doc.text(label, 17, baselineY);
+      };
 
+      // Onde o banner de continuação senta no topo das páginas seguintes.
+      const contBannerBaseline = 18;
+
+      let currentY = 60;
+
+      categoriesMap.forEach((items, categoryName) => {
         const formatExtras = (purchasedItems: any) => {
           if (!purchasedItems) return '-';
           try {
@@ -440,18 +443,40 @@ export default function Registrations() {
           formatExtras(reg.purchasedProducts)
         ]);
 
+        // Paginação inteligente: se não couber o banner + cabeçalho + ao menos
+        // 2 linhas antes do fim da página, começa a categoria já na próxima -
+        // evita banner órfão no rodapé com o resto jogado pra página seguinte.
+        const minBlock = 8 /*banner*/ + 10 /*cabeçalho*/ + 14 * Math.min(2, items.length);
+        if (currentY + minBlock > pageHeight - 14) {
+          doc.addPage();
+          currentY = 20;
+        }
+
+        const tableStartY = currentY;
+        let firstTablePage = true;
+
         autoTable(doc, {
-          startY: currentY,
+          startY: tableStartY + 5,
           head: [['Nº', 'Piloto', 'CPF Piloto', 'Cam', 'Navegador', 'CPF Nav.', 'Cam', 'Equipe', 'Status', 'Extras']],
           body: tableBody,
           theme: 'striped',
           headStyles: { fillColor: [31, 41, 55], textColor: [255, 255, 255], fontSize: 11, fontStyle: 'bold', halign: 'center' },
           columnStyles: { 0: { cellWidth: 12, halign: 'center' }, 1: { cellWidth: 44 }, 2: { cellWidth: 31 }, 3: { cellWidth: 15, halign: 'center' }, 4: { cellWidth: 44 }, 5: { cellWidth: 31 }, 6: { cellWidth: 15, halign: 'center' }, 7: { cellWidth: 30 }, 8: { cellWidth: 26, halign: 'center' }, 9: { cellWidth: 21 } },
           styles: { fontSize: 10, cellPadding: 3, valign: 'middle' },
-          margin: { left: 14, right: 14 }
+          showHead: 'everyPage',
+          // Reserva o topo das páginas de continuação para o banner repetido.
+          margin: { left: 14, right: 14, top: contBannerBaseline + 6 },
+          didDrawPage: () => {
+            if (firstTablePage) {
+              drawCategoryBanner(categoryName, tableStartY);
+              firstTablePage = false;
+            } else {
+              drawCategoryBanner(`${categoryName} (continuação)`, contBannerBaseline);
+            }
+          },
         });
 
-        currentY = (doc as any).lastAutoTable.finalY + 15;
+        currentY = (doc as any).lastAutoTable.finalY + 12;
       });
 
       doc.save(`lista_evento_${event.name.replace(/\s+/g, '_').toLowerCase()}.pdf`);
