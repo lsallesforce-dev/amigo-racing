@@ -6,9 +6,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
-import { Download, Users, DollarSign, Calendar, CheckCircle, Clock, History, ArrowLeft, Trash2 } from "lucide-react";
+import { Download, Users, DollarSign, Calendar, CheckCircle, Clock, History, ArrowLeft, Trash2, Pencil } from "lucide-react";
 
 import { toast } from "sonner";
 import { jsPDF } from "jspdf";
@@ -32,6 +35,8 @@ export default function Registrations() {
   const [selectedRegistrationId, setSelectedRegistrationId] = useState<number | null>(null);
   const [deleteConfirmDialogOpen, setDeleteConfirmDialogOpen] = useState(false);
   const [registrationToDelete, setRegistrationToDelete] = useState<any>(null);
+  const [editDialogOpen, setEditDialogOpen] = useState(false);
+  const [editForm, setEditForm] = useState<any>(null);
 
   // Efeito para carregar eventId da URL se presente
   useEffect(() => {
@@ -98,6 +103,20 @@ export default function Registrations() {
     },
     onError: (error) => {
       toast.error(error.message || "Erro ao atualizar informações de largada");
+    },
+  });
+
+  // Mutation para edição completa da inscrição
+  const updateFullMutation = trpc.registrations.updateFull.useMutation({
+    onSuccess: async () => {
+      toast.success("Inscrição atualizada com sucesso!");
+      setEditDialogOpen(false);
+      setEditForm(null);
+      await utils.registrations.listByEvent.invalidate();
+      await utils.registrations.getStatistics.invalidate();
+    },
+    onError: (error) => {
+      toast.error(error.message || "Erro ao atualizar inscrição");
     },
   });
 
@@ -238,6 +257,48 @@ export default function Registrations() {
 
 
 
+
+  const openEditDialog = (registration: any) => {
+    setEditForm({
+      registrationId: registration.id,
+      categoryId: registration.categoryId,
+      status: registration.status,
+      pilotName: registration.pilotName || "",
+      pilotEmail: registration.pilotEmail || "",
+      pilotCpf: registration.pilotCpf || "",
+      pilotCity: registration.pilotCity || "",
+      pilotState: registration.pilotState || "",
+      pilotAge: registration.pilotAge ?? "",
+      pilotShirtSize: registration.pilotShirtSize || "",
+      phone: registration.phone || "",
+      navigatorName: registration.navigatorName || "",
+      navigatorEmail: registration.navigatorEmail || "",
+      navigatorCpf: registration.navigatorCpf || "",
+      navigatorCity: registration.navigatorCity || "",
+      navigatorState: registration.navigatorState || "",
+      navigatorShirtSize: registration.navigatorShirtSize || "",
+      team: registration.team || "",
+      vehicleBrand: registration.vehicleBrand || "",
+      vehicleModel: registration.vehicleModel || "",
+      vehicleYear: registration.vehicleYear ?? "",
+      vehicleColor: registration.vehicleColor || "",
+      vehiclePlate: registration.vehiclePlate || "",
+      notes: registration.notes || "",
+      startNumber: registration.startNumber ?? "",
+      startTime: registration.startTime || "",
+    });
+    setEditDialogOpen(true);
+  };
+
+  const handleSaveEdit = () => {
+    if (!editForm) return;
+    updateFullMutation.mutate({
+      ...editForm,
+      pilotAge: editForm.pilotAge === "" ? null : Number(editForm.pilotAge),
+      vehicleYear: editForm.vehicleYear === "" ? null : Number(editForm.vehicleYear),
+      startNumber: editForm.startNumber === "" ? null : Number(editForm.startNumber),
+    });
+  };
 
   const handleExportEventList = async () => {
     if (!selectedEventId || !events || registrations.length === 0) {
@@ -801,6 +862,15 @@ export default function Registrations() {
                                 <div className="flex items-center justify-end gap-2">
                                   <Button
                                     size="sm"
+                                    variant="outline"
+                                    className="gap-2"
+                                    onClick={() => openEditDialog(registration)}
+                                  >
+                                    <Pencil className="h-4 w-4" />
+                                    Editar
+                                  </Button>
+                                  <Button
+                                    size="sm"
                                     variant="ghost"
                                     className="gap-2"
                                     onClick={() => {
@@ -911,6 +981,194 @@ export default function Registrations() {
                 {deleteRegistration.isPending ? "Excluindo..." : "Excluir Permanentemente"}
               </Button>
             </div>
+          </DialogContent>
+        </Dialog>
+
+        {/* Dialog de Edição Completa da Inscrição */}
+        <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
+          <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>Editar Inscrição</DialogTitle>
+              <DialogDescription>
+                Todos os campos desta inscrição podem ser alterados aqui.
+              </DialogDescription>
+            </DialogHeader>
+
+            {editForm && (
+              <div className="space-y-6 py-2">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="space-y-1">
+                    <Label>Categoria</Label>
+                    <Select
+                      value={String(editForm.categoryId)}
+                      onValueChange={(v) => setEditForm({ ...editForm, categoryId: Number(v) })}
+                    >
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        {categories.filter(c => !!c.parentId).map((cat) => {
+                          const parent = categories.find(p => p.id === cat.parentId);
+                          const label = parent ? `${parent.name} - ${cat.name}` : cat.name;
+                          return <SelectItem key={cat.id} value={String(cat.id)}>{label}</SelectItem>;
+                        })}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-1">
+                    <Label>Status</Label>
+                    <Select
+                      value={editForm.status}
+                      onValueChange={(v) => setEditForm({ ...editForm, status: v })}
+                    >
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="pending">Pendente</SelectItem>
+                        <SelectItem value="paid">Confirmado</SelectItem>
+                        <SelectItem value="cancellation_requested">Cancelamento Solicitado</SelectItem>
+                        <SelectItem value="cancelled">Cancelado</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+
+                <div>
+                  <h4 className="text-sm font-semibold text-muted-foreground mb-2">Piloto</h4>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div className="space-y-1">
+                      <Label>Nome</Label>
+                      <Input value={editForm.pilotName} onChange={(e) => setEditForm({ ...editForm, pilotName: e.target.value })} />
+                    </div>
+                    <div className="space-y-1">
+                      <Label>Email</Label>
+                      <Input value={editForm.pilotEmail} onChange={(e) => setEditForm({ ...editForm, pilotEmail: e.target.value })} />
+                    </div>
+                    <div className="space-y-1">
+                      <Label>CPF</Label>
+                      <Input value={editForm.pilotCpf} onChange={(e) => setEditForm({ ...editForm, pilotCpf: e.target.value })} />
+                    </div>
+                    <div className="space-y-1">
+                      <Label>Telefone</Label>
+                      <Input value={editForm.phone} onChange={(e) => setEditForm({ ...editForm, phone: e.target.value })} />
+                    </div>
+                    <div className="space-y-1">
+                      <Label>Idade</Label>
+                      <Input type="number" value={editForm.pilotAge} onChange={(e) => setEditForm({ ...editForm, pilotAge: e.target.value })} />
+                    </div>
+                    <div className="space-y-1">
+                      <Label>Cidade</Label>
+                      <Input value={editForm.pilotCity} onChange={(e) => setEditForm({ ...editForm, pilotCity: e.target.value })} />
+                    </div>
+                    <div className="space-y-1">
+                      <Label>UF</Label>
+                      <Input maxLength={2} value={editForm.pilotState} onChange={(e) => setEditForm({ ...editForm, pilotState: e.target.value.toUpperCase() })} />
+                    </div>
+                    <div className="space-y-1">
+                      <Label>Camisa</Label>
+                      <Select value={editForm.pilotShirtSize} onValueChange={(v) => setEditForm({ ...editForm, pilotShirtSize: v })}>
+                        <SelectTrigger><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          {["pp", "p", "m", "g", "gg", "g1", "g2", "g3", "g4", "infantil"].map(s => (
+                            <SelectItem key={s} value={s}>{s.toUpperCase()}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                </div>
+
+                <div>
+                  <h4 className="text-sm font-semibold text-muted-foreground mb-2">Navegador</h4>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div className="space-y-1">
+                      <Label>Nome</Label>
+                      <Input value={editForm.navigatorName} onChange={(e) => setEditForm({ ...editForm, navigatorName: e.target.value })} />
+                    </div>
+                    <div className="space-y-1">
+                      <Label>Email</Label>
+                      <Input value={editForm.navigatorEmail} onChange={(e) => setEditForm({ ...editForm, navigatorEmail: e.target.value })} />
+                    </div>
+                    <div className="space-y-1">
+                      <Label>CPF</Label>
+                      <Input value={editForm.navigatorCpf} onChange={(e) => setEditForm({ ...editForm, navigatorCpf: e.target.value })} />
+                    </div>
+                    <div className="space-y-1">
+                      <Label>Camisa</Label>
+                      <Select value={editForm.navigatorShirtSize} onValueChange={(v) => setEditForm({ ...editForm, navigatorShirtSize: v })}>
+                        <SelectTrigger><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          {["pp", "p", "m", "g", "gg", "g1", "g2", "g3", "g4", "infantil"].map(s => (
+                            <SelectItem key={s} value={s}>{s.toUpperCase()}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-1">
+                      <Label>Cidade</Label>
+                      <Input value={editForm.navigatorCity} onChange={(e) => setEditForm({ ...editForm, navigatorCity: e.target.value })} />
+                    </div>
+                    <div className="space-y-1">
+                      <Label>UF</Label>
+                      <Input maxLength={2} value={editForm.navigatorState} onChange={(e) => setEditForm({ ...editForm, navigatorState: e.target.value.toUpperCase() })} />
+                    </div>
+                  </div>
+                </div>
+
+                <div>
+                  <h4 className="text-sm font-semibold text-muted-foreground mb-2">Veículo / Equipe</h4>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div className="space-y-1">
+                      <Label>Marca</Label>
+                      <Input value={editForm.vehicleBrand} onChange={(e) => setEditForm({ ...editForm, vehicleBrand: e.target.value })} />
+                    </div>
+                    <div className="space-y-1">
+                      <Label>Modelo</Label>
+                      <Input value={editForm.vehicleModel} onChange={(e) => setEditForm({ ...editForm, vehicleModel: e.target.value })} />
+                    </div>
+                    <div className="space-y-1">
+                      <Label>Ano</Label>
+                      <Input type="number" value={editForm.vehicleYear} onChange={(e) => setEditForm({ ...editForm, vehicleYear: e.target.value })} />
+                    </div>
+                    <div className="space-y-1">
+                      <Label>Cor</Label>
+                      <Input value={editForm.vehicleColor} onChange={(e) => setEditForm({ ...editForm, vehicleColor: e.target.value })} />
+                    </div>
+                    <div className="space-y-1">
+                      <Label>Placa</Label>
+                      <Input value={editForm.vehiclePlate} onChange={(e) => setEditForm({ ...editForm, vehiclePlate: e.target.value })} />
+                    </div>
+                    <div className="space-y-1">
+                      <Label>Equipe</Label>
+                      <Input value={editForm.team} onChange={(e) => setEditForm({ ...editForm, team: e.target.value })} />
+                    </div>
+                  </div>
+                </div>
+
+                <div>
+                  <h4 className="text-sm font-semibold text-muted-foreground mb-2">Largada</h4>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div className="space-y-1">
+                      <Label>Número</Label>
+                      <Input type="number" value={editForm.startNumber} onChange={(e) => setEditForm({ ...editForm, startNumber: e.target.value })} />
+                    </div>
+                    <div className="space-y-1">
+                      <Label>Horário</Label>
+                      <Input type="time" value={editForm.startTime} onChange={(e) => setEditForm({ ...editForm, startTime: e.target.value })} />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="space-y-1">
+                  <Label>Observações</Label>
+                  <Textarea value={editForm.notes} onChange={(e) => setEditForm({ ...editForm, notes: e.target.value })} rows={3} />
+                </div>
+              </div>
+            )}
+
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setEditDialogOpen(false)}>Cancelar</Button>
+              <Button onClick={handleSaveEdit} disabled={updateFullMutation.isPending}>
+                {updateFullMutation.isPending ? "Salvando..." : "Salvar Alterações"}
+              </Button>
+            </DialogFooter>
           </DialogContent>
         </Dialog>
 

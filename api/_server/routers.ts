@@ -1379,6 +1379,77 @@ export const appRouter = router({
           updatedAt: new Date()
         });
       }),
+    updateFull: protectedProcedure
+      .input(z.object({
+        registrationId: z.number(),
+        categoryId: z.number().optional(),
+        status: z.enum(["pending", "paid", "cancelled", "cancellation_requested"]).optional(),
+        pilotName: z.string().optional(),
+        pilotEmail: z.string().optional(),
+        pilotCpf: z.string().optional(),
+        pilotCity: z.string().optional(),
+        pilotState: z.string().optional(),
+        pilotAge: z.number().nullable().optional(),
+        pilotShirtSize: z.string().optional(),
+        phone: z.string().nullable().optional(),
+        navigatorName: z.string().nullable().optional(),
+        navigatorEmail: z.string().nullable().optional(),
+        navigatorCpf: z.string().nullable().optional(),
+        navigatorCity: z.string().nullable().optional(),
+        navigatorState: z.string().nullable().optional(),
+        navigatorShirtSize: z.string().nullable().optional(),
+        team: z.string().nullable().optional(),
+        vehicleBrand: z.string().nullable().optional(),
+        vehicleModel: z.string().nullable().optional(),
+        vehicleYear: z.number().nullable().optional(),
+        vehicleColor: z.string().nullable().optional(),
+        vehiclePlate: z.string().nullable().optional(),
+        notes: z.string().nullable().optional(),
+        startNumber: z.number().int().nullable().optional(),
+        startTime: z.string().nullable().optional(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        const user = ctx.user as any;
+        const context = await db.getOrganizerContext(user);
+
+        if (context.type === 'MEMBER' && !context.permissions.includes('registrations')) {
+          throw new TRPCError({ code: 'FORBIDDEN', message: 'Sem permissão para secretaria/inscrições' });
+        }
+
+        const { registrationId, ...data } = input;
+        const reg = await db.getRegistrationById(registrationId) as any;
+        if (!reg) throw new TRPCError({ code: 'NOT_FOUND', message: 'Inscrição não encontrada' });
+
+        const event = await db.getEventById(reg.eventId) as any;
+        const organizer = event ? await db.getOrganizerById(event.organizerId) as any : null;
+        const principal = await db.getUserById(context.principalUserId) as any;
+
+        if (!organizer || organizer.ownerId !== principal?.openId) {
+          throw new TRPCError({ code: 'UNAUTHORIZED', message: 'Somente o organizador pode editar inscrições' });
+        }
+
+        // Registra histórico por campo alterado
+        for (const [key, newValue] of Object.entries(data)) {
+          if (newValue === undefined) continue;
+          const oldValue = (reg as any)[key];
+          const oldStr = oldValue === null || oldValue === undefined ? null : String(oldValue);
+          const newStr = newValue === null ? null : String(newValue);
+          if (oldStr !== newStr) {
+            await db.createRegistrationHistory({
+              registrationId,
+              changedBy: context.principalUserId,
+              fieldName: key,
+              oldValue: oldStr,
+              newValue: newStr,
+            });
+          }
+        }
+
+        return await db.updateRegistration(registrationId, {
+          ...data,
+          updatedAt: new Date(),
+        } as any);
+      }),
     getHistory: protectedProcedure
       .input(z.object({ registrationId: z.number() }))
       .query(async ({ ctx, input }) => {
