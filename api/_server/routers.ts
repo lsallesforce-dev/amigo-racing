@@ -1473,20 +1473,46 @@ export const appRouter = router({
           }
         }
 
-        const rowsSorted = sortShirtSizes([...totals.entries()], ([size]) => size);
-        const totalGeral = rowsSorted.reduce((acc, [, q]) => acc + q, 0);
+        // Busca estoque configurado (produzido / usado / disponível)
+        const stockRows = await db.getShirtAvailability(input.eventId);
+        const stockMap = new Map<string, { quantity: number; available: number }>();
+        for (const s of stockRows) {
+          stockMap.set(s.size, { quantity: s.quantity, available: s.available });
+        }
+
+        // Une todos os tamanhos presentes (pedidos ou estoque)
+        const allSizes = new Set<string>([...totals.keys(), ...stockMap.keys()]);
+        const rowsSorted = sortShirtSizes([...allSizes], (s) => s);
+        const totalPedidos = rowsSorted.reduce((acc, s) => acc + (totals.get(s) || 0), 0);
+        const totalProduzido = rowsSorted.reduce((acc, s) => acc + (stockMap.get(s)?.quantity || 0), 0);
+        const totalDisponivel = rowsSorted.reduce((acc, s) => acc + (stockMap.get(s)?.available || 0), 0);
+
+        const temEstoque = stockRows.length > 0;
 
         const aoa: any[][] = [
           [`Lista de Camisetas - ${event.name}`],
           [],
-          ['Tamanho', 'Quantidade'],
-          ...rowsSorted.map(([size, qty]) => [size, qty]),
-          ['TOTAL', totalGeral],
+          temEstoque
+            ? ['Tamanho', 'Pedidos', 'Produzido', 'Disponível']
+            : ['Tamanho', 'Pedidos'],
+          ...rowsSorted.map((size) => {
+            const pedidos = totals.get(size) || 0;
+            if (temEstoque) {
+              const st = stockMap.get(size);
+              return [size, pedidos, st?.quantity ?? '', st?.available ?? ''];
+            }
+            return [size, pedidos];
+          }),
+          temEstoque
+            ? ['TOTAL', totalPedidos, totalProduzido, totalDisponivel]
+            : ['TOTAL', totalPedidos],
         ];
 
         const wb = XLSX.utils.book_new();
         const ws = XLSX.utils.aoa_to_sheet(aoa);
-        ws['!cols'] = [{ wch: 18 }, { wch: 14 }];
+        ws['!cols'] = temEstoque
+          ? [{ wch: 18 }, { wch: 12 }, { wch: 14 }, { wch: 14 }]
+          : [{ wch: 18 }, { wch: 14 }];
         XLSX.utils.book_append_sheet(wb, ws, 'CAMISETAS');
         const buffer = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
 
