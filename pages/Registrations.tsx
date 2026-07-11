@@ -396,17 +396,25 @@ export default function Registrations() {
     }
   };
 
-  const handleExportEventList = async () => {
+  // Gera um PDF paisagem no padrão "Lista de Participantes": header com logo,
+  // agrupado por categoria (banner laranja, ordem do drag-and-drop de largada)
+  // e com paginação inteligente. Colunas/campos são parametrizados por quem chama.
+  const buildCategoryListPdf = async (opts: {
+    subtitle: string;
+    filenamePrefix: string;
+    toastLabel: string;
+    columns: { head: string; cellWidth: number; halign?: 'left' | 'center' | 'right' }[];
+    rowMapper: (reg: any) => (string | number)[];
+  }) => {
     if (!selectedEventId || !events || registrations.length === 0) {
       toast.error("Selecione um evento com inscrições para exportar");
       return;
     }
-
     const event = events.find(e => e.id === selectedEventId);
     if (!event) return;
 
     try {
-      toast.info("Gerando PDF da Lista de Evento...");
+      toast.info(`Gerando PDF: ${opts.toastLabel}...`);
 
       // Carregar a logo oficial dinamicamente
       let amigoLogoBase64 = "";
@@ -424,31 +432,22 @@ export default function Registrations() {
 
       const doc = new jsPDF({ orientation: 'landscape' });
       const pageWidth = doc.internal.pageSize.getWidth();
+      const pageHeight = doc.internal.pageSize.getHeight();
 
-      // Função simplificada de header (baseada no StartOrderManager)
-      const generateHeader = (title: string, subtitle: string) => {
-        // Logo oficial se carregada
-        if (amigoLogoBase64) {
-          doc.addImage(amigoLogoBase64, 'PNG', pageWidth - 44, 10, 30, 0);
-        }
+      // Header com logo + título + subtítulo
+      if (amigoLogoBase64) doc.addImage(amigoLogoBase64, 'PNG', pageWidth - 44, 10, 30, 0);
+      doc.setTextColor(31, 41, 55);
+      doc.setFontSize(18);
+      doc.setFont("helvetica", "bold");
+      doc.text(event.name, pageWidth / 2, 28, { align: "center" });
+      doc.setFontSize(12);
+      doc.setFont("helvetica", "normal");
+      doc.setTextColor(107, 114, 128);
+      doc.text(opts.subtitle, pageWidth / 2, 36, { align: "center" });
+      doc.setDrawColor(229, 231, 235);
+      doc.line(14, 50, pageWidth - 14, 50);
 
-        doc.setTextColor(31, 41, 55);
-        doc.setFontSize(18);
-        doc.setFont("helvetica", "bold");
-        doc.text(title, pageWidth / 2, 28, { align: "center" });
-
-        doc.setFontSize(12);
-        doc.setFont("helvetica", "normal");
-        doc.setTextColor(107, 114, 128);
-        doc.text(subtitle, pageWidth / 2, 36, { align: "center" });
-
-        doc.setDrawColor(229, 231, 235);
-        doc.line(14, 50, pageWidth - 14, 50);
-      };
-
-      generateHeader(event.name, "Lista de Participantes - Oficial");
-
-      // Agrupar e ordenar itens por categoria seguindo a logica do StartOrderManager
+      // Agrupar e ordenar itens por categoria (ordem da config de largada)
       const sortedItems: any[] = [];
       const subcategories = categories.filter(cat => !!cat.parentId);
       const sortedSubcats = [...subcategories].sort((a, b) => {
@@ -458,13 +457,8 @@ export default function Registrations() {
       });
 
       sortedSubcats.forEach(category => {
-        // Config de ordem de largada é opcional - a lista de inscritos não pode
-        // ficar em branco só porque o organizador ainda não configurou a largada.
         const config = startConfigs.find(c => c.categoryId === category.id);
-
         let categoryRegs = registrations.filter(r => r.categoryId === category.id && r.status !== 'cancelled');
-
-        // registrationOrder logic
         if (config?.registrationOrder) {
           try {
             const order = typeof config.registrationOrder === 'string' ? JSON.parse(config.registrationOrder) : config.registrationOrder;
@@ -474,7 +468,6 @@ export default function Registrations() {
             }
           } catch (e) { }
         }
-
         categoryRegs.forEach((reg, index) => {
           const parent = categories.find(c => c.id === category.parentId);
           sortedItems.push({
@@ -492,10 +485,7 @@ export default function Registrations() {
         categoriesMap.get(item.categoryName)!.push(item);
       });
 
-      const pageHeight = doc.internal.pageSize.getHeight();
-
-      // Banner (barra) do nome da categoria. Usado tanto na 1ª página da
-      // categoria quanto no topo das páginas de continuação.
+      // Banner (barra) do nome da categoria, repetido nas continuações.
       const drawCategoryBanner = (label: string, baselineY: number) => {
         doc.setFillColor(249, 115, 22, 0.1);
         doc.rect(14, baselineY - 5, pageWidth - 28, 8, 'F');
@@ -504,46 +494,21 @@ export default function Registrations() {
         doc.setFont("helvetica", "bold");
         doc.text(label, 17, baselineY);
       };
-
-      // Onde o banner de continuação senta no topo das páginas seguintes.
       const contBannerBaseline = 18;
 
+      const head = [opts.columns.map(c => c.head)];
+      const columnStyles: any = {};
+      opts.columns.forEach((c, i) => {
+        columnStyles[i] = { cellWidth: c.cellWidth, ...(c.halign ? { halign: c.halign } : {}) };
+      });
+
       let currentY = 60;
-
       categoriesMap.forEach((items, categoryName) => {
-        const formatExtras = (purchasedItems: any) => {
-          if (!purchasedItems) return '-';
-          try {
-            const items = typeof purchasedItems === 'string' ? JSON.parse(purchasedItems) : purchasedItems;
-            if (!Array.isArray(items) || items.length === 0) return '-';
-            return items.map((p: any) => {
-              if (p.sizes && Array.isArray(p.sizes) && p.sizes.length > 0) {
-                return `${p.quantity}x ${p.name} (${p.sizes.filter(Boolean).join(', ')})`;
-              }
-              return `${p.quantity}x ${p.name}`;
-            }).join(' | ');
-          } catch (e) {
-            return '-';
-          }
-        };
+        const tableBody = items.map(opts.rowMapper);
 
-        const tableBody = items.map(reg => [
-          `# ${reg.number}`,
-          reg.pilotName,
-          reg.pilotCpf || '-',
-          reg.pilotShirtSize || '-',
-          reg.navigatorName || '-',
-          reg.navigatorCpf || '-',
-          reg.navigatorShirtSize || '-',
-          reg.team || '-',
-          reg.status === 'paid' ? 'Confirmado' : 'Pendente',
-          formatExtras(reg.purchasedProducts)
-        ]);
-
-        // Paginação inteligente: se não couber o banner + cabeçalho + ao menos
-        // 2 linhas antes do fim da página, começa a categoria já na próxima -
-        // evita banner órfão no rodapé com o resto jogado pra página seguinte.
-        const minBlock = 8 /*banner*/ + 10 /*cabeçalho*/ + 14 * Math.min(2, items.length);
+        // Paginação inteligente: se não couber banner + cabeçalho + 2 linhas
+        // antes do fim da página, começa a categoria já na próxima.
+        const minBlock = 8 + 10 + 14 * Math.min(2, items.length);
         if (currentY + minBlock > pageHeight - 14) {
           doc.addPage();
           currentY = 20;
@@ -554,14 +519,13 @@ export default function Registrations() {
 
         autoTable(doc, {
           startY: tableStartY + 5,
-          head: [['Nº', 'Piloto', 'CPF Piloto', 'Cam', 'Navegador', 'CPF Nav.', 'Cam', 'Equipe', 'Status', 'Extras']],
+          head,
           body: tableBody,
           theme: 'striped',
           headStyles: { fillColor: [31, 41, 55], textColor: [255, 255, 255], fontSize: 11, fontStyle: 'bold', halign: 'center' },
-          columnStyles: { 0: { cellWidth: 12, halign: 'center' }, 1: { cellWidth: 44 }, 2: { cellWidth: 31 }, 3: { cellWidth: 15, halign: 'center' }, 4: { cellWidth: 44 }, 5: { cellWidth: 31 }, 6: { cellWidth: 15, halign: 'center' }, 7: { cellWidth: 30 }, 8: { cellWidth: 26, halign: 'center' }, 9: { cellWidth: 21 } },
+          columnStyles,
           styles: { fontSize: 10, cellPadding: 3, valign: 'middle' },
           showHead: 'everyPage',
-          // Reserva o topo das páginas de continuação para o banner repetido.
           margin: { left: 14, right: 14, top: contBannerBaseline + 6 },
           didDrawPage: () => {
             if (firstTablePage) {
@@ -576,12 +540,82 @@ export default function Registrations() {
         currentY = (doc as any).lastAutoTable.finalY + 12;
       });
 
-      doc.save(`lista_evento_${event.name.replace(/\s+/g, '_').toLowerCase()}.pdf`);
-      toast.success("PDF da Lista de Evento gerado com sucesso!");
+      doc.save(`${opts.filenamePrefix}_${event.name.replace(/\s+/g, '_').toLowerCase()}.pdf`);
+      toast.success(`PDF gerado: ${opts.toastLabel}!`);
     } catch (error) {
       console.error("Erro ao gerar PDF:", error);
-      toast.error("Erro ao gerar PDF da Lista de Evento");
+      toast.error(`Erro ao gerar PDF: ${opts.toastLabel}`);
     }
+  };
+
+  const handleExportEventList = () => {
+    const formatExtras = (purchasedItems: any) => {
+      if (!purchasedItems) return '-';
+      try {
+        const items = typeof purchasedItems === 'string' ? JSON.parse(purchasedItems) : purchasedItems;
+        if (!Array.isArray(items) || items.length === 0) return '-';
+        return items.map((p: any) => {
+          if (p.sizes && Array.isArray(p.sizes) && p.sizes.length > 0) {
+            return `${p.quantity}x ${p.name} (${p.sizes.filter(Boolean).join(', ')})`;
+          }
+          return `${p.quantity}x ${p.name}`;
+        }).join(' | ');
+      } catch (e) {
+        return '-';
+      }
+    };
+
+    return buildCategoryListPdf({
+      subtitle: "Lista de Participantes - Oficial",
+      filenamePrefix: "lista_evento",
+      toastLabel: "Lista do Evento",
+      columns: [
+        { head: 'Nº', cellWidth: 12, halign: 'center' },
+        { head: 'Piloto', cellWidth: 44 },
+        { head: 'CPF Piloto', cellWidth: 31 },
+        { head: 'Cam', cellWidth: 15, halign: 'center' },
+        { head: 'Navegador', cellWidth: 44 },
+        { head: 'CPF Nav.', cellWidth: 31 },
+        { head: 'Cam', cellWidth: 15, halign: 'center' },
+        { head: 'Equipe', cellWidth: 30 },
+        { head: 'Status', cellWidth: 26, halign: 'center' },
+        { head: 'Extras', cellWidth: 21 },
+      ],
+      rowMapper: (reg) => [
+        `# ${reg.number}`,
+        reg.pilotName,
+        reg.pilotCpf || '-',
+        reg.pilotShirtSize || '-',
+        reg.navigatorName || '-',
+        reg.navigatorCpf || '-',
+        reg.navigatorShirtSize || '-',
+        reg.team || '-',
+        reg.status === 'paid' ? 'Confirmado' : 'Pendente',
+        formatExtras(reg.purchasedProducts),
+      ],
+    });
+  };
+
+  const handleExportInscritos = () => {
+    return buildCategoryListPdf({
+      subtitle: "Listagem Inscritos",
+      filenamePrefix: "listagem_inscritos",
+      toastLabel: "Listagem Inscritos",
+      columns: [
+        { head: 'Nº', cellWidth: 16, halign: 'center' },
+        { head: 'Piloto', cellWidth: 65 },
+        { head: 'Navegador', cellWidth: 62 },
+        { head: 'Carro', cellWidth: 60 },
+        { head: 'Cidade', cellWidth: 66 },
+      ],
+      rowMapper: (reg) => [
+        `# ${reg.number}`,
+        reg.pilotName,
+        reg.navigatorName || '-',
+        (reg.vehicleBrand || reg.vehicleModel) ? `${reg.vehicleBrand || ''} ${reg.vehicleModel || ''}`.trim() : '-',
+        reg.pilotCity ? `${reg.pilotCity}${reg.pilotState ? '/' + reg.pilotState : ''}` : '-',
+      ],
+    });
   };
 
   return (
@@ -611,6 +645,11 @@ export default function Registrations() {
                 <Download className="mr-2 h-4 w-4" />
                 <span className="hidden sm:inline">Exportar Lista do Evento</span>
                 <span className="sm:hidden">Exportar PDF</span>
+              </Button>
+              <Button onClick={handleExportInscritos} variant="outline" className="h-10">
+                <Download className="mr-2 h-4 w-4" />
+                <span className="hidden sm:inline">Listagem Inscritos</span>
+                <span className="sm:hidden">Inscritos</span>
               </Button>
               <Button
                 onClick={handleExportShirts}
