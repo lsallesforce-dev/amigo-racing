@@ -430,12 +430,35 @@ export default function Registrations() {
         console.warn("Não foi possível carregar a logo oficial", e);
       }
 
+      // Logo do evento (via backend, já em base64 — evita CORS do R2).
+      let eventLogoDataUrl: string | null = null;
+      try {
+        const r = await utils.events.getLogoDataUrl.fetch({ eventId: selectedEventId });
+        eventLogoDataUrl = r?.dataUrl || null;
+      } catch (e) {
+        console.warn("Não foi possível carregar o logo do evento", e);
+      }
+
       const doc = new jsPDF({ orientation: 'landscape' });
       const pageWidth = doc.internal.pageSize.getWidth();
       const pageHeight = doc.internal.pageSize.getHeight();
 
-      // Header com logo + título + subtítulo
+      // Header com logo AutoZap (direita) + logo do evento (esquerda) + título
       if (amigoLogoBase64) doc.addImage(amigoLogoBase64, 'PNG', pageWidth - 44, 10, 30, 0);
+      // Logo do evento: redimensiona sozinho pra caber numa caixa 45x28
+      // preservando a proporção (qualquer formato de logo).
+      if (eventLogoDataUrl) {
+        try {
+          const props = doc.getImageProperties(eventLogoDataUrl);
+          const maxW = 45, maxH = 28;
+          const ratio = Math.min(maxW / props.width, maxH / props.height);
+          const w = props.width * ratio;
+          const h = props.height * ratio;
+          doc.addImage(eventLogoDataUrl, (props as any).fileType || 'PNG', 14, 12 + (maxH - h) / 2, w, h);
+        } catch (e) {
+          console.warn("Falha ao desenhar o logo do evento", e);
+        }
+      }
       doc.setTextColor(31, 41, 55);
       doc.setFontSize(18);
       doc.setFont("helvetica", "bold");

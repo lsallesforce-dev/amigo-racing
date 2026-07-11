@@ -887,6 +887,24 @@ export const appRouter = router({
         if (!event) throw new TRPCError({ code: 'NOT_FOUND', message: 'Evento não encontrado' });
         return event;
       }),
+    // Devolve o logo do evento já em base64 (data URL). O PDF é gerado no
+    // browser e o logo mora no R2 (cross-origin) — buscar pelo backend evita
+    // problema de CORS/canvas.
+    getLogoDataUrl: publicProcedure
+      .input(z.object({ eventId: z.number() }))
+      .query(async ({ input }) => {
+        const event = await db.getEventById(input.eventId) as any;
+        if (!event?.logoUrl) return { dataUrl: null as string | null };
+        try {
+          const resp = await fetch(event.logoUrl);
+          if (!resp.ok) return { dataUrl: null };
+          const buf = Buffer.from(await resp.arrayBuffer());
+          const contentType = resp.headers.get('content-type') || 'image/png';
+          return { dataUrl: `data:${contentType};base64,${buf.toString('base64')}` };
+        } catch {
+          return { dataUrl: null };
+        }
+      }),
     myEvents: protectedProcedure.query(async ({ ctx }) => {
       const user = ctx.user as any;
       const context = await db.getOrganizerContext(user);
@@ -908,6 +926,7 @@ export const appRouter = router({
         city: z.string(),
         state: z.string().optional(),
         imageUrl: z.string().optional(),
+        logoUrl: z.string().optional(),
         isExternal: z.boolean().optional(),
         showInListing: z.boolean().optional(),
         showRegistrations: z.boolean().optional(),
@@ -1030,6 +1049,7 @@ export const appRouter = router({
         state: z.string().optional().nullable(),
         status: z.enum(['open', 'closed', 'cancelled']).optional(),
         imageUrl: z.string().optional().nullable(),
+        logoUrl: z.string().optional().nullable(),
         isExternal: z.boolean().optional().nullable(),
         externalUrl: z.string().url().optional().nullable(),
         showInListing: z.boolean().optional().nullable(),

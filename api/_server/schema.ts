@@ -102,6 +102,7 @@ export const events = pgTable("events", {
   showInListing: boolean("showInListing").default(true).notNull(),
   showRegistrations: boolean("showRegistrations").default(true).notNull(),
   imageUrl: text("imageUrl"),
+  logoUrl: text("logoUrl"), // Logo do evento (usado nos PDFs de listagem)
   documents: text("documents"), // JSON: [{name, url, type}]
   terms: text("terms"),
   organizerId: integer("organizerId").notNull(),

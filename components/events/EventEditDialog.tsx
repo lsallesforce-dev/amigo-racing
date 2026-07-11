@@ -100,6 +100,7 @@ export function EventEditDialog({ open, onOpenChange, event, onSuccess }: EventE
     const [isUploadingSponsors, setIsUploadingSponsors] = useState(false);
     const [isUploadingGallery, setIsUploadingGallery] = useState(false);
     const [isUploadingImage, setIsUploadingImage] = useState(false);
+    const [isUploadingLogo, setIsUploadingLogo] = useState(false);
 
     const utils = trpc.useUtils();
     const uploadImage = trpc.upload.image.useMutation();
@@ -402,6 +403,56 @@ export function EventEditDialog({ open, onOpenChange, event, onSuccess }: EventE
                                 </div>
                             )}
                         </div>
+                        <div>
+                            <Label htmlFor="edit-logo">Logo do Evento</Label>
+                            <p className="text-[10px] text-muted-foreground mb-1">Aparece no topo dos PDFs (Lista do Evento, Listagem Inscritos). Redimensiona sozinho pra caber. Prefira PNG com fundo transparente.</p>
+                            <Input
+                                id="edit-logo"
+                                type="file"
+                                accept="image/*"
+                                onChange={async (e) => {
+                                    const file = e.target.files?.[0];
+                                    if (!file) return;
+                                    try {
+                                        setIsUploadingLogo(true);
+                                        // Lê cru (sem compressão JPEG) pra preservar a transparência do PNG.
+                                        const dataUrl: string = await new Promise((resolve, reject) => {
+                                            const reader = new FileReader();
+                                            reader.onloadend = () => resolve(reader.result as string);
+                                            reader.onerror = reject;
+                                            reader.readAsDataURL(file);
+                                        });
+                                        const { url } = await uploadImage.mutateAsync({
+                                            base64: dataUrl,
+                                            fileName: `event_logo_${file.name}`,
+                                            contentType: file.type,
+                                        });
+                                        setEditingEvent({ ...editingEvent, logoUrl: url });
+                                        toast.success('Logo enviado com sucesso!');
+                                    } catch (error) {
+                                        toast.error('Erro ao processar logo');
+                                    } finally {
+                                        setIsUploadingLogo(false);
+                                    }
+                                }}
+                            />
+                            {isUploadingLogo && (
+                                <div className="mt-2 flex items-center gap-2 text-sm text-muted-foreground">
+                                    <Loader2 className="h-4 w-4 animate-spin" />
+                                    Subindo logo...
+                                </div>
+                            )}
+                            {editingEvent.logoUrl && !isUploadingLogo && (
+                                <div className="mt-2 flex items-center gap-3">
+                                    <div className="bg-[repeating-conic-gradient(#e5e7eb_0%_25%,transparent_0%_50%)] bg-[length:16px_16px] rounded border p-2">
+                                        <img src={editingEvent.logoUrl} alt="Logo" className="h-20 object-contain" />
+                                    </div>
+                                    <Button variant="ghost" size="sm" className="text-destructive" onClick={() => setEditingEvent({ ...editingEvent, logoUrl: null })}>
+                                        <X className="h-4 w-4 mr-1" /> Remover
+                                    </Button>
+                                </div>
+                            )}
+                        </div>
                         <div className="flex items-center space-x-2">
                             <input
                                 type="checkbox"
@@ -526,8 +577,8 @@ export function EventEditDialog({ open, onOpenChange, event, onSuccess }: EventE
                     <Button variant="outline" onClick={() => onOpenChange(false)}>
                         Cancelar
                     </Button>
-                    <Button onClick={handleUpdateEvent} disabled={updateEvent.isPending || isUploadingImage || isUploadingSponsors || isUploadingGallery}>
-                        {updateEvent.isPending ? "Salvando..." : (isUploadingImage || isUploadingSponsors || isUploadingGallery) ? "Fazendo Upload..." : "Salvar Alterações"}
+                    <Button onClick={handleUpdateEvent} disabled={updateEvent.isPending || isUploadingImage || isUploadingLogo || isUploadingSponsors || isUploadingGallery}>
+                        {updateEvent.isPending ? "Salvando..." : (isUploadingImage || isUploadingLogo || isUploadingSponsors || isUploadingGallery) ? "Fazendo Upload..." : "Salvar Alterações"}
                     </Button>
                 </DialogFooter>
             </DialogContent>
