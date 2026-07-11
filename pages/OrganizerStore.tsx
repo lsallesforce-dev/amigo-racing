@@ -7,7 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { getLoginUrl } from "@/api/_server/const";
 import { trpc } from "@/lib/trpc";
-import { ShoppingBag, Plus, Loader2, ArrowLeft, Image as ImageIcon, Trash2, Pencil, Trophy } from "lucide-react";
+import { ShoppingBag, Plus, Loader2, ArrowLeft, Image as ImageIcon, Trash2, Pencil, Trophy, X } from "lucide-react";
 import { Link, useParams } from "wouter";
 import { useState } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -77,6 +77,16 @@ export default function OrganizerStore() {
         },
         onError: (error) => {
             toast.error(error.message || "Erro ao atualizar produto");
+        }
+    });
+
+    const deleteOrder = trpc.store.deleteOrder.useMutation({
+        onSuccess: () => {
+            toast.success("Pedido excluído com sucesso!");
+            utils.store.getOrganizerOrders.invalidate();
+        },
+        onError: (error) => {
+            toast.error(error.message || "Erro ao excluir pedido");
         }
     });
 
@@ -153,6 +163,12 @@ export default function OrganizerStore() {
                 imageUrl: productForm.imageUrl || undefined,
                 eventId: eventId,
             });
+        }
+    };
+
+    const handleDeleteOrder = (orderId: string, buyerName: string) => {
+        if (window.confirm(`Excluir o pedido de "${buyerName}"? Esta ação não pode ser desfeita.`)) {
+            deleteOrder.mutate({ orderId });
         }
     };
 
@@ -388,6 +404,7 @@ export default function OrganizerStore() {
                                                         <TableHead>Produto/Variações</TableHead>
                                                         <TableHead>Status</TableHead>
                                                         <TableHead className="text-right">Total</TableHead>
+                                                        <TableHead className="w-12">Ações</TableHead>
                                                     </TableRow>
                                                 </TableHeader>
                                                 <TableBody>
@@ -427,6 +444,18 @@ export default function OrganizerStore() {
                                                                 </TableCell>
                                                                 <TableCell className="text-right font-bold text-primary">
                                                                     {formatCurrency(o.totalAmount)}
+                                                                </TableCell>
+                                                                <TableCell>
+                                                                    <Button
+                                                                        size="icon"
+                                                                        variant="ghost"
+                                                                        className="h-7 w-7 text-destructive hover:text-destructive hover:bg-destructive/10"
+                                                                        title="Excluir pedido"
+                                                                        disabled={deleteOrder.isPending}
+                                                                        onClick={() => handleDeleteOrder(o.id, o.buyerName)}
+                                                                    >
+                                                                        <Trash2 className="h-3.5 w-3.5" />
+                                                                    </Button>
                                                                 </TableCell>
                                                             </TableRow>
                                                         );

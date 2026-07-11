@@ -413,7 +413,39 @@ const storeRouter = router({
         .orderBy(sql`${productOrders.createdAt} DESC`);
 
       return orders;
-    })
+    }),
+
+  deleteOrder: organizerProcedure
+    .input(z.object({ orderId: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      const user = ctx.user as any;
+      const context = await db.getOrganizerContext(user);
+      if (context.type === 'MEMBER' && !context.permissions.includes('store')) {
+        throw new TRPCError({ code: 'FORBIDDEN', message: 'Sem permissão para loja' });
+      }
+      const dbInstance = await getDb();
+      if (!dbInstance) throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Database connection failed' });
+
+      // Verifica que o pedido pertence a um produto do organizador
+      const existing = await dbInstance
+        .select({ id: productOrders.id })
+        .from(productOrders)
+        .innerJoin(products, eq(productOrders.productId, products.id))
+        .where(
+          and(
+            eq(productOrders.id, input.orderId),
+            eq(products.userId, context.principalUserId)
+          )
+        )
+        .limit(1);
+
+      if (!existing.length) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: 'Pedido não encontrado ou sem permissão' });
+      }
+
+      await dbInstance.delete(productOrders).where(eq(productOrders.id, input.orderId));
+      return { success: true };
+    }),
 });
 
 export const competitorRouter = router({
