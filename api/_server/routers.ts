@@ -1354,6 +1354,83 @@ export const appRouter = router({
       .query(async ({ input }) => {
         return await db.getRegistrationsStatistics(input.eventId);
       }),
+    // Planilha Excel com o total de camisetas por tamanho (piloto + navegador
+    // + extras compradas na loja). Junta tamanhos iguais ignorando caixa
+    // (P=p, GG=gg) e mantém os infantis (infantil, Inf 2/6/8) separados.
+    exportShirts: protectedProcedure
+      .input(z.object({ eventId: z.number() }))
+      .mutation(async ({ input }) => {
+        const XLSX = await import('xlsx');
+        const event = await db.getEventById(input.eventId) as any;
+        if (!event) throw new TRPCError({ code: 'NOT_FOUND', message: 'Evento não encontrado' });
+
+        const regs = await db.getRegistrationsByEventId(input.eventId) || [];
+
+        const norm = (s: any) => String(s || '').trim().toUpperCase();
+        const totals = new Map<string, number>();
+        const add = (size: any) => {
+          const k = norm(size);
+          if (!k) return;
+          totals.set(k, (totals.get(k) || 0) + 1);
+        };
+
+        for (const reg of regs as any[]) {
+          if (reg.status === 'cancelled') continue;
+          add(reg.pilotShirtSize);
+          if (reg.navigatorShirtSize) add(reg.navigatorShirtSize);
+          let pp: any[] = [];
+          try {
+            pp = typeof reg.purchasedProducts === 'string' ? JSON.parse(reg.purchasedProducts) : (reg.purchasedProducts || []);
+          } catch { pp = []; }
+          if (Array.isArray(pp)) {
+            for (const item of pp) {
+              if (item && Array.isArray(item.sizes)) {
+                for (const sz of item.sizes) add(sz);
+              }
+            }
+          }
+        }
+
+        // Ordena: PP,P,M,G,GG,G1..G4 → infantis (INFANTIL, Inf N) → outros.
+        const ORDER = ['PP', 'P', 'M', 'G', 'GG', 'G1', 'G2', 'G3', 'G4'];
+        const sortKey = (size: string): [number, number, number | string] => {
+          const idx = ORDER.indexOf(size);
+          if (idx >= 0) return [0, idx, 0];
+          if (size === 'INFANTIL') return [1, 0, 0];
+          const m = size.match(/^INF\s*(\d+)/);
+          if (m) return [1, 1, Number(m[1])];
+          return [2, 0, size];
+        };
+        const rowsSorted = [...totals.entries()].sort((a, b) => {
+          const ka = sortKey(a[0]); const kb = sortKey(b[0]);
+          if (ka[0] !== kb[0]) return ka[0] - kb[0];
+          if (ka[1] !== kb[1]) return ka[1] - kb[1];
+          if (typeof ka[2] === 'number' && typeof kb[2] === 'number') return ka[2] - kb[2];
+          return String(ka[2]).localeCompare(String(kb[2]));
+        });
+
+        const totalGeral = rowsSorted.reduce((acc, [, q]) => acc + q, 0);
+
+        const aoa: any[][] = [
+          [`Lista de Camisetas - ${event.name}`],
+          [],
+          ['Tamanho', 'Quantidade'],
+          ...rowsSorted.map(([size, qty]) => [size, qty]),
+          ['TOTAL', totalGeral],
+        ];
+
+        const wb = XLSX.utils.book_new();
+        const ws = XLSX.utils.aoa_to_sheet(aoa);
+        ws['!cols'] = [{ wch: 18 }, { wch: 14 }];
+        XLSX.utils.book_append_sheet(wb, ws, 'CAMISETAS');
+        const buffer = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
+
+        return {
+          success: true,
+          data: Buffer.from(buffer).toString('base64'),
+          filename: `camisetas-${String(event.name).replace(/\s+/g, '-')}.xlsx`,
+        };
+      }),
     updateStartInfo: protectedProcedure
       .input(z.object({
         registrationId: z.number(),

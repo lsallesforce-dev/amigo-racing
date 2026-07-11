@@ -10,7 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Download, Users, DollarSign, Calendar, CheckCircle, Clock, History, ArrowLeft, Trash2, Pencil } from "lucide-react";
+import { Download, Users, DollarSign, Calendar, CheckCircle, Clock, History, ArrowLeft, Trash2, Pencil, Shirt } from "lucide-react";
 
 import { toast } from "sonner";
 import { jsPDF } from "jspdf";
@@ -104,6 +104,9 @@ export default function Registrations() {
       toast.error(error.message || "Erro ao atualizar informações de largada");
     },
   });
+
+  // Mutation para exportar a planilha de camisetas
+  const exportShirtsMutation = trpc.registrations.exportShirts.useMutation();
 
   // Mutation para edição completa da inscrição
   const updateFullMutation = trpc.registrations.updateFull.useMutation({
@@ -297,6 +300,41 @@ export default function Registrations() {
       vehicleYear: editForm.vehicleYear === "" ? null : Number(editForm.vehicleYear),
       startNumber: editForm.startNumber === "" ? null : Number(editForm.startNumber),
     });
+  };
+
+  const downloadBase64Xlsx = (payload: any, defaultFilename: string) => {
+    try {
+      const binaryString = atob(payload.data);
+      const bytes = new Uint8Array(binaryString.length);
+      for (let i = 0; i < binaryString.length; i++) bytes[i] = binaryString.charCodeAt(i);
+      const blob = new Blob([bytes], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.setAttribute("download", payload.filename || defaultFilename);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error('Erro ao processar arquivo:', error);
+      toast.error("Erro ao processar arquivo para download");
+    }
+  };
+
+  const handleExportShirts = async () => {
+    if (!selectedEventId) {
+      toast.error("Selecione um evento para exportar");
+      return;
+    }
+    try {
+      toast.info("Gerando planilha de camisetas...");
+      const result = await exportShirtsMutation.mutateAsync({ eventId: selectedEventId });
+      downloadBase64Xlsx(result, "camisetas.xlsx");
+      toast.success("Planilha de camisetas gerada!");
+    } catch (error: any) {
+      toast.error(error?.message || "Erro ao gerar planilha de camisetas");
+    }
   };
 
   const handleExportEventList = async () => {
@@ -514,6 +552,18 @@ export default function Registrations() {
                 <Download className="mr-2 h-4 w-4" />
                 <span className="hidden sm:inline">Exportar Lista do Evento</span>
                 <span className="sm:hidden">Exportar PDF</span>
+              </Button>
+              <Button
+                onClick={handleExportShirts}
+                variant="outline"
+                className="h-10"
+                disabled={exportShirtsMutation.isPending}
+              >
+                <Shirt className="mr-2 h-4 w-4" />
+                <span className="hidden sm:inline">
+                  {exportShirtsMutation.isPending ? "Gerando..." : "Exportar Camisetas"}
+                </span>
+                <span className="sm:hidden">Camisetas</span>
               </Button>
             </div>
           )}
