@@ -863,8 +863,10 @@ export async function createRegistrationHistory(data: {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
 
+  // Colunas são camelCase case-sensitive (criadas pelo Drizzle) — PRECISAM de
+  // aspas no SQL cru, senão o Postgres rebaixa pra minúsculo e não acha a coluna.
   await db.execute(sql`
-    INSERT INTO registration_history (registrationId, changedBy, fieldName, oldValue, newValue, changedAt)
+    INSERT INTO registration_history ("registrationId", "changedBy", "fieldName", "oldValue", "newValue", "changedAt")
     VALUES (${data.registrationId}, ${data.changedBy}, ${data.fieldName}, ${data.oldValue}, ${data.newValue}, NOW())
   `);
 }
@@ -874,13 +876,13 @@ export async function getRegistrationHistory(registrationId: number) {
   if (!db) throw new Error("Database not available");
 
   const result = await db.execute(sql`
-    SELECT 
+    SELECT
       rh.*,
-      u.name as changedByName
+      u.name as "changedByName"
     FROM registration_history rh
-    LEFT JOIN users u ON rh.changedBy = u.id
-    WHERE rh.registrationId = ${registrationId}
-    ORDER BY rh.changedAt DESC
+    LEFT JOIN users u ON rh."changedBy" = u.id
+    WHERE rh."registrationId" = ${registrationId}
+    ORDER BY rh."changedAt" DESC
   `);
 
   return result as any[];
