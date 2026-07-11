@@ -1,4 +1,4 @@
-import { eq, and, or, gte, lte, asc, desc, sql } from "drizzle-orm";
+import { eq, and, or, gte, lte, asc, desc, sql, ne } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/postgres-js";
 import {
   User,
@@ -1943,10 +1943,24 @@ export async function getShirtAvailability(eventId: number) {
   const stockRows = await db.select().from(eventShirtStock).where(eq(eventShirtStock.eventId, eventId));
   const regs = await db.select().from(registrations).where(eq(registrations.eventId, eventId));
 
+  // Pedidos da loja ligados a este evento (qualquer status exceto CANCELLED reserva estoque)
+  const orders = await db
+    .select({ sizes: productOrders.sizes, status: productOrders.status })
+    .from(productOrders)
+    .innerJoin(products, eq(productOrders.productId, products.id))
+    .where(
+      and(
+        eq(productOrders.eventId, eventId),
+        ne(productOrders.status, 'CANCELLED')
+      )
+    );
+
   const stock = new Map<string, number>();
   for (const r of stockRows) stock.set(normalizeShirtSize(r.size), r.quantity);
 
   const used = new Map<string, number>();
+
+  // 1) Camisetas das inscrições (piloto + navegador + extras)
   for (const reg of regs as any[]) {
     if (reg.status === 'cancelled') continue;
     for (const size of shirtSizesOfRegistration(reg)) {
@@ -1954,9 +1968,25 @@ export async function getShirtAvailability(eventId: number) {
     }
   }
 
-  const sizes = new Set<string>([...stock.keys(), ...used.keys()]);
+  // 2) Camisetas de pedidos avulsos da loja (PENDING, PAID, SHIPPED)
+  for (const order of orders) {
+    let sizes: unknown[] = [];
+    try {
+      sizes = Array.isArray(order.sizes)
+        ? order.sizes
+        : typeof order.sizes === 'string'
+          ? JSON.parse(order.sizes)
+          : [];
+    } catch { sizes = []; }
+    for (const sz of sizes) {
+      const key = normalizeShirtSize(sz);
+      if (key) used.set(key, (used.get(key) || 0) + 1);
+    }
+  }
+
+  const allSizes = new Set<string>([...stock.keys(), ...used.keys()]);
   const out: { size: string; quantity: number; used: number; available: number }[] = [];
-  for (const size of sizes) {
+  for (const size of allSizes) {
     const quantity = stock.get(size) || 0;
     const u = used.get(size) || 0;
     out.push({ size, quantity, used: u, available: quantity - u });
