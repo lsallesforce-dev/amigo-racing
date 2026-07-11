@@ -2024,7 +2024,10 @@ export const appRouter = router({
             customer: {
               name: String(reg.pilotName),
               email: String(reg.pilotEmail),
-              ...(reg.pilotCpf ? { document: String(reg.pilotCpf).replace(/\D/g, '') } : {}),
+              ...(reg.pilotCpf ? { 
+                document: String(reg.pilotCpf).replace(/\D/g, '').padStart(11, '0'),
+                document_type: String(reg.pilotCpf).replace(/\D/g, '').length > 11 ? 'CNPJ' : 'CPF'
+              } : {}),
               type: "individual",
               phones: {
                 mobile_phone: {
@@ -2073,7 +2076,10 @@ export const appRouter = router({
             customer: {
               name: String(reg.pilotName),
               email: String(reg.pilotEmail),
-              ...(reg.pilotCpf ? { document: String(reg.pilotCpf).replace(/\D/g, '') } : {}),
+              ...(reg.pilotCpf ? { 
+                document: String(reg.pilotCpf).replace(/\D/g, '').padStart(11, '0'),
+                document_type: String(reg.pilotCpf).replace(/\D/g, '').length > 11 ? 'CNPJ' : 'CPF'
+              } : {}),
               type: "individual",
               ip: finalIp,
               phones: {
