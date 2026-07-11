@@ -1463,27 +1463,30 @@ export const appRouter = router({
 
         const regs = await db.getRegistrationsByEventId(input.eventId) || [];
 
-        // Conta pilotos + navegador + extras por tamanho canônico (mesma
-        // normalização do estoque: G3/G4 combinado, INF6 sem espaço).
-        const totals = new Map<string, number>();
+        // Busca estoque configurado + "usado" (inscrições + pedidos da loja, já calculado)
+        const stockRows = await db.getShirtAvailability(input.eventId);
+        const stockMap = new Map<string, { quantity: number; used: number; available: number }>();
+        for (const s of stockRows) {
+          stockMap.set(s.size, { quantity: s.quantity, used: s.used, available: s.available });
+        }
+
+        // Conta pedidos APENAS de inscrições (para tamanhos não no estoque)
+        const regTotals = new Map<string, number>();
         for (const reg of regs as any[]) {
           if (reg.status === 'cancelled') continue;
           for (const size of shirtSizesOfRegistration(reg)) {
-            totals.set(size, (totals.get(size) || 0) + 1);
+            regTotals.set(size, (regTotals.get(size) || 0) + 1);
           }
         }
 
-        // Busca estoque configurado (produzido / usado / disponível)
-        const stockRows = await db.getShirtAvailability(input.eventId);
-        const stockMap = new Map<string, { quantity: number; available: number }>();
-        for (const s of stockRows) {
-          stockMap.set(s.size, { quantity: s.quantity, available: s.available });
-        }
+        // "Pedidos" = used do estoque (inclui loja) se tiver estoque; senão só inscrições
+        const getPedidos = (size: string) =>
+          stockMap.has(size) ? (stockMap.get(size)!.used) : (regTotals.get(size) || 0);
 
-        // Une todos os tamanhos presentes (pedidos ou estoque)
-        const allSizes = new Set<string>([...totals.keys(), ...stockMap.keys()]);
+        // Une todos os tamanhos presentes (estoque ou inscrições)
+        const allSizes = new Set<string>([...stockMap.keys(), ...regTotals.keys()]);
         const rowsSorted = sortShirtSizes([...allSizes], (s) => s);
-        const totalPedidos = rowsSorted.reduce((acc, s) => acc + (totals.get(s) || 0), 0);
+        const totalPedidos = rowsSorted.reduce((acc, s) => acc + getPedidos(s), 0);
         const totalProduzido = rowsSorted.reduce((acc, s) => acc + (stockMap.get(s)?.quantity || 0), 0);
         const totalDisponivel = rowsSorted.reduce((acc, s) => acc + (stockMap.get(s)?.available || 0), 0);
 
@@ -1496,7 +1499,7 @@ export const appRouter = router({
             ? ['Tamanho', 'Pedidos', 'Produzido', 'Disponível']
             : ['Tamanho', 'Pedidos'],
           ...rowsSorted.map((size) => {
-            const pedidos = totals.get(size) || 0;
+            const pedidos = getPedidos(size);
             if (temEstoque) {
               const st = stockMap.get(size);
               return [size, pedidos, st?.quantity ?? '', st?.available ?? ''];
