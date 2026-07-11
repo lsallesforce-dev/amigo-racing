@@ -1,4 +1,4 @@
-import { integer, pgTable, text, timestamp, varchar, doublePrecision, boolean, json, serial, uuid } from "drizzle-orm/pg-core";
+import { integer, pgTable, text, timestamp, varchar, doublePrecision, boolean, json, serial, uuid, unique } from "drizzle-orm/pg-core";
 
 /**
  * Core user table backing auth flow.
@@ -210,6 +210,23 @@ export const registrations = pgTable("registrations", {
 
 export type Registration = typeof registrations.$inferSelect;
 export type InsertRegistration = typeof registrations.$inferInsert;
+
+// Estoque de camisetas por tamanho, por evento. A quantidade é o total
+// produzido; o "disponível" é calculado subtraindo o que já foi usado
+// (piloto + navegador + extras da loja) das inscrições não canceladas.
+export const eventShirtStock = pgTable("event_shirt_stock", {
+  id: serial("id").primaryKey(),
+  eventId: integer("eventId").notNull(),
+  size: varchar("size", { length: 20 }).notNull(), // tamanho canônico (ex: M, G3/G4, INF6)
+  quantity: integer("quantity").default(0).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().notNull(),
+}, (t) => ({
+  eventSizeUnique: unique().on(t.eventId, t.size),
+}));
+
+export type EventShirtStock = typeof eventShirtStock.$inferSelect;
+export type InsertEventShirtStock = typeof eventShirtStock.$inferInsert;
 
 /**
  * Payments table - payment records for registrations

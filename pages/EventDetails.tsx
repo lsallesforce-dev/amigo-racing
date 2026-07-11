@@ -10,6 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Separator } from "@/components/ui/separator";
 import { getLoginUrl } from "@/api/_server/const";
 import { trpc } from "@/lib/trpc";
+import { normalizeShirtSize } from "@/shared/shirtSizes";
 import { Calendar, MapPin, ArrowLeft, Users, DollarSign, Car, Trash2, Pencil, ShoppingBag, Trophy, Plus, Loader2, ArrowRight, GripVertical } from "lucide-react";
 import { Link, useParams } from "wouter";
 import { format } from "date-fns";
@@ -48,7 +49,13 @@ function SortableCategoryCard({ id, disabled, children }: { id: number; disabled
 
 const SHIRT_SIZES = ["PP", "P", "M", "G", "GG", "G1", "G2", "G3", "G4", "Infantil"];
 
-function ShirtSizeCard({ label, htmlId, value, onChange, imageUrl }: { label: string; htmlId: string; value: string; onChange: (v: string) => void; imageUrl?: string | null }) {
+type ShirtOption = { value: string; label: string; disabled?: boolean };
+
+function ShirtSizeCard({ label, htmlId, value, onChange, imageUrl, options }: { label: string; htmlId: string; value: string; onChange: (v: string) => void; imageUrl?: string | null; options?: ShirtOption[] }) {
+  // Sem estoque configurado: cai na lista fixa antiga (retrocompatível).
+  const opts: ShirtOption[] = options && options.length > 0
+    ? options
+    : SHIRT_SIZES.map(s => ({ value: s.toLowerCase(), label: s }));
   return (
     <div className="flex gap-3 p-3 border rounded-lg bg-card items-center">
       {imageUrl ? (
@@ -65,8 +72,10 @@ function ShirtSizeCard({ label, htmlId, value, onChange, imageUrl }: { label: st
             <SelectValue placeholder="Escolha o tamanho" />
           </SelectTrigger>
           <SelectContent>
-            {SHIRT_SIZES.map(s => (
-              <SelectItem key={s} value={s.toLowerCase()}>{s}</SelectItem>
+            {opts.map(o => (
+              <SelectItem key={o.value} value={o.value} disabled={o.disabled}>
+                {o.label}{o.disabled ? " (esgotado)" : ""}
+              </SelectItem>
             ))}
           </SelectContent>
         </Select>
@@ -107,6 +116,23 @@ export default function EventDetails() {
   );
   const registrations = registrationsQuery.data || [];
   const registrationsLoading = registrationsQuery.isLoading;
+
+  // Estoque de camisetas por tamanho (se configurado no evento).
+  const { data: shirtAvailability } = trpc.shirtStock.getByEvent.useQuery(
+    { eventId },
+    { enabled: eventId > 0 }
+  );
+  // "Configurado" = tem ao menos um tamanho com quantidade produzida > 0.
+  // (getByEvent também devolve tamanhos que só aparecem no uso, com qtd 0 —
+  // esses sozinhos NÃO significam estoque configurado; senão eventos sem
+  // estoque mas com inscrições travariam tudo como esgotado.)
+  const hasShirtStock = !!shirtAvailability && shirtAvailability.some(a => a.quantity > 0);
+  // Mapa tamanho canônico -> disponível.
+  const shirtAvailMap = new Map((shirtAvailability || []).map(a => [a.size, a.available]));
+  // Opções do kit (piloto/navegador): vêm do estoque; esgotado fica desabilitado.
+  const kitShirtOptions: ShirtOption[] = hasShirtStock
+    ? shirtAvailability!.map(a => ({ value: a.size, label: a.size, disabled: a.available <= 0 }))
+    : [];
 
   const { data: availableProducts } = trpc.store.getAvailable.useQuery(
     { eventId, organizerId: (event as any)?.organizer?.principalUserId },
@@ -1069,6 +1095,7 @@ export default function EventDetails() {
                             value={formData.pilot_shirt}
                             onChange={(value) => setFormData({ ...formData, pilot_shirt: value })}
                             imageUrl={kitShirtImageUrl}
+                            options={kitShirtOptions}
                           />
                           {/* Campo Camiseta Navegador - ocultar para Motos */}
                           {!isMotosCategory && (
@@ -1078,6 +1105,7 @@ export default function EventDetails() {
                               value={formData.navigator_shirt}
                               onChange={(value) => setFormData({ ...formData, navigator_shirt: value })}
                               imageUrl={kitShirtImageUrl}
+                              options={kitShirtOptions}
                             />
                           )}
                         </div>
@@ -1169,7 +1197,15 @@ export default function EventDetails() {
                                             <SelectValue placeholder={`Tamanho ${idx + 1} *`} />
                                           </SelectTrigger>
                                           <SelectContent>
-                                            {displaySizes.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+                                            {displaySizes.map(s => {
+                                              // Camiseta da loja também consome do estoque: esgotado desabilita.
+                                              const esgotado = hasShirtStock && isCamisa && (shirtAvailMap.get(normalizeShirtSize(s)) ?? 0) <= 0;
+                                              return (
+                                                <SelectItem key={s} value={s} disabled={esgotado}>
+                                                  {s}{esgotado ? " (esgotado)" : ""}
+                                                </SelectItem>
+                                              );
+                                            })}
                                           </SelectContent>
                                         </Select>
                                       ))}

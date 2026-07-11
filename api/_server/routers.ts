@@ -14,6 +14,7 @@ import * as db from "./db.js";
 import { getDb } from "./db.js";
 import { products, productOrders, organizerMembers, registrations, events, payments, championshipStages, championshipRequests, users, championships, organizers, categories } from "./schema.js";
 import { eq, sql, and, inArray, ne } from "drizzle-orm";
+import { normalizeShirtSize, sortShirtSizes, shirtSizesOfRegistration } from "../../shared/shirtSizes.js";
 import { ENV } from "./env.js";
 import { sendEmail } from "./email.js";
 
@@ -673,6 +674,36 @@ export const appRouter = router({
   zequinha: zequinhaRouter,
   whatsapp: whatsappRouter,
 
+  shirtStock: router({
+    // Disponibilidade por tamanho (público: o formulário de inscrição lê pra
+    // saber o que ofertar). Ordenado PP,P,M,G,GG,G1..G4 → infantis → outros.
+    getByEvent: publicProcedure
+      .input(z.object({ eventId: z.number() }))
+      .query(async ({ input }) => {
+        const rows = await db.getShirtAvailability(input.eventId);
+        return sortShirtSizes(rows, (r) => r.size);
+      }),
+    // Define/ajusta o estoque (organizador). Upsert por tamanho.
+    setStock: protectedProcedure
+      .input(z.object({
+        eventId: z.number(),
+        items: z.array(z.object({ size: z.string(), quantity: z.number().int().min(0) })),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        const user = ctx.user as any;
+        const context = await db.getOrganizerContext(user);
+        const event = await db.getEventById(input.eventId) as any;
+        if (!event) throw new TRPCError({ code: 'NOT_FOUND', message: 'Evento não encontrado' });
+        const organizer = await db.getOrganizerById(event.organizerId) as any;
+        const principal = await db.getUserById(context.principalUserId) as any;
+        if (!organizer || organizer.ownerId !== principal?.openId || (context.type === 'MEMBER' && !context.permissions.includes('registrations'))) {
+          throw new TRPCError({ code: 'UNAUTHORIZED', message: 'Somente o organizador pode alterar o estoque' });
+        }
+        await db.setShirtStock(input.eventId, input.items);
+        return sortShirtSizes(await db.getShirtAvailability(input.eventId), (r) => r.size);
+      }),
+  }),
+
   organizerMembers: router({
     invite: organizerProcedure
       .input(z.object({
@@ -1200,6 +1231,37 @@ export const appRouter = router({
       .mutation(async ({ ctx, input }) => {
         const user = ctx.user as any;
         try {
+          // Trava de estoque de camisetas: só quando o evento tem estoque
+          // configurado (retrocompatível com eventos sem estoque). Confere se
+          // os tamanhos desta inscrição (piloto + navegador + extras) cabem no
+          // disponível. Conta a demanda da PRÓPRIA inscrição também, pra não
+          // deixar 2 camisetas do mesmo tamanho passarem quando só resta 1.
+          const stockRows = await db.getShirtStockByEventId(input.eventId);
+          if (stockRows.length > 0) {
+            const availability = await db.getShirtAvailability(input.eventId);
+            const availMap = new Map(availability.map(a => [a.size, a.available]));
+
+            const demand = new Map<string, number>();
+            const bump = (s: any) => { const k = normalizeShirtSize(s); if (k) demand.set(k, (demand.get(k) || 0) + 1); };
+            bump(input.pilotShirtSize);
+            if (input.navigatorShirtSize) bump(input.navigatorShirtSize);
+            if (Array.isArray(input.purchasedProducts)) {
+              for (const item of input.purchasedProducts as any[]) {
+                if (item && Array.isArray(item.sizes)) for (const sz of item.sizes) bump(sz);
+              }
+            }
+
+            for (const [size, qty] of demand) {
+              const available = availMap.get(size) ?? 0;
+              if (available < qty) {
+                throw new TRPCError({
+                  code: 'BAD_REQUEST',
+                  message: `Estoque de camiseta esgotado para o tamanho ${size}. Escolha outro tamanho disponível.`,
+                });
+              }
+            }
+          }
+
           const result = await db.createRegistration({
             ...input,
             userId: user.id || 1,
@@ -1228,6 +1290,9 @@ export const appRouter = router({
 
           return { success: true, id: finalId, registrationId: finalId };
         } catch (error) {
+          // Erros de negócio (ex: estoque de camiseta esgotado) devem chegar
+          // ao usuário com a mensagem original, não viram "erro genérico".
+          if (error instanceof TRPCError) throw error;
           console.error("[registrations.create Error]:", error);
           throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Erro ao criar inscrição' });
         }
@@ -1366,49 +1431,17 @@ export const appRouter = router({
 
         const regs = await db.getRegistrationsByEventId(input.eventId) || [];
 
-        const norm = (s: any) => String(s || '').trim().toUpperCase();
+        // Conta pilotos + navegador + extras por tamanho canônico (mesma
+        // normalização do estoque: G3/G4 combinado, INF6 sem espaço).
         const totals = new Map<string, number>();
-        const add = (size: any) => {
-          const k = norm(size);
-          if (!k) return;
-          totals.set(k, (totals.get(k) || 0) + 1);
-        };
-
         for (const reg of regs as any[]) {
           if (reg.status === 'cancelled') continue;
-          add(reg.pilotShirtSize);
-          if (reg.navigatorShirtSize) add(reg.navigatorShirtSize);
-          let pp: any[] = [];
-          try {
-            pp = typeof reg.purchasedProducts === 'string' ? JSON.parse(reg.purchasedProducts) : (reg.purchasedProducts || []);
-          } catch { pp = []; }
-          if (Array.isArray(pp)) {
-            for (const item of pp) {
-              if (item && Array.isArray(item.sizes)) {
-                for (const sz of item.sizes) add(sz);
-              }
-            }
+          for (const size of shirtSizesOfRegistration(reg)) {
+            totals.set(size, (totals.get(size) || 0) + 1);
           }
         }
 
-        // Ordena: PP,P,M,G,GG,G1..G4 → infantis (INFANTIL, Inf N) → outros.
-        const ORDER = ['PP', 'P', 'M', 'G', 'GG', 'G1', 'G2', 'G3', 'G4'];
-        const sortKey = (size: string): [number, number, number | string] => {
-          const idx = ORDER.indexOf(size);
-          if (idx >= 0) return [0, idx, 0];
-          if (size === 'INFANTIL') return [1, 0, 0];
-          const m = size.match(/^INF\s*(\d+)/);
-          if (m) return [1, 1, Number(m[1])];
-          return [2, 0, size];
-        };
-        const rowsSorted = [...totals.entries()].sort((a, b) => {
-          const ka = sortKey(a[0]); const kb = sortKey(b[0]);
-          if (ka[0] !== kb[0]) return ka[0] - kb[0];
-          if (ka[1] !== kb[1]) return ka[1] - kb[1];
-          if (typeof ka[2] === 'number' && typeof kb[2] === 'number') return ka[2] - kb[2];
-          return String(ka[2]).localeCompare(String(kb[2]));
-        });
-
+        const rowsSorted = sortShirtSizes([...totals.entries()], ([size]) => size);
         const totalGeral = rowsSorted.reduce((acc, [, q]) => acc + q, 0);
 
         const aoa: any[][] = [

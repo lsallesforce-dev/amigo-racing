@@ -34,8 +34,10 @@ import {
   championshipStages,
   InsertChampionshipStage,
   championshipResults,
-  InsertChampionshipResult
+  InsertChampionshipResult,
+  eventShirtStock,
 } from "./schema.js";
+import { normalizeShirtSize, shirtSizesOfRegistration } from "../../shared/shirtSizes.js";
 import { ENV } from './env.js';
 import postgres from "postgres";
 
@@ -1922,3 +1924,59 @@ export async function deleteProduct(id: string, userId: number) {
   return result[0];
 }
 
+
+// ===== Estoque de camisetas por tamanho =====
+
+export async function getShirtStockByEventId(eventId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  return await db.select().from(eventShirtStock).where(eq(eventShirtStock.eventId, eventId));
+}
+
+// Calcula disponibilidade por tamanho: produzido (estoque) - usado (piloto +
+// navegador + extras das inscrições não canceladas). Retorna também tamanhos
+// que só aparecem no consumo (over-alocados, sem linha de estoque).
+export async function getShirtAvailability(eventId: number) {
+  const db = await getDb();
+  if (!db) return [] as { size: string; quantity: number; used: number; available: number }[];
+
+  const stockRows = await db.select().from(eventShirtStock).where(eq(eventShirtStock.eventId, eventId));
+  const regs = await db.select().from(registrations).where(eq(registrations.eventId, eventId));
+
+  const stock = new Map<string, number>();
+  for (const r of stockRows) stock.set(normalizeShirtSize(r.size), r.quantity);
+
+  const used = new Map<string, number>();
+  for (const reg of regs as any[]) {
+    if (reg.status === 'cancelled') continue;
+    for (const size of shirtSizesOfRegistration(reg)) {
+      used.set(size, (used.get(size) || 0) + 1);
+    }
+  }
+
+  const sizes = new Set<string>([...stock.keys(), ...used.keys()]);
+  const out: { size: string; quantity: number; used: number; available: number }[] = [];
+  for (const size of sizes) {
+    const quantity = stock.get(size) || 0;
+    const u = used.get(size) || 0;
+    out.push({ size, quantity, used: u, available: quantity - u });
+  }
+  return out;
+}
+
+export async function setShirtStock(eventId: number, items: { size?: string; quantity?: number }[]) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  for (const item of items) {
+    const size = normalizeShirtSize(item.size);
+    if (!size) continue;
+    const qty = Math.max(0, Math.floor(item.quantity || 0));
+    await db.execute(sql`
+      INSERT INTO event_shirt_stock ("eventId", size, quantity, "updatedAt")
+      VALUES (${eventId}, ${size}, ${qty}, NOW())
+      ON CONFLICT ("eventId", size) DO UPDATE SET quantity = ${qty}, "updatedAt" = NOW();
+    `);
+  }
+  return await getShirtStockByEventId(eventId);
+}

@@ -16,6 +16,7 @@ import { toast } from "sonner";
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
 import Navbar from "@/components/Navbar";
+import { normalizeShirtSize, sortShirtSizes } from "@/shared/shirtSizes";
 
 
 const calculateStartTime = (baseTime: string, index: number, intervalSeconds: number): string => {
@@ -36,6 +37,10 @@ export default function Registrations() {
   const [registrationToDelete, setRegistrationToDelete] = useState<any>(null);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [editForm, setEditForm] = useState<any>(null);
+  const [stockDialogOpen, setStockDialogOpen] = useState(false);
+  const [stockEdits, setStockEdits] = useState<Record<string, number>>({});
+  const [newSize, setNewSize] = useState("");
+  const [newQty, setNewQty] = useState("");
 
   // Efeito para carregar eventId da URL se presente
   useEffect(() => {
@@ -107,6 +112,60 @@ export default function Registrations() {
 
   // Mutation para exportar a planilha de camisetas
   const exportShirtsMutation = trpc.registrations.exportShirts.useMutation();
+
+  // Estoque de camisetas (disponibilidade + gestão)
+  const { data: shirtStock = [] } = trpc.shirtStock.getByEvent.useQuery(
+    { eventId: selectedEventId! },
+    { enabled: !!selectedEventId && stockDialogOpen }
+  );
+  // Semeia o formulário editável quando a disponibilidade carrega.
+  useEffect(() => {
+    if (stockDialogOpen && shirtStock.length > 0) {
+      setStockEdits(Object.fromEntries(shirtStock.map((s: any) => [s.size, s.quantity])));
+    }
+  }, [stockDialogOpen, shirtStock]);
+
+  const usedBySize = new Map((shirtStock as any[]).map(s => [s.size, s.used]));
+  const stockRows = sortShirtSizes(
+    Object.keys(stockEdits).map(size => {
+      const quantity = stockEdits[size];
+      const used = usedBySize.get(size) || 0;
+      return { size, quantity, used, available: quantity - used };
+    }),
+    (r) => r.size
+  );
+
+  const setStockMutation = trpc.shirtStock.setStock.useMutation({
+    onSuccess: () => {
+      toast.success("Estoque de camisetas atualizado!");
+      setStockDialogOpen(false);
+      utils.shirtStock.getByEvent.invalidate();
+    },
+    onError: (error) => {
+      toast.error(error.message || "Erro ao salvar estoque");
+    },
+  });
+
+  const handleAddStockSize = () => {
+    const size = normalizeShirtSize(newSize);
+    if (!size) {
+      toast.error("Informe um tamanho válido");
+      return;
+    }
+    if (stockEdits[size] !== undefined) {
+      toast.error(`Tamanho ${size} já está na lista`);
+      return;
+    }
+    setStockEdits({ ...stockEdits, [size]: Math.max(0, parseInt(newQty) || 0) });
+    setNewSize("");
+    setNewQty("");
+  };
+
+  const handleSaveStock = () => {
+    if (!selectedEventId) return;
+    const items = Object.entries(stockEdits).map(([size, quantity]) => ({ size, quantity }));
+    setStockMutation.mutate({ eventId: selectedEventId, items });
+  };
 
   // Mutation para edição completa da inscrição
   const updateFullMutation = trpc.registrations.updateFull.useMutation({
@@ -565,6 +624,11 @@ export default function Registrations() {
                 </span>
                 <span className="sm:hidden">Camisetas</span>
               </Button>
+              <Button onClick={() => setStockDialogOpen(true)} variant="outline" className="h-10">
+                <Shirt className="mr-2 h-4 w-4" />
+                <span className="hidden sm:inline">Estoque de Camisetas</span>
+                <span className="sm:hidden">Estoque</span>
+              </Button>
             </div>
           )}
         </div>
@@ -913,6 +977,105 @@ export default function Registrations() {
                 {deleteRegistration.isPending ? "Excluindo..." : "Excluir Permanentemente"}
               </Button>
             </div>
+          </DialogContent>
+        </Dialog>
+
+        {/* Dialog de Estoque de Camisetas */}
+        <Dialog open={stockDialogOpen} onOpenChange={setStockDialogOpen}>
+          <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <Shirt className="h-5 w-5" />
+                Estoque de Camisetas
+              </DialogTitle>
+              <DialogDescription>
+                Defina quantas camisetas foram produzidas por tamanho. As novas inscrições
+                só poderão escolher tamanhos com saldo disponível (piloto + navegador + extras
+                da loja consomem do mesmo estoque).
+              </DialogDescription>
+            </DialogHeader>
+
+            <div className="py-2">
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Tamanho</TableHead>
+                      <TableHead className="text-center w-32">Produzido</TableHead>
+                      <TableHead className="text-center">Usado</TableHead>
+                      <TableHead className="text-center">Disponível</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {stockRows.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={4} className="text-center text-muted-foreground py-6">
+                          Nenhum tamanho cadastrado ainda. Adicione abaixo.
+                        </TableCell>
+                      </TableRow>
+                    ) : (
+                      stockRows.map((row) => (
+                        <TableRow key={row.size}>
+                          <TableCell className="font-medium">{row.size}</TableCell>
+                          <TableCell className="text-center">
+                            <Input
+                              type="number"
+                              min={0}
+                              className="w-24 mx-auto text-center"
+                              value={stockEdits[row.size] ?? 0}
+                              onChange={(e) =>
+                                setStockEdits({ ...stockEdits, [row.size]: Math.max(0, parseInt(e.target.value) || 0) })
+                              }
+                            />
+                          </TableCell>
+                          <TableCell className="text-center text-muted-foreground">{row.used}</TableCell>
+                          <TableCell className="text-center">
+                            <span className={row.available < 0 ? "text-destructive font-semibold" : row.available === 0 ? "text-amber-600 font-semibold" : "text-green-600 font-semibold"}>
+                              {row.available}
+                            </span>
+                          </TableCell>
+                        </TableRow>
+                      ))
+                    )}
+                  </TableBody>
+                </Table>
+              </div>
+
+              <div className="flex items-end gap-2 mt-4 pt-4 border-t">
+                <div className="space-y-1">
+                  <Label className="text-xs">Novo tamanho</Label>
+                  <Input
+                    className="w-32"
+                    placeholder="Ex: INF8, G3/G4"
+                    value={newSize}
+                    onChange={(e) => setNewSize(e.target.value)}
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs">Qtd</Label>
+                  <Input
+                    type="number"
+                    min={0}
+                    className="w-24"
+                    value={newQty}
+                    onChange={(e) => setNewQty(e.target.value)}
+                  />
+                </div>
+                <Button variant="outline" onClick={handleAddStockSize}>Adicionar</Button>
+              </div>
+
+              <p className="text-xs text-muted-foreground mt-3">
+                "Disponível" negativo significa que já foram usadas mais camisetas do que o produzido
+                (ex: tamanhos antigos que não estavam no pedido). Ajuste o produzido para regularizar.
+              </p>
+            </div>
+
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setStockDialogOpen(false)}>Cancelar</Button>
+              <Button onClick={handleSaveStock} disabled={setStockMutation.isPending}>
+                {setStockMutation.isPending ? "Salvando..." : "Salvar Estoque"}
+              </Button>
+            </DialogFooter>
           </DialogContent>
         </Dialog>
 
