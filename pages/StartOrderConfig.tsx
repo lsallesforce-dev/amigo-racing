@@ -5,11 +5,11 @@ import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
-import { ArrowLeft, Save, Trash2, Download, Wand2, Edit3, Users, Clock, SkipForward } from "lucide-react";
+import { ArrowLeft, Save, Download, Wand2, Users, RotateCcw } from "lucide-react";
 import { useParams, useLocation } from "wouter";
 import { useState, useEffect, useRef } from "react";
-import { SortableStartList } from "@/components/SortableStartList";
 import { trpc } from "@/lib/trpc";
+import { calculateStartTime, computeCascade, type CascadeEntry } from "@/lib/start-order";
 
 const hideNumberArrows = `
   input::-webkit-outer-spin-button,
@@ -22,265 +22,152 @@ const hideNumberArrows = `
   }
 `;
 
-const calculateStartTime = (baseTime: string, index: number, intervalSeconds: number): string => {
-  if (!baseTime) return "08:00";
-  const [hours, minutes] = baseTime.split(":").map(Number);
-  const totalSeconds = hours * 3600 + minutes * 60 + index * intervalSeconds;
-  const newHours = Math.floor(totalSeconds / 3600) % 24;
-  const newMinutes = Math.floor((totalSeconds % 3600) / 60);
-  return `${String(newHours).padStart(2, "0")}:${String(newMinutes).padStart(2, "0")}`;
+type CategoryConfig = {
+  orderPosition: number;
+  numberStart: number;
+  numberEnd: number;
+  startTime: string;
+  intervalSeconds: number;
+  timeBetweenCategories: number;
+  numberStartManual: boolean;
+  numberEndManual: boolean;
+  startTimeManual: boolean;
+  /** Ordem sorteada (JSON de IDs de inscrição) — somente leitura aqui; quem grava é o /sorteio */
+  registrationOrder: string | null;
 };
 
 export default function StartOrderConfig() {
-  console.log('[StartOrderConfig] Component rendered');
   const { id } = useParams<{ id: string }>();
   const eventId = parseInt(id || "0");
   const utils = trpc.useUtils();
   const [, navigate] = useLocation();
 
   // Queries
-  const { data: event } = trpc.events.get.useQuery({ id: eventId });
-  const { data: categories = [] } = trpc.categories.listByEvent.useQuery({ eventId });
-  const { data: stats = { byCategory: [] } } = trpc.registrations.getStatistics.useQuery({ eventId });
-  const { data: startOrderConfigs = [], isLoading: isLoadingConfigs } = trpc.startOrder.getByEvent.useQuery({ eventId });
-  const { data: registrations = [] } = trpc.registrations.listByEvent.useQuery({ eventId });
+  const eventQuery = trpc.events.get.useQuery({ id: eventId });
+  const categoriesQuery = trpc.categories.listByEvent.useQuery({ eventId });
+  const statsQuery = trpc.registrations.getStatistics.useQuery({ eventId });
+  const configsQuery = trpc.startOrder.getByEvent.useQuery({ eventId });
+  const registrationsQuery = trpc.registrations.listByEvent.useQuery({ eventId });
 
-  // Mutations
-  const upsertMutation = trpc.startOrder.upsert.useMutation();
+  const event = eventQuery.data;
+  const categories = categoriesQuery.data ?? [];
+  const stats = statsQuery.data ?? { byCategory: [] };
+  const startOrderConfigs = configsQuery.data ?? [];
+  const registrations = registrationsQuery.data ?? [];
+
   const upsertBatchMutation = trpc.startOrder.upsertBatch.useMutation();
 
-  // Mutations for Export (triggered manually)
-  const exportMutation = trpc.startOrder.exportStartList.useMutation();
-  const exportKrakenMutation = trpc.startOrder.exportKraken.useMutation();
-  const exportEventListMutation = trpc.startOrder.exportEventList.useMutation();
-
-
-
-  // State: configs keyed by categoryId
-  const [configs, setConfigs] = useState<Record<number, {
-    orderPosition: number;
-    numberStart: number;
-    numberEnd: number;
-    startTime: string;
-    intervalSeconds: number;
-    timeBetweenCategories?: number;
-    registrationOrder?: string | number[] | null;
-  }>>({});
-
-  // Refs para controlar inputs de número sem interferência do React
-  const numberEndRefs = useRef<Record<number, HTMLInputElement | null>>({});
-  const intervalSecondsRefs = useRef<Record<number, HTMLInputElement | null>>({});
-
-  // State para modal de sorting
-  const [showSortingModal, setShowSortingModal] = useState(false);
-  const [sortedRegistrations, setSortedRegistrations] = useState<any[]>([]);
-
+  const [configs, setConfigs] = useState<Record<number, CategoryConfig>>({});
   const hasInitialized = useRef(false);
 
-  // Initialize configs from database OR create defaults
+  const regCountOf = (categoryId: number): number => {
+    const stat = stats?.byCategory?.find((s: any) => s.categoryId === categoryId);
+    return Number(stat?.totalRegistrations || 0);
+  };
+
+  const subcategoriesOf = (cfgs: Record<number, CategoryConfig>) =>
+    categories
+      .filter(cat => !!cat.parentId && !!cfgs[cat.id])
+      .sort((a, b) => (cfgs[a.id].orderPosition - cfgs[b.id].orderPosition) || (a.id - b.id));
+
+  /** Roda a cascata compartilhada sobre o estado e devolve o estado atualizado. */
+  const applyCascade = (cfgs: Record<number, CategoryConfig>): Record<number, CategoryConfig> => {
+    const entries: CascadeEntry[] = subcategoriesOf(cfgs).map(cat => ({
+      categoryId: cat.id,
+      registrationCount: regCountOf(cat.id),
+      orderPosition: cfgs[cat.id].orderPosition,
+      numberStart: cfgs[cat.id].numberStart,
+      numberEnd: cfgs[cat.id].numberEnd,
+      startTime: cfgs[cat.id].startTime,
+      intervalSeconds: cfgs[cat.id].intervalSeconds,
+      timeBetweenCategories: cfgs[cat.id].timeBetweenCategories,
+      numberStartManual: cfgs[cat.id].numberStartManual,
+      numberEndManual: cfgs[cat.id].numberEndManual,
+      startTimeManual: cfgs[cat.id].startTimeManual,
+    }));
+
+    const next = { ...cfgs };
+    computeCascade(entries).forEach(e => {
+      next[e.categoryId] = {
+        ...next[e.categoryId],
+        orderPosition: e.orderPosition,
+        numberStart: e.numberStart,
+        numberEnd: e.numberEnd,
+        startTime: e.startTime,
+      };
+    });
+    return next;
+  };
+
+  // Inicializa o estado quando TODAS as queries usadas no cálculo carregarem.
+  // Inicializar sem stats zerava as contagens e corrompia números/horários (bug antigo).
   useEffect(() => {
-    console.log('[StartOrderConfig] useEffect triggered', {
-      categoriesLength: categories.length,
-      statsLoading: !stats?.byCategory,
-      isLoadingConfigs,
-      hasInitialized: hasInitialized.current
+    if (hasInitialized.current) return;
+    if (categoriesQuery.isPending || statsQuery.isPending || configsQuery.isPending) return;
+    if (categories.length === 0) return;
+
+    const subcats = categories.filter(cat => !!cat.parentId);
+    const seeded: Record<number, CategoryConfig> = {};
+    subcats.forEach((cat, idx) => {
+      const saved = startOrderConfigs.find(c => c.categoryId === cat.id) as any;
+      seeded[cat.id] = {
+        orderPosition: saved?.orderPosition ?? 900 + idx,
+        numberStart: saved?.numberStart ?? 1,
+        numberEnd: saved?.numberEnd ?? 0,
+        startTime: (saved?.startTime || "08:00").slice(0, 5),
+        intervalSeconds: saved?.intervalSeconds ?? 60,
+        timeBetweenCategories: Number(saved?.timeBetweenCategories ?? 0),
+        numberStartManual: !!saved?.numberStartManual,
+        numberEndManual: !!saved?.numberEndManual,
+        startTimeManual: !!saved?.startTimeManual,
+        registrationOrder: (saved?.registrationOrder as string) ?? null,
+      };
     });
 
-    // Only initialize if categories and config are loaded
-    if (categories.length > 0 && !isLoadingConfigs && !hasInitialized.current) {
-      const newConfigs: typeof configs = {};
-      let currentNumber = 1;
-      let currentTimeMinutes = timeToMinutes("08:00");
+    setConfigs(applyCascade(seeded));
+    hasInitialized.current = true;
+  }, [categoriesQuery.isPending, statsQuery.isPending, configsQuery.isPending, categories, stats, startOrderConfigs]);
 
-      // Filtrar apenas subcategorias (parentId !== null)
-      const subcategories = categories.filter(category => !!category.parentId);
-
-      // Ordenar subcategorias pela posição salva ou pelo ID
-      const sortedSubcats = [...subcategories].sort((a, b) => {
-        const configA = startOrderConfigs.find(c => c.categoryId === a.id);
-        const configB = startOrderConfigs.find(c => c.categoryId === b.id);
-        const posA = configA?.orderPosition || 999;
-        const posB = configB?.orderPosition || 999;
-        return posA !== posB ? posA - posB : a.id - b.id;
-      });
-
-      sortedSubcats.forEach((category, idx) => {
-        const catStat = stats.byCategory?.find((s: any) => s.categoryId === category.id);
-        const registrationCount = Number(catStat?.totalRegistrations || 0);
-
-        // Popular configs para todas as subcategorias
-        const existingConfig = startOrderConfigs.find(c => c.categoryId === category.id);
-
-        // Se for a primeira categoria e tiver horário salvo, usar como base
-        if (idx === 0 && existingConfig?.startTime) {
-          currentTimeMinutes = timeToMinutes(existingConfig.startTime);
-        }
-
-        const effectiveNumberStart = existingConfig?.numberStart || currentNumber;
-        const effectiveInterval = existingConfig?.intervalSeconds || 60;
-        const timeBetween = Number((existingConfig as any)?.timeBetweenCategories || 0);
-
-        const isManualEnd = existingConfig && existingConfig.numberEnd !== (existingConfig.numberStart + registrationCount - 1);
-        const numberEnd = isManualEnd ? existingConfig.numberEnd : (effectiveNumberStart + Math.max(registrationCount, 1) - 1);
-
-        newConfigs[category.id] = {
-          orderPosition: existingConfig?.orderPosition || (idx + 1),
-          numberStart: effectiveNumberStart,
-          numberEnd: numberEnd,
-          startTime: minutesToTime(currentTimeMinutes),
-          intervalSeconds: effectiveInterval,
-          timeBetweenCategories: timeBetween,
-        };
-
-        const numPilotosForTime = Math.max(numberEnd - effectiveNumberStart + 1, 1);
-        const totalDurationSegs = (numPilotosForTime - 1) * effectiveInterval;
-        const totalDurationMins = Math.ceil(Math.max(0, totalDurationSegs) / 60);
-
-        currentTimeMinutes += totalDurationMins + timeBetween;
-        currentNumber = numberEnd + 1;
-      });
-
-      setConfigs(newConfigs);
-      hasInitialized.current = true;
-    }
-  }, [categories, stats, startOrderConfigs]);
-
-  // Função para converter tempo HH:MM para minutos
-  const timeToMinutes = (time: string): number => {
-    const [hours, minutes] = time.split(':').map(Number);
-    return hours * 60 + minutes;
+  /** Atualiza campos de uma categoria sem recalcular (a cascata roda no onBlur). */
+  const setField = (categoryId: number, patch: Partial<CategoryConfig>) => {
+    setConfigs(prev => ({ ...prev, [categoryId]: { ...prev[categoryId], ...patch } }));
   };
 
-  // Função para converter minutos para HH:MM
-  const minutesToTime = (minutes: number): string => {
-    const hours = Math.floor(minutes / 60) % 24;
-    const mins = minutes % 60;
-    return `${String(hours).padStart(2, '0')}:${String(mins).padStart(2, '0')}`;
-  };
+  const recalcOnBlur = () => setConfigs(prev => applyCascade(prev));
 
-  // Centralized Cascade Logic
-  const recalculateCascade = (currentConfigs: typeof configs, startingFromId?: number) => {
-    const updated = { ...currentConfigs };
-
-    // Sort subcategories by orderPosition
-    const subcats = categories
-      .filter(cat => !!cat.parentId)
-      .sort((a, b) => {
-        const posA = updated[a.id]?.orderPosition || 999;
-        const posB = updated[b.id]?.orderPosition || 999;
-        return posA - posB;
-      });
-
-    const startIdx = startingFromId
-      ? subcats.findIndex(c => c.id === startingFromId)
-      : 0;
-
-    if (startIdx === -1) return updated;
-
-    for (let i = startIdx; i < subcats.length; i++) {
-      const cat = subcats[i];
-      const cfg = updated[cat.id];
-      if (!cfg) continue;
-
-      const catStat = stats?.byCategory?.find((s: any) => s.categoryId === cat.id);
-      const regCount = Number(catStat?.totalRegistrations || 0);
-      const count = Math.max(regCount, 1);
-
-      if (i > 0) {
-        const prevCfg = updated[subcats[i - 1].id];
-        cfg.numberStart = prevCfg.numberEnd + 1;
-
-        if (i > startIdx) {
-          // AUTOMATION: Subsequent categories always reset to pilot count
-          cfg.numberEnd = cfg.numberStart + count - 1;
-        }
-      }
-
-      // Default/Empty handling:
-      // Fill if undefined (initial) OR if it's 0 AND we are not currently editing this specific field.
-      if (cfg.numberEnd === undefined || (cfg.numberEnd === 0 && startingFromId !== cat.id)) {
-        cfg.numberEnd = cfg.numberStart + count - 1;
-      }
-
-      // Timing...
-      const numPilotos = Math.max(cfg.numberEnd - cfg.numberStart + 1, 1);
-      const durationSegs = (numPilotos - 1) * cfg.intervalSeconds;
-      const durationMins = Math.ceil(Math.max(0, durationSegs) / 60);
-
-      const prevStartMins = i > 0 ? timeToMinutes(updated[subcats[i - 1].id].startTime) : 0;
-      const prevNumP = i > 0 ? Math.max(updated[subcats[i - 1].id].numberEnd - updated[subcats[i - 1].id].numberStart + 1, 1) : 0;
-      const prevDurS = i > 0 ? (prevNumP - 1) * updated[subcats[i - 1].id].intervalSeconds : 0;
-      const prevDurM = i > 0 ? Math.ceil(Math.max(0, prevDurS) / 60) : 0;
-      const prevGap = i > 0 ? Number(updated[subcats[i - 1].id].timeBetweenCategories || 0) : 0;
-
-      if (i > 0) {
-        cfg.startTime = minutesToTime(prevStartMins + prevDurM + prevGap);
-      }
-    }
-
-    return updated;
-  };
-
-  // Função para mover categoria para cima
-  const handleMoveUp = (categoryIndex: number) => {
-    const subcategoriesWithRegistrations = categories.filter(category => {
-      if (!category.parentId) return false;
-      const catStat = stats?.byCategory?.find((s: any) => s.categoryId === category.id);
-      const registrationCount = Number(catStat?.totalRegistrations || 0);
-      return registrationCount > 0;
-    });
-
-    if (categoryIndex <= 0) return;
-
+  /** Move a categoria para a posição escolhida e renumera 1..n. */
+  const handlePositionChange = (categoryId: number, newPosition: number) => {
     setConfigs(prev => {
-      const updated = { ...prev };
-      const currentCat = subcategoriesWithRegistrations[categoryIndex];
-      const prevCat = subcategoriesWithRegistrations[categoryIndex - 1];
+      const ordered = subcategoriesOf(prev);
+      const fromIdx = ordered.findIndex(cat => cat.id === categoryId);
+      if (fromIdx === -1) return prev;
 
-      // Trocar os números e horários (apenas as posições)
-      const currentPos = updated[currentCat.id].orderPosition;
-      updated[currentCat.id].orderPosition = updated[prevCat.id].orderPosition;
-      updated[prevCat.id].orderPosition = currentPos;
+      const [moved] = ordered.splice(fromIdx, 1);
+      ordered.splice(Math.min(Math.max(newPosition - 1, 0), ordered.length), 0, moved);
 
-      // Recalcular cascata completa a partir do primeiro
-      return recalculateCascade(updated);
+      const next = { ...prev };
+      ordered.forEach((cat, i) => {
+        next[cat.id] = { ...next[cat.id], orderPosition: i + 1 };
+      });
+      return applyCascade(next);
     });
   };
 
-  // Função para mover categoria para baixo
-  const handleMoveDown = (categoryIndex: number) => {
-    const subcategoriesWithRegistrations = categories.filter(category => {
-      if (!category.parentId) return false;
-      const catStat = stats?.byCategory?.find((s: any) => s.categoryId === category.id);
-      const registrationCount = Number(catStat?.totalRegistrations || 0);
-      return registrationCount > 0;
-    });
-
-    if (categoryIndex >= subcategoriesWithRegistrations.length - 1) return;
-
+  /** Limpa todas as flags manuais e recalcula tudo a partir da 1ª categoria. */
+  const handleResetAuto = () => {
     setConfigs(prev => {
-      const updated = { ...prev };
-      const currentCat = subcategoriesWithRegistrations[categoryIndex];
-      const nextCat = subcategoriesWithRegistrations[categoryIndex + 1];
-
-      // Trocar os números e horários (apenas as posições)
-      const currentPos = updated[currentCat.id].orderPosition;
-      updated[currentCat.id].orderPosition = updated[nextCat.id].orderPosition;
-      updated[nextCat.id].orderPosition = currentPos;
-
-      // Recalcular cascata completa a partir do primeiro
-      return recalculateCascade(updated);
+      const next: Record<number, CategoryConfig> = {};
+      Object.entries(prev).forEach(([key, cfg]) => {
+        next[Number(key)] = { ...cfg, numberStartManual: false, numberEndManual: false, startTimeManual: false };
+      });
+      return applyCascade(next);
     });
+    toast.success("Números e horários recalculados automaticamente.");
   };
 
   const handleSaveAll = async () => {
     try {
-      // Filtrar apenas subcategorias
-      const subcategoriesToSave = categories.filter(category => {
-        return !!category.parentId && !!configs[category.id];
-      });
-
-      const configsToSave = subcategoriesToSave.map(category => {
+      const configsToSave = subcategoriesOf(configs).map(category => {
         const config = configs[category.id];
         return {
           categoryId: category.id,
@@ -290,8 +177,12 @@ export default function StartOrderConfig() {
           startTime: config.startTime,
           intervalSeconds: config.intervalSeconds,
           timeBetweenCategories: config.timeBetweenCategories || 0,
+          numberStartManual: config.numberStartManual,
+          numberEndManual: config.numberEndManual,
+          startTimeManual: config.startTimeManual,
+          // registrationOrder NÃO é enviado: o backend preserva a ordem sorteada salva
         };
-      }).filter(config => config.numberStart !== undefined && config.numberEnd !== undefined);
+      });
 
       await upsertBatchMutation.mutateAsync({ eventId, configs: configsToSave });
       await utils.startOrder.getByEvent.invalidate({ eventId });
@@ -301,56 +192,6 @@ export default function StartOrderConfig() {
       console.error(error);
     }
   };
-
-  // Função para buscar botão Kraken (restaurar)
-  const handleExportKraken = async () => {
-    if (!eventId) {
-      toast.error("Evento não encontrado");
-      return;
-    }
-
-    try {
-      toast.info("Gerando arquivo Kraken...");
-
-      // Chamar endpoint do backend
-      const result = await exportKrakenMutation.mutateAsync({ eventId });
-
-      if (!result || !result.data) {
-        throw new Error("Erro ao gerar arquivo");
-      }
-
-      // Converter base64 para blob
-      const byteCharacters = atob(result.data);
-      const byteNumbers = new Array(byteCharacters.length);
-      for (let i = 0; i < byteCharacters.length; i++) {
-        byteNumbers[i] = byteCharacters.charCodeAt(i);
-      }
-      const byteArray = new Uint8Array(byteNumbers);
-      const blob = new Blob([byteArray], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-
-      // Criar link de download
-      const link = document.createElement('a');
-      const url = window.URL.createObjectURL(blob);
-      link.href = url;
-      link.download = result?.filename || "export-kraken.xlsx";
-      try {
-        document.body.appendChild(link);
-        link.click();
-        if (link.parentNode) {
-          link.parentNode.removeChild(link);
-        }
-      } finally {
-        window.URL.revokeObjectURL(url);
-      }
-
-      toast.success("Arquivo Kraken exportado com sucesso!");
-    } catch (error) {
-      console.error("Erro ao exportar Kraken:", error);
-      toast.error("Erro ao exportar arquivo Kraken");
-    }
-  };
-
-
 
   const handleExportEventList = async () => {
     if (!eventId || !event || registrations.length === 0) {
@@ -396,23 +237,21 @@ export default function StartOrderConfig() {
 
       generateHeader(event.name, "Lista de Participantes - Oficial");
 
-      // Buscar configs baseadas no estado local 'configs' que o usuario pode ter alterado
+      // Ordena pela posição das categorias e, dentro delas, pela ordem sorteada salva no banco
       const sortedItems: any[] = [];
-      const subcategories = categories.filter(cat => !!cat.parentId);
-      const sortedSubcats = [...subcategories].sort((a, b) => (configs[a.id]?.orderPosition || 0) - (configs[b.id]?.orderPosition || 0));
-
-      sortedSubcats.forEach(category => {
+      subcategoriesOf(configs).forEach(category => {
         const config = configs[category.id];
-        if (!config) return;
 
         let categoryRegs = registrations.filter(r => r.categoryId === category.id && r.status !== 'cancelled');
 
         if (config.registrationOrder) {
           try {
-            const order = typeof config.registrationOrder === 'string' ? JSON.parse(config.registrationOrder) : config.registrationOrder;
+            const order = JSON.parse(config.registrationOrder);
             if (Array.isArray(order) && order.length > 0) {
-              const orderMap = new Map(order.map((id, idx) => [id, idx]));
-              categoryRegs.sort((a, b) => ((orderMap.get(a.id) ?? 999) as number) - ((orderMap.get(b.id) ?? 999) as number));
+              const orderMap = new Map(order.map((regId: number, idx: number) => [regId, idx]));
+              categoryRegs = [...categoryRegs].sort(
+                (a, b) => ((orderMap.get(a.id) ?? 999) as number) - ((orderMap.get(b.id) ?? 999) as number)
+              );
             }
           } catch (e) { }
         }
@@ -501,142 +340,10 @@ export default function StartOrderConfig() {
     }
   };
 
-  const handleExport = async () => {
-    try {
-      const result = await exportMutation.mutateAsync({ eventId });
-
-      if (!result || !result.data) {
-        throw new Error("Erro ao gerar arquivo");
-      }
-
-      // Converter base64 para blob
-      const byteCharacters = atob(result.data);
-      const byteNumbers = new Array(byteCharacters.length);
-      for (let i = 0; i < byteCharacters.length; i++) {
-        byteNumbers[i] = byteCharacters.charCodeAt(i);
-      }
-      const byteArray = new Uint8Array(byteNumbers);
-      const blob = new Blob([byteArray], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-
-      // Criar link de download
-      const url = window.URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = result.filename || 'lista-largada.xlsx';
-      try {
-        document.body.appendChild(link);
-        link.click();
-        if (link.parentNode) {
-          link.parentNode.removeChild(link);
-        }
-      } finally {
-        window.URL.revokeObjectURL(url);
-      }
-
-      toast.success("Lista de largada exportada!");
-    } catch (error) {
-
-      toast.error("Erro ao exportar lista de largada");
-    }
-  };
-
-  const handleUpdateOrder = () => {
-    setConfigs(prev => {
-      const updated = { ...prev };
-
-      const subcategories = categories.filter(cat => !!cat.parentId);
-      const sortedCategories = [...subcategories]
-        .filter(cat => updated[cat.id])
-        .sort((a, b) => {
-          const posA = updated[a.id]?.orderPosition || 999;
-          const posB = updated[b.id]?.orderPosition || 999;
-          return posA !== posB ? posA - posB : a.id - b.id;
-        });
-
-      if (sortedCategories.length === 0) return prev;
-
-      let currentNumber = updated[sortedCategories[0].id].numberStart;
-      let currentTimeMinutes = timeToMinutes(updated[sortedCategories[0].id].startTime);
-
-      sortedCategories.forEach((cat, idx) => {
-        const catStat = stats?.byCategory?.find((s: any) => s.categoryId === cat.id);
-        const registrationCount = Number(catStat?.totalRegistrations || 0);
-        const config = updated[cat.id];
-
-        // Usar a lógica que respeita o Número Final manual se ele for maior que a contagem
-        const nStart = config.numberStart;
-        const nEnd = config.numberEnd;
-        const numPilotos = Math.max(nEnd - nStart + 1, registrationCount, 1);
-        const numberStart = idx === 0 ? config.numberStart : currentNumber;
-        const numberEnd = numberStart + numPilotos - 1;
-        const startTime = idx === 0 ? config.startTime : minutesToTime(currentTimeMinutes);
-
-        updated[cat.id] = {
-          ...config,
-          orderPosition: idx + 1,
-          numberStart,
-          numberEnd,
-          startTime,
-        };
-
-        // Próximos valores
-        currentNumber = numberEnd + 1;
-        const totalDurationSegs = Math.max(0, (numPilotos - 1) * config.intervalSeconds);
-        const totalDurationMins = Math.ceil(totalDurationSegs / 60);
-        currentTimeMinutes += totalDurationMins + (config.timeBetweenCategories || 0);
-      });
-
-      return updated;
-    });
-    toast.success("Ordem e horários recalculados!");
-  };
-
-  // Função para calcular cascata de horários
-  const calculateCascadeTime = (categoryIndex: number, filteredCategories: any[]): string => {
-    if (categoryIndex === 0) {
-      return configs[filteredCategories[0].id]?.startTime || '08:00';
-    }
-
-    const prevCategory = filteredCategories[categoryIndex - 1];
-    const prevConfig = configs[prevCategory.id];
-
-    if (!prevConfig) return '08:00';
-
-    // Validar que os valores são números válidos
-    const numberEnd = Number(prevConfig.numberEnd);
-    const numberStart = Number(prevConfig.numberStart);
-    const intervalSeconds = Number(prevConfig.intervalSeconds);
-
-    // Se algum valor for NaN, retornar horário padrão
-    if (isNaN(numberEnd) || isNaN(numberStart) || isNaN(intervalSeconds)) {
-      return '08:00';
-    }
-
-    // Calcular tempo total da categoria anterior
-    const numPilotos = numberEnd - numberStart + 1;
-    const tempoTotalSegundos = Math.max(0, (numPilotos - 1) * intervalSeconds);
-    const tempoTotalMinutos = Math.ceil(tempoTotalSegundos / 60);
-
-    // Somar ao horário anterior
-    const prevTimeMinutes = timeToMinutes(prevConfig.startTime);
-    const nextTimeMinutes = prevTimeMinutes + tempoTotalMinutos;
-
-    return minutesToTime(nextTimeMinutes);
-  };
-
-  const getSubcategoriesWithRegistrations = (categories: any[], stats: any) => {
-    return categories.filter(cat => {
-      if (!cat.parentId) return false;
-      const stat = stats?.byCategory?.find((s: any) => s.categoryId === cat.id);
-      return Number(stat?.totalRegistrations || 0) > 0;
-    });
-  };
-
   if (!event) {
     return <div className="p-4">Carregando...</div>;
   }
 
-  // RENDERIZAR CATEGORIAS MESMO QUE VAZIO
   if (!categories || categories.length === 0) {
     return (
       <div className="min-h-screen bg-background p-4">
@@ -668,6 +375,11 @@ export default function StartOrderConfig() {
     return category.name;
   };
 
+  const orderedCategories = subcategoriesOf(configs);
+  const isSaving = upsertBatchMutation.isPending;
+
+  const ManualTag = () => <span className="ml-1 text-xs text-orange-500">(manual)</span>;
+
   return (
     <div className="min-h-screen bg-background p-4">
       <style>{hideNumberArrows}</style>
@@ -698,304 +410,137 @@ export default function StartOrderConfig() {
             <Wand2 className="w-4 h-4 mr-2" />
             Gerenciar Ordem de Largada (Sorteio)
           </Button>
-          <Button onClick={handleSaveAll} className="ml-auto">
+          <Button onClick={handleResetAuto} variant="outline" disabled={isSaving}>
+            <RotateCcw className="w-4 h-4 mr-2" />
+            Recalcular Automático
+          </Button>
+          <Button onClick={handleSaveAll} className="ml-auto" disabled={isSaving}>
             <Save className="w-4 h-4 mr-2" />
-            Salvar Todas
+            {isSaving ? "Salvando..." : "Salvar Todas"}
           </Button>
         </div>
 
         <div className="space-y-6">
-          {categories
-            .filter(category => {
-              // Mostrar apenas subcategorias (parentId !== null)
-              if (!category.parentId) return false;
-              // Verificar se tem inscritos (confirmados ou pendentes)
-              const catStat = stats?.byCategory?.find((s: any) => s.categoryId === category.id);
-              const registrationCount = Number(catStat?.totalRegistrations || 0);
-              return registrationCount > 0 || !!configs[category.id];
-            })
-            .sort((a, b) => {
-              const posA = configs[a.id]?.orderPosition || 999;
-              const posB = configs[b.id]?.orderPosition || 999;
-              return posA - posB;
-            })
-            .map((category, sortedIndex) => {
-              const config = configs[category.id];
+          {orderedCategories.map((category, sortedIndex) => {
+            const config = configs[category.id];
+            if (!config) return null;
 
-              // Se não tiver config, não renderizar
-              if (!config) {
-                return null;
-              }
+            const registrationCount = regCountOf(category.id);
+            const isLast = sortedIndex === orderedCategories.length - 1;
+            const summary = `Esta categoria largará em ${config.orderPosition}º lugar, com números de ${config.numberStart} a ${config.numberEnd}, começando às ${config.startTime}:00, com intervalo de ${config.intervalSeconds}s entre cada largada.`;
+            const overCapacity = registrationCount > (config.numberEnd - config.numberStart + 1);
 
-              // Get registration count
-              const catStat = stats?.byCategory?.find((s: any) => s.categoryId === category.id);
-              const registrationCount = Number(catStat?.totalRegistrations || 0);
+            return (
+              <Card key={category.id}>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-4">
+                  <div>
+                    <CardTitle>{getCategoryTitle(category)}</CardTitle>
+                    <CardDescription>
+                      {registrationCount} inscritos (confirmados + pendentes) | Números: {config.numberStart} a {config.numberEnd}
+                    </CardDescription>
+                  </div>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <p className="text-sm text-muted-foreground">{summary}</p>
+                  {overCapacity && (
+                    <p className="text-sm font-medium text-red-500">
+                      Atenção: há {registrationCount} inscritos para {config.numberEnd - config.numberStart + 1} números reservados.
+                      Aumente o Número Final ou use "Recalcular Automático".
+                    </p>
+                  )}
 
-              const capacity = config.numberEnd - config.numberStart + 1;
-              const summary = `Esta categoria largará em ${config.orderPosition}º lugar, com números de ${config.numberStart} a ${config.numberEnd}, começando às ${config.startTime}:00, com intervalo de ${config.intervalSeconds}s entre cada largada.`;
-
-              const subcategoriesWithRegistrations = categories.filter(cat => {
-                if (!cat.parentId) return false;
-                const stat = stats?.byCategory?.find((s: any) => s.categoryId === cat.id);
-                return Number(stat?.totalRegistrations || 0) > 0 || !!configs[cat.id];
-              });
-              const categoryIndex = subcategoriesWithRegistrations.findIndex(c => c.id === category.id);
-              const sortedCategories = categories.filter(cat => {
-                if (!cat.parentId) return false;
-                const stat = stats?.byCategory?.find((s: any) => s.categoryId === cat.id);
-                return Number(stat?.totalRegistrations || 0) > 0 || !!configs[cat.id];
-              }).sort((a, b) => {
-                const posA = configs[a.id]?.orderPosition || 999;
-                const posB = configs[b.id]?.orderPosition || 999;
-                return posA - posB;
-              });
-              const isFirst = sortedIndex === 0;
-              const isLast = sortedIndex === sortedCategories.length - 1;
-
-              return (
-                <Card key={category.id}>
-                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-4">
+                  <div className="grid grid-cols-2 gap-4">
                     <div>
-                      <CardTitle>{getCategoryTitle(category)}</CardTitle>
-                      <CardDescription>
-                        {registrationCount} inscritos (confirmados + pendentes) | Números: {config.numberStart} a {config.numberEnd}
-                      </CardDescription>
+                      <Label>Posição de Largada Categoria</Label>
+                      <select
+                        value={config.orderPosition || 1}
+                        onChange={(e) => handlePositionChange(category.id, parseInt(e.target.value, 10) || 1)}
+                        className="w-full px-3 py-2 border border-input rounded-md bg-background text-foreground"
+                      >
+                        {orderedCategories.map((_, i) => (
+                          <option key={i + 1} value={i + 1}>
+                            {i + 1}º lugar
+                          </option>
+                        ))}
+                      </select>
                     </div>
-
-                  </CardHeader>
-                  <CardContent className="space-y-4">
-                    <p className="text-sm text-muted-foreground">{summary}</p>
-
-                    <div className="grid grid-cols-2 gap-4">
-                      <div>
-                        <Label>Posição de Largada Categoria</Label>
-                        <select
-                          value={config.orderPosition || 1}
-                          onChange={(e) => {
-                            const newPosition = parseInt(e.target.value, 10) || 1;
-                            setConfigs(prev => {
-                              const updated = { ...prev };
-                              updated[category.id] = { ...prev[category.id], orderPosition: newPosition };
-
-                              // Recalcular tudo
-                              const subcats = categories.filter(cat => !!cat.parentId);
-                              const sortedCats = [...subcats]
-                                .filter(cat => updated[cat.id])
-                                .sort((a, b) => {
-                                  const configA = updated[a.id];
-                                  const configB = updated[b.id];
-                                  const pA = configA?.orderPosition || 999;
-                                  const pB = configB?.orderPosition || 999;
-
-                                  if (pA === pB) {
-                                    if (a.id === category.id) return -1;
-                                    if (b.id === category.id) return 1;
-                                  }
-                                  return pA !== pB ? pA - pB : a.id - b.id;
-                                });
-
-                              if (sortedCats.length === 0) return prev;
-
-                              let currentNumber = updated[sortedCats[0].id].numberStart;
-                              let currentTimeMinutes = timeToMinutes(updated[sortedCats[0].id].startTime);
-
-                              sortedCats.forEach((cat, idx) => {
-                                const config = updated[cat.id];
-                                const catStat = stats?.byCategory?.find((s: any) => s.categoryId === cat.id);
-                                const regCount = Number(catStat?.totalRegistrations || 0);
-
-                                const nStart = config.numberStart;
-                                const nEnd = config.numberEnd;
-                                const numP = Math.max(nEnd - nStart + 1, regCount, 1);
-
-                                const finalStart = idx === 0 ? nStart : currentNumber;
-                                const finalEnd = finalStart + numP - 1;
-                                const finalTime = idx === 0 ? config.startTime : minutesToTime(currentTimeMinutes);
-
-                                updated[cat.id] = {
-                                  ...config,
-                                  orderPosition: idx + 1,
-                                  numberStart: finalStart,
-                                  numberEnd: finalEnd,
-                                  startTime: finalTime,
-                                };
-
-                                const duration = Math.ceil(Math.max(0, (numP - 1) * config.intervalSeconds) / 60);
-                                currentTimeMinutes = timeToMinutes(finalTime) + duration + (config.timeBetweenCategories || 0);
-                                currentNumber = finalEnd + 1;
-                              });
-
-                              return updated;
-                            });
-                          }}
-                          className="w-full px-3 py-2 border border-input rounded-md bg-background text-foreground"
-                        >
-                          {Array.from({ length: categories.filter(cat => cat.parentId && Number(stats?.byCategory?.find((s: any) => s.categoryId === cat.id)?.totalRegistrations || 0) > 0).length }, (_, i) => (
-                            <option key={i + 1} value={i + 1}>
-                              {i + 1}º lugar
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-                      <div>
-                        <Label>Horário de Início</Label>
-                        <Input
-                          type="time"
-                          value={config.startTime}
-                          onChange={(e) => {
-                            const newTime = e.target.value;
-                            setConfigs(prev => {
-                              const updated = { ...prev };
-                              updated[category.id] = { ...prev[category.id], startTime: newTime };
-                              return recalculateCascade(updated, category.id);
-                            });
-                          }}
-                        />
-                      </div>
-                      <div>
-                        <Label>Número Inicial</Label>
-                        <Input
-                          type="number"
-                          value={config.numberStart === 0 ? '' : (config.numberStart ?? '')}
-                          onChange={(e) => {
-                            const val = e.target.value === '' ? 0 : parseInt(e.target.value, 10);
-                            const catStat = stats?.byCategory?.find((s: any) => s.categoryId === category.id);
-                            const regCount = Number(catStat?.totalRegistrations || 0);
-
-                            setConfigs(prev => {
-                              const updated = { ...prev };
-                              updated[category.id] = {
-                                ...prev[category.id],
-                                numberStart: val,
-                                // If start changes, end slides automatically to maintain count
-                                numberEnd: val > 0 ? (val + Math.max(regCount, 1) - 1) : 0
-                              };
-                              return recalculateCascade(updated, category.id);
-                            });
-                          }}
-                        />
-                      </div>
-                      <div>
-                        <Label>Número Final</Label>
-                        <Input
-                          ref={(el) => {
-                            if (el) numberEndRefs.current[category.id] = el;
-                          }}
-                          type="number"
-                          value={config.numberEnd === 0 ? '' : (config.numberEnd ?? '')}
-                          onChange={(e) => {
-                            const val = e.target.value === '' ? 0 : parseInt(e.target.value, 10);
-                            setConfigs(prev => {
-                              const updated = { ...prev };
-                              updated[category.id] = { ...prev[category.id], numberEnd: val };
-                              // No cascade recalculation for the current field to allow free editing,
-                              // but DO recalculate for subsequent ones.
-                              return recalculateCascade(updated, category.id);
-                            });
-                          }}
-                        />
-                      </div>
+                    <div>
+                      <Label>
+                        Horário de Início
+                        {config.startTimeManual && sortedIndex > 0 && <ManualTag />}
+                      </Label>
+                      <Input
+                        type="time"
+                        value={config.startTime}
+                        onChange={(e) => setField(category.id, { startTime: e.target.value, startTimeManual: sortedIndex > 0 })}
+                        onBlur={recalcOnBlur}
+                      />
+                    </div>
+                    <div>
+                      <Label>
+                        Número Inicial
+                        {config.numberStartManual && sortedIndex > 0 && <ManualTag />}
+                      </Label>
+                      <Input
+                        type="number"
+                        value={config.numberStart === 0 ? '' : (config.numberStart ?? '')}
+                        onChange={(e) => {
+                          const val = e.target.value === '' ? 0 : parseInt(e.target.value, 10) || 0;
+                          setField(category.id, { numberStart: val, numberStartManual: sortedIndex > 0 });
+                        }}
+                        onBlur={recalcOnBlur}
+                      />
+                    </div>
+                    <div>
+                      <Label>
+                        Número Final
+                        {config.numberEndManual && <ManualTag />}
+                      </Label>
+                      <Input
+                        type="number"
+                        value={config.numberEnd === 0 ? '' : (config.numberEnd ?? '')}
+                        onChange={(e) => {
+                          const val = e.target.value === '' ? 0 : parseInt(e.target.value, 10) || 0;
+                          // Campo vazio volta pro automático; valor digitado vira manual
+                          setField(category.id, { numberEnd: val, numberEndManual: val !== 0 });
+                        }}
+                        onBlur={recalcOnBlur}
+                      />
+                    </div>
+                    <div className="col-span-2">
+                      <Label>Intervalo entre Largadas (segundos)</Label>
+                      <input
+                        type="number"
+                        value={config.intervalSeconds === 0 ? '' : (config.intervalSeconds ?? '')}
+                        onChange={(e) => {
+                          const val = e.target.value === '' ? 0 : parseInt(e.target.value, 10) || 0;
+                          setField(category.id, { intervalSeconds: val });
+                        }}
+                        onBlur={recalcOnBlur}
+                        className="w-full px-3 py-2 border border-input rounded-md bg-background text-foreground"
+                      />
+                    </div>
+                    {!isLast && (
                       <div className="col-span-2">
-                        <Label>Intervalo entre Largadas (segundos)</Label>
+                        <Label>Tempo entre Categorias (minutos)</Label>
                         <input
-                          ref={(el) => {
-                            if (el) intervalSecondsRefs.current[category.id] = el;
-                          }}
                           type="number"
-                          value={config.intervalSeconds === 0 ? '' : (config.intervalSeconds ?? '')}
+                          value={config.timeBetweenCategories === 0 ? '' : (config.timeBetweenCategories ?? '')}
                           onChange={(e) => {
-                            const val = e.target.value === '' ? 0 : parseInt(e.target.value) || 0;
-                            setConfigs(prev => {
-                              const updated = { ...prev };
-                              updated[category.id] = { ...prev[category.id], intervalSeconds: val };
-                              return recalculateCascade(updated, category.id);
-                            });
+                            const val = e.target.value === '' ? 0 : parseInt(e.target.value, 10) || 0;
+                            setField(category.id, { timeBetweenCategories: val });
                           }}
+                          onBlur={recalcOnBlur}
                           className="w-full px-3 py-2 border border-input rounded-md bg-background text-foreground"
                         />
                       </div>
-                      {!isLast && (
-                        <div className="col-span-2">
-                          <Label>Tempo entre Categorias (minutos)</Label>
-                          <input
-                            type="number"
-                            value={config.timeBetweenCategories === 0 ? '' : (config.timeBetweenCategories ?? '')}
-                            onChange={(e) => {
-                              const val = e.target.value === '' ? 0 : parseInt(e.target.value, 10) || 0;
-                              setConfigs(prev => {
-                                const updated = { ...prev };
-                                updated[category.id] = { ...prev[category.id], timeBetweenCategories: val };
-                                return recalculateCascade(updated, category.id);
-                              });
-                            }}
-                            className="w-full px-3 py-2 border border-input rounded-md bg-background text-foreground"
-                          />
-                        </div>
-                      )}
-                    </div>
-                  </CardContent>
-                </Card>
-              );
-            })}
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+            );
+          })}
         </div>
-
-        {/* Modal de Sorting */}
-        {showSortingModal && (
-          <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-            <div className="bg-white rounded-lg max-w-4xl w-full max-h-[90vh] overflow-y-auto">
-              <SortableStartList
-                categories={categories}
-                registrations={registrations}
-                registrationCounts={Object.fromEntries(
-                  (stats?.byCategory || []).map((s: any) => [
-                    s.categoryId,
-                    Number(s.totalRegistrations || 0),
-                  ])
-                )}
-                currentConfigs={configs}
-                onConfirm={async (newOrder) => {
-                  try {
-                    const savePromises: Promise<any>[] = [];
-                    const uniqueCategories = new Set<number>(newOrder.map(item => item.categoryId as number));
-
-                    uniqueCategories.forEach((categoryId: number) => {
-                      const categoryItems = newOrder.filter(item => item.categoryId === categoryId);
-                      if (categoryItems.length > 0) {
-                        const firstItem = categoryItems[0];
-                        const registrationIds = categoryItems.map(item => item.registrationId).filter((id): id is number => id !== undefined);
-                        savePromises.push(
-                          upsertMutation.mutateAsync({
-                            eventId,
-                            categoryId,
-                            orderPosition: firstItem.orderPosition,
-                            numberStart: firstItem.numberStart,
-                            numberEnd: firstItem.numberStart + (categoryItems.length - 1),
-                            startTime: firstItem.startTime,
-                            intervalSeconds: firstItem.intervalSeconds,
-                            registrationOrder: registrationIds.length > 0 ? registrationIds : undefined,
-                          })
-                        );
-                      }
-                    });
-
-                    await Promise.all(savePromises);
-
-                    setSortedRegistrations(newOrder);
-                    setShowSortingModal(false);
-                    toast.success("Ordem de largada atualizada e salva!");
-                    setTimeout(() => {
-                      window.location.reload();
-                    }, 500);
-                  } catch (error) {
-                    console.error("Erro ao salvar ordem de largada:", error);
-                    toast.error("Erro ao salvar ordem de largada");
-                  }
-                }}
-                onCancel={() => setShowSortingModal(false)}
-              />
-            </div>
-          </div>
-        )}
       </div>
     </div>
   );

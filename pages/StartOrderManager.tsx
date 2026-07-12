@@ -1,6 +1,7 @@
 import { useParams, useLocation } from "wouter";
 import { useAuth } from "../_core/hooks/useAuth";
 import { trpc } from "../lib/trpc";
+import { calculateStartTime } from "../lib/start-order";
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
 
@@ -198,15 +199,6 @@ export default function StartOrderManager() {
       };
       reader.readAsDataURL(file);
     }
-  };
-
-  const calculateStartTime = (baseTime: string, index: number, intervalSeconds: number): string => {
-    if (!baseTime) return "08:00";
-    const [hours, minutes] = baseTime.split(":").map(Number);
-    const totalSeconds = hours * 3600 + minutes * 60 + index * intervalSeconds;
-    const newHours = Math.floor(totalSeconds / 3600) % 24;
-    const newMinutes = Math.floor((totalSeconds % 3600) / 60);
-    return `${String(newHours).padStart(2, "0")}:${String(newMinutes).padStart(2, "0")}`;
   };
 
   const buildSortedList = () => {

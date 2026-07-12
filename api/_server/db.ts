@@ -974,6 +974,9 @@ export async function getStartOrderConfigsByEventId(eventId: number) {
     intervalSeconds: startOrderConfig.intervalSeconds,
     timeBetweenCategories: startOrderConfig.timeBetweenCategories,
     registrationOrder: startOrderConfig.registrationOrder,
+    numberStartManual: startOrderConfig.numberStartManual,
+    numberEndManual: startOrderConfig.numberEndManual,
+    startTimeManual: startOrderConfig.startTimeManual,
     categoryName: categories.name,
     parentCategoryId: categories.parentId,
   })
@@ -1493,40 +1496,35 @@ export async function getStartOrderConfigByEvent(eventId: number) {
 }
 
 /**
- * Upsert start order configurations (batch)
+ * Upsert start order configurations (batch).
+ * Atômico via ON CONFLICT no unique (eventId, categoryId) — sem corrida de select-then-insert.
+ * Campos undefined são omitidos do UPDATE: quem não envia registrationOrder (ex.: "Salvar Todas"
+ * da tela de config) não apaga a ordem sorteada salva pelo /sorteio.
  */
-export async function upsertStartOrderConfigs(eventId: number, configs: InsertStartOrderConfig[]) {
+export async function upsertStartOrderConfigs(eventId: number, configs: Partial<InsertStartOrderConfig>[]) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
 
   for (const config of configs) {
-    const existing = await db
-      .select()
-      .from(startOrderConfig)
-      .where(and(
-        eq(startOrderConfig.eventId, eventId),
-        eq(startOrderConfig.categoryId, config.categoryId)
-      ))
-      .limit(1);
+    const provided = Object.fromEntries(
+      Object.entries(config).filter(([, value]) => value !== undefined)
+    ) as Partial<InsertStartOrderConfig>;
 
-    if (existing.length > 0) {
-      await db
-        .update(startOrderConfig)
-        .set({
-          ...config,
-          updatedAt: new Date()
-        })
-        .where(eq(startOrderConfig.id, existing[0].id));
-    } else {
-      await db
-        .insert(startOrderConfig)
-        .values({
-          ...config,
-          eventId,
-          createdAt: new Date(),
-          updatedAt: new Date()
-        });
-    }
+    await db
+      .insert(startOrderConfig)
+      .values({
+        ...(provided as InsertStartOrderConfig),
+        eventId,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      })
+      .onConflictDoUpdate({
+        target: [startOrderConfig.eventId, startOrderConfig.categoryId],
+        set: {
+          ...provided,
+          updatedAt: new Date(),
+        },
+      });
   }
 
   return { success: true };

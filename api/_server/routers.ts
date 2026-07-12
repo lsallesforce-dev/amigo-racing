@@ -26,6 +26,49 @@ import { whatsappRouter } from "./backend_routers/whatsapp.js";
 
 const integerSchema = z.number().int();
 
+/**
+ * Garante que o usuário pode gerenciar a ordem de largada do evento:
+ * admin, organizador dono do evento, ou membro do organizador com permissão de inscrições.
+ * Segue o mesmo padrão de ownership dos endpoints de inscrição/estoque.
+ */
+async function assertStartOrderAccess(user: any, eventId: number) {
+  const event = await db.getEventById(eventId) as any;
+  if (!event) throw new TRPCError({ code: 'NOT_FOUND', message: 'Evento não encontrado' });
+  if (user?.role === 'admin') return event;
+
+  const context = await db.getOrganizerContext(user);
+  const organizer = await db.getOrganizerById(event.organizerId) as any;
+  const principal = await db.getUserById(context.principalUserId) as any;
+  if (!organizer || organizer.ownerId !== principal?.openId || (context.type === 'MEMBER' && !context.permissions.includes('registrations'))) {
+    throw new TRPCError({ code: 'FORBIDDEN', message: 'Somente o organizador do evento pode acessar a ordem de largada' });
+  }
+  return event;
+}
+
+/** Campos editáveis de uma config de largada (upsert). Flags *Manual controlam a cascata no front. */
+const startOrderConfigInput = z.object({
+  categoryId: z.number(),
+  orderPosition: z.number(),
+  numberStart: z.number().int(),
+  numberEnd: z.number().int(),
+  startTime: z.string(),
+  intervalSeconds: z.number(),
+  timeBetweenCategories: z.number().optional(),
+  registrationOrder: z.array(z.number()).optional(),
+  numberStartManual: z.boolean().optional(),
+  numberEndManual: z.boolean().optional(),
+  startTimeManual: z.boolean().optional(),
+});
+
+/** registrationOrder ausente fica undefined (não sobrescreve o sorteio salvo no banco). */
+function toStartOrderDbConfig(config: z.infer<typeof startOrderConfigInput>) {
+  const { registrationOrder, ...rest } = config;
+  return {
+    ...rest,
+    registrationOrder: registrationOrder !== undefined ? JSON.stringify(registrationOrder) : undefined,
+  };
+}
+
 
 
 const storageRouter = router({
@@ -2547,7 +2590,8 @@ export const appRouter = router({
   startOrder: router({
     getByEvent: protectedProcedure
       .input(z.object({ eventId: z.number() }))
-      .query(async ({ input }) => {
+      .query(async ({ ctx, input }) => {
+        await assertStartOrderAccess(ctx.user, input.eventId);
         try {
           return await db.getStartOrderConfigByEvent(input.eventId);
         } catch (error) {
@@ -2560,57 +2604,29 @@ export const appRouter = router({
       }),
 
     upsert: protectedProcedure
-      .input(z.object({
-        eventId: z.number(),
-        categoryId: z.number(),
-        orderPosition: z.number(),
-        numberStart: z.number().int(),
-        numberEnd: z.number().int(),
-        startTime: z.string(),
-        intervalSeconds: z.number(),
-        timeBetweenCategories: z.number().optional(),
-        registrationOrder: z.array(z.number()).optional(),
-      }))
-      .mutation(async ({ input }) => {
-        const { eventId, registrationOrder, ...config } = input;
-        const dbConfig = {
-          ...config,
-          registrationOrder: registrationOrder ? JSON.stringify(registrationOrder) : null,
-        };
-        return await db.upsertStartOrderConfigs(eventId, [dbConfig as any]);
+      .input(startOrderConfigInput.extend({ eventId: z.number() }))
+      .mutation(async ({ ctx, input }) => {
+        await assertStartOrderAccess(ctx.user, input.eventId);
+        const { eventId, ...config } = input;
+        return await db.upsertStartOrderConfigs(eventId, [toStartOrderDbConfig(config) as any]);
       }),
 
     upsertBatch: protectedProcedure
       .input(z.object({
         eventId: z.number(),
-        configs: z.array(z.object({
-          categoryId: z.number(),
-          orderPosition: z.number(),
-          numberStart: z.number().int(),
-          numberEnd: z.number().int(),
-          startTime: z.string(),
-          intervalSeconds: z.number(),
-          timeBetweenCategories: z.number().optional(),
-          registrationOrder: z.array(z.number()).optional(),
-        }))
+        configs: z.array(startOrderConfigInput),
       }))
-      .mutation(async ({ input }) => {
-        const dbConfigs = input.configs.map(config => ({
-          ...config,
-          registrationOrder: config.registrationOrder ? JSON.stringify(config.registrationOrder) : null,
-        }));
+      .mutation(async ({ ctx, input }) => {
+        await assertStartOrderAccess(ctx.user, input.eventId);
+        const dbConfigs = input.configs.map(toStartOrderDbConfig);
         return await db.upsertStartOrderConfigs(input.eventId, dbConfigs as any);
       }),
 
     exportStartList: protectedProcedure
       .input(z.object({ eventId: z.number() }))
       .mutation(async ({ ctx, input }) => {
+        const event = await assertStartOrderAccess(ctx.user, input.eventId);
         const ExcelJS = (await import('exceljs')).default;
-
-        const event = await db.getEventById(input.eventId);
-        if (!event) {
-          throw new TRPCError({ code: 'NOT_FOUND', message: 'Evento não encontrado' });
-        }
 
         // Buscar configurações de ordem de largada
         let configs = await db.getStartOrderConfigsByEventId(input.eventId);
@@ -2636,7 +2652,9 @@ export const appRouter = router({
         const startListData: any[] = [];
 
         for (const config of configs) {
-          const numSlots = config.numberEnd - config.numberStart + 1;
+          let categoryRegsCount = (registrationsByCategory.get(config.categoryId) || []).length;
+          // Nunca truncar: se entraram mais inscritos que a faixa configurada, lista todos mesmo assim
+          const numSlots = Math.max(config.numberEnd - config.numberStart + 1, categoryRegsCount);
           const [hours, minutes] = config.startTime.split(':').map(Number);
           const baseTime = new Date();
           baseTime.setHours(hours, minutes, 0, 0);
@@ -2713,10 +2731,9 @@ export const appRouter = router({
 
     exportKraken: protectedProcedure
       .input(z.object({ eventId: z.number() }))
-      .mutation(async ({ input }) => {
+      .mutation(async ({ ctx, input }) => {
+        const event = await assertStartOrderAccess(ctx.user, input.eventId);
         const XLSX = await import('xlsx');
-        const event = await db.getEventById(input.eventId);
-        if (!event) throw new TRPCError({ code: 'NOT_FOUND', message: 'Evento não encontrado' });
 
         const configs = await db.getStartOrderConfigsByEventId(input.eventId);
         const registrations = await db.getRegistrationsByEventId(input.eventId);
@@ -2731,12 +2748,12 @@ export const appRouter = router({
 
         const data: any[] = [];
         for (const config of configs) {
-          const numSlots = config.numberEnd - config.numberStart + 1;
+          let catRegs = registrationsByCategory.get(config.categoryId) || [];
+          // Nunca truncar: se entraram mais inscritos que a faixa configurada, lista todos mesmo assim
+          const numSlots = Math.max(config.numberEnd - config.numberStart + 1, catRegs.length);
           const [hours, minutes] = config.startTime.split(':').map(Number);
           const baseTime = new Date();
           baseTime.setHours(hours, minutes, 0, 0);
-
-          let catRegs = registrationsByCategory.get(config.categoryId) || [];
           if (config.registrationOrder) {
             try {
               const order = typeof config.registrationOrder === 'string' ? JSON.parse(config.registrationOrder) : config.registrationOrder;
@@ -2792,10 +2809,9 @@ export const appRouter = router({
 
     exportEventList: protectedProcedure
       .input(z.object({ eventId: z.number() }))
-      .mutation(async ({ input }) => {
+      .mutation(async ({ ctx, input }) => {
+        const event = await assertStartOrderAccess(ctx.user, input.eventId);
         const XLSX = await import('xlsx');
-        const event = await db.getEventById(input.eventId);
-        if (!event) throw new TRPCError({ code: 'NOT_FOUND', message: 'Evento não encontrado' });
 
         const regs = await db.getRegistrationsByEventId(input.eventId);
         const configs = await db.getStartOrderConfigsByEventId(input.eventId);

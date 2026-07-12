@@ -1,4 +1,4 @@
-import { integer, pgTable, text, timestamp, varchar, doublePrecision, boolean, json, serial, uuid, unique } from "drizzle-orm/pg-core";
+import { integer, pgTable, text, timestamp, varchar, doublePrecision, boolean, json, serial, uuid, unique, uniqueIndex } from "drizzle-orm/pg-core";
 
 /**
  * Core user table backing auth flow.
@@ -321,9 +321,15 @@ export const startOrderConfig = pgTable("start_order_config", {
   intervalSeconds: integer("intervalSeconds").default(60).notNull(), // Seconds between starts
   timeBetweenCategories: integer("timeBetweenCategories").default(0), // Minutes between categories
   registrationOrder: text("registrationOrder"), // JSON array of registration IDs
+  // Flags de edição manual: quando true, a cascata automática não sobrescreve o campo
+  numberStartManual: boolean("numberStartManual").default(false).notNull(),
+  numberEndManual: boolean("numberEndManual").default(false).notNull(),
+  startTimeManual: boolean("startTimeManual").default(false).notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().notNull(),
-});
+}, (table) => ({
+  eventCategoryUnique: uniqueIndex("start_order_config_event_category_idx").on(table.eventId, table.categoryId),
+}));
 
 export type StartOrderConfig = typeof startOrderConfig.$inferSelect;
 export type InsertStartOrderConfig = typeof startOrderConfig.$inferInsert;
