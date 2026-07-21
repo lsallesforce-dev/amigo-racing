@@ -1286,83 +1286,102 @@ export default function EventDetails() {
             </div>
           ) : (
             <div className="space-y-6">
-              {Object.entries(
-                registrations.reduce((groups: Record<string, Record<string, any[]>>, reg: any) => {
+              {(() => {
+                const catList = (categories as any[]) || [];
+                const parentSortOrder = new Map<string, number>();
+                const subSortOrder = new Map<string, number>();
+                catList.forEach((c: any) => {
+                  if (!c.parentId) parentSortOrder.set(c.name, c.sortOrder ?? 0);
+                });
+                catList.forEach((c: any) => {
+                  if (c.parentId) subSortOrder.set(c.name, c.sortOrder ?? 0);
+                });
+
+                const groups = registrations.reduce((acc: Record<string, Record<string, any[]>>, reg: any) => {
                   const groupName = reg.categoryGroup || 'Outros';
                   const subName = reg.categoryName || 'N/A';
-                  if (!groups[groupName]) groups[groupName] = {};
-                  if (!groups[groupName][subName]) groups[groupName][subName] = [];
-                  groups[groupName][subName].push(reg);
-                  return groups;
-                }, {})
-              ).map(([groupName, subgroups]) => (
-                <div key={groupName} className="space-y-4">
-                  <h3 className="text-lg font-bold border-b pb-1">{groupName}</h3>
-                  {Object.entries(subgroups).map(([subName, regs]) => (
-                    <div key={subName} className="space-y-3">
-                      <h4 className="text-sm font-semibold text-muted-foreground">{subName}</h4>
-                      {(regs as any[]).map((reg: any) => (
-                        <Card key={reg.id}>
-                          <CardContent className="pt-6">
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                              <div>
-                                <h4 className="font-semibold mb-2 flex items-center gap-2">
-                                  <Users className="h-4 w-4" />
-                                  Piloto
-                                </h4>
-                                <div className="space-y-1 text-sm">
-                                  <p><strong>Nome:</strong> {reg.pilotName}</p>
-                                  <p><strong>Email:</strong> {reg.pilotEmail}</p>
-                                  <p><strong>Cidade:</strong> {reg.pilotCity}, {reg.pilotState}</p>
-                                </div>
-                              </div>
+                  if (!acc[groupName]) acc[groupName] = {};
+                  if (!acc[groupName][subName]) acc[groupName][subName] = [];
+                  acc[groupName][subName].push(reg);
+                  return acc;
+                }, {});
 
-                              <div>
-                                <h4 className="font-semibold mb-2 flex items-center gap-2">
-                                  <Car className="h-4 w-4" />
-                                  Veículo e Categoria
-                                </h4>
-                                <div className="space-y-1 text-sm">
-                                  <p><strong>Categoria:</strong> {reg.categoryName || 'N/A'}</p>
-                                  <p><strong>Veículo:</strong> {(reg.vehicleBrand || reg.vehicleModel) ? `${reg.vehicleBrand || ''} ${reg.vehicleModel || ''}`.trim() : 'Não informado'}</p>
-                                  {reg.team && <p><strong>Equipe:</strong> {reg.team}</p>}
-                                </div>
-                              </div>
+                const sortedGroups = Object.entries(groups).sort(
+                  ([a], [b]) => (parentSortOrder.get(a) ?? 999) - (parentSortOrder.get(b) ?? 999)
+                );
 
-                              {reg.navigatorName && (
-                                <div className="md:col-span-2 pt-2 border-t">
-                                  <h4 className="font-semibold mb-2 flex items-center gap-2">
-                                    <Users className="h-4 w-4" />
-                                    Navegador
-                                  </h4>
-                                  <div className="space-y-1 text-sm">
-                                    <p><strong>Nome:</strong> {reg.navigatorName}</p>
-                                    {reg.navigatorEmail && <p><strong>Email:</strong> {reg.navigatorEmail}</p>}
-                                    {reg.navigatorCity && (
-                                      <p><strong>Cidade:</strong> {reg.navigatorCity}, {reg.navigatorState}</p>
+                return sortedGroups.map(([groupName, subgroups]) => {
+                  const sortedSubgroups = Object.entries(subgroups).sort(
+                    ([a], [b]) => (subSortOrder.get(a) ?? 999) - (subSortOrder.get(b) ?? 999)
+                  );
+                  return (
+                    <div key={groupName} className="space-y-4">
+                      <h3 className="text-lg font-bold border-b pb-1">{groupName}</h3>
+                      {sortedSubgroups.map(([subName, regs]) => (
+                        <div key={subName} className="space-y-3">
+                          <h4 className="text-sm font-semibold text-muted-foreground">{subName}</h4>
+                          {(regs as any[]).map((reg: any) => (
+                            <Card key={reg.id}>
+                              <CardContent className="pt-6">
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                  <div>
+                                    <h4 className="font-semibold mb-2 flex items-center gap-2">
+                                      <Users className="h-4 w-4" />
+                                      Piloto
+                                    </h4>
+                                    <div className="space-y-1 text-sm">
+                                      <p><strong>Nome:</strong> {reg.pilotName}</p>
+                                      <p><strong>Cidade:</strong> {reg.pilotCity}, {reg.pilotState}</p>
+                                    </div>
+                                  </div>
+
+                                  <div>
+                                    <h4 className="font-semibold mb-2 flex items-center gap-2">
+                                      <Car className="h-4 w-4" />
+                                      Veículo e Categoria
+                                    </h4>
+                                    <div className="space-y-1 text-sm">
+                                      <p><strong>Categoria:</strong> {reg.categoryName || 'N/A'}</p>
+                                      <p><strong>Veículo:</strong> {(reg.vehicleBrand || reg.vehicleModel) ? `${reg.vehicleBrand || ''} ${reg.vehicleModel || ''}`.trim() : 'Não informado'}</p>
+                                      {reg.team && <p><strong>Equipe:</strong> {reg.team}</p>}
+                                    </div>
+                                  </div>
+
+                                  {reg.navigatorName && (
+                                    <div className="md:col-span-2 pt-2 border-t">
+                                      <h4 className="font-semibold mb-2 flex items-center gap-2">
+                                        <Users className="h-4 w-4" />
+                                        Navegador
+                                      </h4>
+                                      <div className="space-y-1 text-sm">
+                                        <p><strong>Nome:</strong> {reg.navigatorName}</p>
+                                        {reg.navigatorCity && (
+                                          <p><strong>Cidade:</strong> {reg.navigatorCity}, {reg.navigatorState}</p>
+                                        )}
+                                      </div>
+                                    </div>
+                                  )}
+
+                                  <div className="md:col-span-2 flex items-center justify-between pt-2 border-t">
+                                    <Badge variant={reg.status === 'paid' ? 'default' : 'outline'}>
+                                      {reg.status === 'paid' ? 'Confirmado' : 'Pendente'}
+                                    </Badge>
+                                    {reg.paymentStatus && (
+                                      <Badge variant={reg.paymentStatus === 'confirmed' ? 'default' : 'secondary'}>
+                                        Pagamento: {reg.paymentStatus === 'confirmed' ? 'Confirmado' : 'Pendente'}
+                                      </Badge>
                                     )}
                                   </div>
                                 </div>
-                              )}
-
-                              <div className="md:col-span-2 flex items-center justify-between pt-2 border-t">
-                                <Badge variant={reg.status === 'paid' ? 'default' : 'outline'}>
-                                  {reg.status === 'paid' ? 'Confirmado' : 'Pendente'}
-                                </Badge>
-                                {reg.paymentStatus && (
-                                  <Badge variant={reg.paymentStatus === 'confirmed' ? 'default' : 'secondary'}>
-                                    Pagamento: {reg.paymentStatus === 'confirmed' ? 'Confirmado' : 'Pendente'}
-                                  </Badge>
-                                )}
-                              </div>
-                            </div>
-                          </CardContent>
-                        </Card>
+                              </CardContent>
+                            </Card>
+                          ))}
+                        </div>
                       ))}
                     </div>
-                  ))}
-                </div>
-              ))}
+                  );
+                });
+              })()}
             </div>
           )}
         </DialogContent>
