@@ -1,4 +1,5 @@
 import { eq, and, or, gte, lte, asc, desc, sql, ne } from "drizzle-orm";
+import { alias } from "drizzle-orm/pg-core";
 import { drizzle } from "drizzle-orm/postgres-js";
 import {
   User,
@@ -590,23 +591,34 @@ export async function getRegistrationsByEventId(eventId: number) {
   const db = await getDb();
   if (!db) return [];
 
+  const parentCategories = alias(categories, "parentCategories");
+
   const results = await db
     .select()
     .from(registrations)
     .leftJoin(payments, eq(registrations.id, payments.registrationId))
     .leftJoin(categories, eq(registrations.categoryId, categories.id))
+    .leftJoin(parentCategories, eq(categories.parentId, parentCategories.id))
+    .leftJoin(vehicles, eq(registrations.vehicleId, vehicles.id))
     .where(eq(registrations.eventId, eventId))
     .orderBy(desc(registrations.createdAt));
 
-  return results.map(r => ({
-    ...r.registrations,
-    paymentId: r.payments?.id || null,
-    paymentStatus: r.payments?.status || null,
-    categoryName: r.categories?.name || 'N/A',
-    categoryPrice: r.categories?.price || 0,
-    startNumber: r.registrations.startNumber,
-    startTime: r.registrations.startTime,
-  }));
+  return results.map(r => {
+    const vehicleBrand = r.vehicles?.brand || r.registrations.vehicleBrand || null;
+    const vehicleModel = r.vehicles?.model || r.registrations.vehicleModel || null;
+    return {
+      ...r.registrations,
+      paymentId: r.payments?.id || null,
+      paymentStatus: r.payments?.status || null,
+      categoryName: r.categories?.name || 'N/A',
+      categoryPrice: r.categories?.price || 0,
+      categoryGroup: r.parentCategories?.name || null,
+      vehicleBrand,
+      vehicleModel,
+      startNumber: r.registrations.startNumber,
+      startTime: r.registrations.startTime,
+    };
+  });
 }
 
 export async function updateRegistration(id: number, data: Partial<InsertRegistration>) {
