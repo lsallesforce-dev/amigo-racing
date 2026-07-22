@@ -433,7 +433,7 @@ router.post('/pagarme', async (req, res) => {
             <p>Seu pagamento foi aprovado e sua inscrição para o evento <strong>${eventName}</strong> está oficialmente confirmada.</p>
             <p>Estamos ansiosos para vê-lo no grid de largada!</p>
             <div style="text-align: center; margin: 30px 0;">
-              <a href="${ENV.oAuthServerUrl}/panel" style="background-color: #00a19c; color: white; padding: 12px 24px; text-decoration: none; border-radius: 4px; font-weight: bold;">Acessar Meu Painel</a>
+              <a href="${ENV.oAuthServerUrl}/dashboard" style="background-color: #00a19c; color: white; padding: 12px 24px; text-decoration: none; border-radius: 4px; font-weight: bold;">Acessar Meu Painel</a>
             </div>
             <hr style="border: none; border-top: 1px solid #eee; margin: 20px 0;" />
             <p style="color: #999; font-size: 12px; text-align: center;">🏁 Equipe Amigo Racing</p>
