@@ -373,19 +373,6 @@ export default function OrganizerPanel() {
     },
   });
 
-  const deleteEvent = trpc.events.delete.useMutation({
-    onSuccess: async () => {
-      toast.success("Evento deletado com sucesso!");
-      // Invalidar e forçar refetch imediato
-      await utils.events.myEvents.invalidate();
-      await utils.events.listOpen.refetch();
-      await utils.events.list.invalidate();
-    },
-    onError: (error) => {
-      toast.error(error.message || "Erro ao deletar evento");
-    },
-  });
-
 
 
 
@@ -1547,31 +1534,6 @@ export default function OrganizerPanel() {
                            Inscritos
                          </Button>
                        </Link>
-                       <AlertDialog>
-                         <AlertDialogTrigger asChild className="w-full md:w-auto">
-                           <Button size="sm" variant="destructive" className="w-full">
-                             <Trash2 className="h-4 w-4 mr-2" />
-                             Deletar Evento
-                           </Button>
-                         </AlertDialogTrigger>
-                        <AlertDialogContent>
-                          <AlertDialogHeader>
-                            <AlertDialogTitle>Confirmar Deleção</AlertDialogTitle>
-                            <AlertDialogDescription>
-                              Tem certeza que deseja deletar o evento "{event.name}"? Esta ação não pode ser desfeita e todas as categorias e inscrições associadas serão removidas.
-                            </AlertDialogDescription>
-                          </AlertDialogHeader>
-                          <AlertDialogFooter>
-                            <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                            <AlertDialogAction
-                              onClick={() => deleteEvent.mutate({ id: event.id })}
-                              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                            >
-                              Deletar
-                            </AlertDialogAction>
-                          </AlertDialogFooter>
-                        </AlertDialogContent>
-                      </AlertDialog>
                     </CardFooter>
                   </Card>
                 ))}

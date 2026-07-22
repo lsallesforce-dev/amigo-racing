@@ -1369,6 +1369,48 @@ export const appRouter = router({
 
           const finalId = typeof result === 'number' ? result : (result as any)?.id || Date.now();
 
+          // Notifica o organizador por e-mail a cada nova inscrição.
+          // Não depende de "notifyOnNewRegistration" (campo existe no schema mas
+          // não tem UI pra ligar/desligar) — sempre notifica, com override opcional
+          // via event.notificationEmail se o organizador configurar um e-mail específico.
+          (async () => {
+            try {
+              const event = await db.getEventById(input.eventId) as any;
+              if (event) {
+                const organizer = await db.getOrganizerById(event.organizerId) as any;
+                const organizerUser = organizer ? await db.getUserByOpenId(organizer.ownerId) as any : null;
+                const notifyEmail = event.notificationEmail || organizerUser?.email;
+
+                if (notifyEmail) {
+                  const categoryData = await db.getCategoryById(input.categoryId) as any;
+                  const parentCategory = categoryData?.parentId ? await db.getCategoryById(categoryData.parentId) as any : null;
+                  const categoryName = parentCategory ? `${parentCategory.name} - ${categoryData?.name}` : (categoryData?.name || 'Desconhecida');
+
+                  const emailHtml = `
+                    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; color: #333;">
+                      <h2 style="color: #00a19c;">Nova Inscrição Recebida! 🏁</h2>
+                      <p>Uma nova inscrição foi feita no evento <strong>${event.name}</strong>.</p>
+                      <ul>
+                        <li><strong>Piloto:</strong> ${input.pilotName}</li>
+                        <li><strong>E-mail:</strong> ${input.pilotEmail}</li>
+                        <li><strong>Categoria:</strong> ${categoryName}</li>
+                        <li><strong>Data:</strong> ${new Date().toLocaleDateString('pt-BR')}</li>
+                      </ul>
+                      <div style="text-align: center; margin: 30px 0;">
+                        <a href="${ENV.oAuthServerUrl}/organizer" style="background-color: #00a19c; color: white; padding: 12px 24px; text-decoration: none; border-radius: 4px; font-weight: bold;">Ver Inscrições</a>
+                      </div>
+                      <hr style="border: none; border-top: 1px solid #eee; margin: 20px 0;" />
+                      <p style="color: #999; font-size: 12px; text-align: center;">🏁 Equipe Amigo Racing</p>
+                    </div>
+                  `;
+                  await sendEmail(notifyEmail, `[NOVA INSCRIÇÃO] ${input.pilotName} - ${event.name}`, emailHtml);
+                }
+              }
+            } catch (error) {
+              console.error('[registrations.create] Erro ao enviar notificação ao organizador:', error);
+            }
+          })();
+
           // Deduct stock for purchased products
           if (input.purchasedProducts && Array.isArray(input.purchasedProducts)) {
             const dbInstance = await getDb();
