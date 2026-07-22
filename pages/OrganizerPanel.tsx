@@ -1482,11 +1482,11 @@ export default function OrganizerPanel() {
                         </div>
                       )}
                     </CardContent>
-                    <CardFooter className="flex flex-wrap gap-2">
+                    <CardFooter className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                        <Button
                          size="sm"
                          variant="outline"
-                         className="w-full md:w-auto"
+                         className="w-full"
                          onClick={() => {
                            setSelectedEventId(event.id);
                            setCategoryForm({ vehicleType: "", customVehicleType: "", level: "", customLevel: "", price: "", slots: "", eventId: event.id });
@@ -1496,17 +1496,17 @@ export default function OrganizerPanel() {
                          <Plus className="mr-2 h-4 w-4" />
                          Adicionar Categoria
                        </Button>
-                       <Link href={`/events/${event.id}`} className="w-full md:w-auto">
+                       <Link href={`/events/${event.id}`} className="w-full">
                          <Button size="sm" variant="outline" className="w-full">
                            <Pencil className="h-4 w-4 mr-2" />
                            Editar Categorias
                          </Button>
                        </Link>
-                       <Button size="sm" variant="outline" className="w-full md:w-auto" onClick={() => handleEditClick(event)}>
+                       <Button size="sm" variant="outline" className="w-full" onClick={() => handleEditClick(event)}>
                          <Pencil className="h-4 w-4 mr-2" />
                          Editar Evento
                        </Button>
-                       <Link href={`/organizer/events/${event.id}/start-order`} className="w-full md:w-auto">
+                       <Link href={`/organizer/events/${event.id}/start-order`} className="w-full">
                          <Button size="sm" variant="outline" className="w-full">
                            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
@@ -1515,20 +1515,20 @@ export default function OrganizerPanel() {
                          </Button>
                        </Link>
                        {canStore && (
-                         <Link href={`/organizer/events/${event.id}/store`} className="w-full md:w-auto">
+                         <Link href={`/organizer/events/${event.id}/store`} className="w-full">
                            <Button size="sm" variant="outline" className="w-full bg-primary/10 hover:bg-primary/20 text-primary border-primary/20">
                              <ShoppingBag className="h-4 w-4 mr-2" />
                              Loja do EventO
                            </Button>
                          </Link>
                        )}
-                       <Link href={`/organizer/events/${event.id}/secretariat`} className="w-full md:w-auto">
+                       <Link href={`/organizer/events/${event.id}/secretariat`} className="w-full">
                          <Button size="sm" variant="outline" className="w-full bg-primary/10 hover:bg-primary/20 text-primary border-primary/20">
                            <ClipboardCheck className="h-4 w-4 mr-2" />
                            Secretaria / Check-in
                          </Button>
                        </Link>
-                       <Link href={`/registrations?eventId=${event.id}`} className="w-full md:w-auto">
+                       <Link href={`/registrations?eventId=${event.id}`} className="w-full">
                          <Button size="sm" variant="outline" className="w-full bg-primary/10 hover:bg-primary/20 text-primary border-primary/20">
                            <Users className="h-4 w-4 mr-2" />
                            Inscritos
