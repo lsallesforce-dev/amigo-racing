@@ -1530,9 +1530,17 @@ export default function EventDetails() {
                         <SelectValue placeholder="Selecione o tamanho" />
                       </SelectTrigger>
                       <SelectContent>
-                        {displaySizes.map((size: string) => (
-                          <SelectItem key={size} value={size}>{size}</SelectItem>
-                        ))}
+                        {displaySizes.map((size: string) => {
+                          // Mesma regra do carrinho da inscrição: pedido avulso
+                          // consome o mesmo estoque, então esgotado não é opção.
+                          const esgotado = hasShirtStock
+                            && (shirtAvailMap.get(normalizeShirtSize(size)) ?? 0) <= 0;
+                          return (
+                            <SelectItem key={size} value={size} disabled={esgotado}>
+                              {size}{esgotado ? " (esgotado)" : ""}
+                            </SelectItem>
+                          );
+                        })}
                       </SelectContent>
                     </Select>
                   </div>

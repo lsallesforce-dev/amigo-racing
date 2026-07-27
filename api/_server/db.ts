@@ -1899,7 +1899,32 @@ export async function getAvailableProducts(filters?: { eventId?: number; organiz
     );
   }
 
-  return await query.orderBy(desc(products.createdAt));
+  const rows = await query.orderBy(desc(products.createdAt));
+
+  // products.stock é um contador próprio da loja, decrementado a cada compra.
+  // Quando o evento controla camiseta por tamanho, quem manda é o
+  // event_shirt_stock (produzido - reservado por inscrições E pedidos) — manter
+  // os dois números levava a loja a anunciar estoque que não existe.
+  // Aqui o stock exibido passa a ser derivado, e vai junto a disponibilidade
+  // por tamanho pro front desabilitar o que acabou.
+  const out: any[] = [];
+  const cache = new Map<number, { size: string; available: number }[]>();
+  for (const p of rows as any[]) {
+    if (!p.eventId) { out.push(p); continue; }
+
+    if (!cache.has(p.eventId)) {
+      const stockRows = await getShirtStockByEventId(p.eventId);
+      cache.set(p.eventId, stockRows.length === 0 ? [] : (await getShirtAvailability(p.eventId))
+        .map(a => ({ size: a.size, available: a.available })));
+    }
+    const avail = cache.get(p.eventId)!;
+    if (avail.length === 0) { out.push(p); continue; }
+
+    const total = avail.reduce((acc, a) => acc + Math.max(0, a.available), 0);
+    if (total <= 0) continue; // esgotado de verdade: some da loja
+    out.push({ ...p, stock: total, sizeAvailability: avail });
+  }
+  return out;
 }
 
 export async function getProductById(id: string) {
@@ -2004,6 +2029,52 @@ export async function getShirtAvailability(eventId: number) {
     out.push({ size, quantity, used: u, available: quantity - u });
   }
   return out;
+}
+
+/**
+ * Trava única de estoque de camiseta por tamanho. Usada na inscrição nova, na
+ * edição da inscrição e no pedido avulso da loja — antes cada fluxo tinha (ou
+ * não tinha) a sua checagem, e a loja furava o estoque por tamanho porque só
+ * olhava products.stock.
+ *
+ * Só age se o evento tem estoque cadastrado (retrocompatível com evento sem).
+ * `jaReservados` = tamanhos que o registro em edição JÁ ocupa hoje; o
+ * `available` do banco conta com eles, então precisam ser descontados senão
+ * uma edição que não mexe na camiseta seria barrada por falta de estoque.
+ *
+ * Devolve o primeiro conflito ({ size, disponivel, pedido }) ou null.
+ */
+export async function checkShirtSizesAvailable(
+  eventId: number,
+  pedidos: unknown[],
+  jaReservados: unknown[] = []
+): Promise<{ size: string; disponivel: number; pedido: number } | null> {
+  const stockRows = await getShirtStockByEventId(eventId);
+  if (stockRows.length === 0) return null;
+
+  const availability = await getShirtAvailability(eventId);
+  const availMap = new Map(availability.map(a => [a.size, a.available]));
+
+  const delta = new Map<string, number>();
+  const bump = (raw: unknown, sinal: number) => {
+    const k = normalizeShirtSize(raw);
+    if (k) delta.set(k, (delta.get(k) || 0) + sinal);
+  };
+  for (const s of pedidos) bump(s, 1);
+  for (const s of jaReservados) bump(s, -1);
+
+  for (const [size, pedido] of delta) {
+    if (pedido <= 0) continue;
+    const disponivel = availMap.get(size) ?? 0;
+    if (disponivel < pedido) return { size, disponivel, pedido };
+  }
+  return null;
+}
+
+/** true se o evento controla camiseta por tamanho (aí products.stock não vale como contador). */
+export async function hasShirtStockControl(eventId?: number | null) {
+  if (!eventId) return false;
+  return (await getShirtStockByEventId(eventId)).length > 0;
 }
 
 export async function setShirtStock(eventId: number, items: { size?: string; quantity?: number }[]) {

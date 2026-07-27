@@ -397,16 +397,38 @@ const storeRouter = router({
         throw new TRPCError({ code: 'NOT_FOUND', message: 'Produto não encontrado' });
       }
 
-      if (product.stock < input.quantity) {
+      const eventId = input.eventId ?? product.eventId ?? undefined;
+      // Evento que controla camiseta por tamanho: quem manda é o event_shirt_stock.
+      // Antes o pedido avulso só olhava products.stock e furava o estoque por
+      // tamanho (foi assim que o M zerou sem ninguém ver).
+      const controlaPorTamanho = await db.hasShirtStockControl(eventId);
+
+      if (controlaPorTamanho) {
+        const sizes = input.sizes || [];
+        if (sizes.filter(Boolean).length < input.quantity) {
+          throw new TRPCError({ code: 'BAD_REQUEST', message: 'Selecione o tamanho de cada camiseta do pedido.' });
+        }
+        const conflito = await db.checkShirtSizesAvailable(eventId!, sizes);
+        if (conflito) {
+          throw new TRPCError({
+            code: 'BAD_REQUEST',
+            message: `Estoque de camiseta esgotado para o tamanho ${conflito.size} (disponível: ${conflito.disponivel}, pedido: ${conflito.pedido}). Escolha outro tamanho disponível.`,
+          });
+        }
+      } else if (product.stock < input.quantity) {
         throw new TRPCError({ code: 'BAD_REQUEST', message: 'Estoque insuficiente' });
       }
 
       const totalAmount = product.price * input.quantity;
 
-      // Decrease stock
-      await dbInstance.update(products)
-        .set({ stock: sql`${products.stock} - ${input.quantity}` })
-        .where(eq(products.id, input.productId));
+      // products.stock só é decrementado quando ele É o controle. Com estoque por
+      // tamanho, o próprio pedido (product_orders) já conta como reservado —
+      // decrementar os dois contava a mesma camiseta duas vezes.
+      if (!controlaPorTamanho) {
+        await dbInstance.update(products)
+          .set({ stock: sql`${products.stock} - ${input.quantity}` })
+          .where(eq(products.id, input.productId));
+      }
 
       // Create the order
       const newOrder = await dbInstance.insert(productOrders).values({
@@ -1346,30 +1368,19 @@ export const appRouter = router({
           // os tamanhos desta inscrição (piloto + navegador + extras) cabem no
           // disponível. Conta a demanda da PRÓPRIA inscrição também, pra não
           // deixar 2 camisetas do mesmo tamanho passarem quando só resta 1.
-          const stockRows = await db.getShirtStockByEventId(input.eventId);
-          if (stockRows.length > 0) {
-            const availability = await db.getShirtAvailability(input.eventId);
-            const availMap = new Map(availability.map(a => [a.size, a.available]));
-
-            const demand = new Map<string, number>();
-            const bump = (s: any) => { const k = normalizeShirtSize(s); if (k) demand.set(k, (demand.get(k) || 0) + 1); };
-            bump(input.pilotShirtSize);
-            if (input.navigatorShirtSize) bump(input.navigatorShirtSize);
-            if (Array.isArray(input.purchasedProducts)) {
-              for (const item of input.purchasedProducts as any[]) {
-                if (item && Array.isArray(item.sizes)) for (const sz of item.sizes) bump(sz);
-              }
+          const pedidos: unknown[] = [input.pilotShirtSize];
+          if (input.navigatorShirtSize) pedidos.push(input.navigatorShirtSize);
+          if (Array.isArray(input.purchasedProducts)) {
+            for (const item of input.purchasedProducts as any[]) {
+              if (item && Array.isArray(item.sizes)) pedidos.push(...item.sizes);
             }
-
-            for (const [size, qty] of demand) {
-              const available = availMap.get(size) ?? 0;
-              if (available < qty) {
-                throw new TRPCError({
-                  code: 'BAD_REQUEST',
-                  message: `Estoque de camiseta esgotado para o tamanho ${size}. Escolha outro tamanho disponível.`,
-                });
-              }
-            }
+          }
+          const conflito = await db.checkShirtSizesAvailable(input.eventId, pedidos);
+          if (conflito) {
+            throw new TRPCError({
+              code: 'BAD_REQUEST',
+              message: `Estoque de camiseta esgotado para o tamanho ${conflito.size} (disponível: ${conflito.disponivel}, pedido: ${conflito.pedido}). Escolha outro tamanho disponível.`,
+            });
           }
 
           const result = await db.createRegistration({
@@ -1426,8 +1437,12 @@ export const appRouter = router({
             }
           })();
 
-          // Deduct stock for purchased products
-          if (input.purchasedProducts && Array.isArray(input.purchasedProducts)) {
+          // Deduct stock for purchased products.
+          // Com estoque por tamanho, os extras já entram no "reservado" via
+          // purchasedProducts da própria inscrição — decrementar products.stock
+          // também contaria a mesma camiseta duas vezes.
+          if (input.purchasedProducts && Array.isArray(input.purchasedProducts)
+              && !(await db.hasShirtStockControl(input.eventId))) {
             const dbInstance = await getDb();
             if (dbInstance) {
               for (const item of input.purchasedProducts) {
@@ -1717,6 +1732,41 @@ export const appRouter = router({
 
         if (!organizer || organizer.ownerId !== principal?.openId) {
           throw new TRPCError({ code: 'UNAUTHORIZED', message: 'Somente o organizador pode editar inscrições' });
+        }
+
+        // Trocar camiseta pelo painel também consome estoque — antes a trava
+        // existia só na inscrição nova, então a edição furava o controle.
+        // Compara o DEPOIS contra o ANTES: só o que aumenta precisa caber no
+        // disponível (que já conta esta inscrição com os tamanhos antigos).
+        const mexeuNaCamiseta =
+          data.pilotShirtSize !== undefined ||
+          data.navigatorShirtSize !== undefined ||
+          data.status !== undefined;
+
+        if (mexeuNaCamiseta && reg.eventId) {
+          const novoStatus = data.status ?? reg.status;
+          const antesValia = reg.status !== 'cancelled';
+          const depoisVale = novoStatus !== 'cancelled';
+
+          const depois = depoisVale
+            ? shirtSizesOfRegistration({
+                ...reg,
+                pilotShirtSize: data.pilotShirtSize ?? reg.pilotShirtSize,
+                navigatorShirtSize: data.navigatorShirtSize === undefined
+                  ? reg.navigatorShirtSize
+                  : data.navigatorShirtSize,
+              })
+            : [];
+          // Inscrição cancelada não reserva nada hoje: nesse caso não há o que descontar.
+          const antes = antesValia ? shirtSizesOfRegistration(reg) : [];
+
+          const conflito = await db.checkShirtSizesAvailable(reg.eventId, depois, antes);
+          if (conflito) {
+            throw new TRPCError({
+              code: 'BAD_REQUEST',
+              message: `Estoque de camiseta esgotado para o tamanho ${conflito.size} (disponível: ${conflito.disponivel}, pedido: ${conflito.pedido}). Escolha outro tamanho ou aumente o estoque do evento.`,
+            });
+          }
         }
 
         // Registra histórico por campo alterado
