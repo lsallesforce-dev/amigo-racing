@@ -95,6 +95,8 @@ export default function OrganizerFinance() {
     const availableBalance = pagarmeBalance?.availableBalance || 0;
     const waitingBalance = pagarmeBalance?.waitingBalance || 0;
     const transferredToBank = pagarmeBalance?.transferredToBank || 0;
+    // Membro convidado (permissão 'finance') vê o saldo da conta, mas quem saca é o titular.
+    const canWithdraw = pagarmeBalance?.canWithdraw;
 
     const payoutMutation = trpc.finance.requestPayout.useMutation({
         onSuccess: () => {
@@ -467,13 +469,16 @@ export default function OrganizerFinance() {
                                     <p className="text-xs text-muted-foreground">
                                         Transfira o saldo disponível para sua conta bancária cadastrada.
                                         <span className="block mt-1 font-semibold text-amber-600 dark:text-amber-400">Taxa de R$ 3,67 por saque.</span>
+                                        {canWithdraw === false && (
+                                            <span className="block mt-1 font-semibold text-muted-foreground">Somente o titular da conta pode solicitar o saque.</span>
+                                        )}
                                     </p>
                                     <Dialog open={isPayoutOpen} onOpenChange={setIsPayoutOpen}>
                                         <DialogTrigger asChild>
                                             <Button
                                                 id="btn-transferir-pagarme"
                                                 className="w-full bg-[#00a19c] hover:bg-[#00695c] text-white gap-2"
-                                                disabled={(pagarmeBalance?.availableBalance || 0) <= 0}
+                                                disabled={(pagarmeBalance?.availableBalance || 0) <= 0 || canWithdraw === false}
                                             >
                                                 <Send className="h-4 w-4" />
                                                 Transferir

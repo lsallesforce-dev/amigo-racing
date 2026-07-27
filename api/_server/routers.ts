@@ -87,6 +87,23 @@ const storageRouter = router({
     }),
 });
 
+/**
+ * Resolve o recebedor Pagar.me do PRINCIPAL (dono da conta), nunca do usuário logado.
+ * Membro convidado (co-organizador com permissão 'finance') não tem recipientId próprio —
+ * o dinheiro das inscrições cai no recebedor do principal. Usar ctx.user.id aqui fazia o
+ * painel do membro mostrar saldo 0 e esconder o bloco "Saldo Pagar.me".
+ */
+async function resolveFinanceRecipient(user: any) {
+  const context = await db.getOrganizerContext(user);
+  if (context.type === 'MEMBER' && !context.permissions.includes('finance')) {
+    throw new TRPCError({ code: 'FORBIDDEN', message: 'Sem permissão para financeiro' });
+  }
+  const principal = await db.getUserById(context.principalUserId) as any;
+  const recipientId = principal?.recipientId
+    || (context.type === 'PRINCIPAL' ? user.recipientId : undefined);
+  return { context, recipientId };
+}
+
 const financeRouter = router({
   create: organizerProcedure
     .input(z.object({
@@ -169,15 +186,14 @@ const financeRouter = router({
       return await db.deleteTransaction(input.id, context.principalUserId);
     }),
 
-  // Retorna o saldo Pagar.me do organizador logado
+  // Retorna o saldo Pagar.me da conta (recebedor do principal, mesmo pra membro convidado)
   getPagarmeBalance: organizerProcedure
     .query(async ({ ctx }) => {
-      const user = ctx.user as any;
-      const freshUser = await db.getUserById(user.id);
-      const recipientId = freshUser?.recipientId || user.recipientId;
+      const { context, recipientId } = await resolveFinanceRecipient(ctx.user as any);
+      const canWithdraw = context.type !== 'MEMBER';
 
       if (!recipientId) {
-        return { availableBalance: 0, waitingBalance: 0, transferredToBank: 0, hasRecipient: false };
+        return { availableBalance: 0, waitingBalance: 0, transferredToBank: 0, hasRecipient: false, canWithdraw };
       }
 
       try {
@@ -192,19 +208,18 @@ const financeRouter = router({
           waitingBalance: (balance.waiting_funds_amount || 0) / 100, // a liquidar
           transferredToBank: (balance.transferred_amount || 0) / 100, // já caiu no banco
           hasRecipient: true,
+          canWithdraw,
         };
       } catch (err: any) {
         console.error('[finance.getPagarmeBalance] Erro:', err.message);
-        return { availableBalance: 0, waitingBalance: 0, transferredToBank: 0, hasRecipient: true, error: err.message };
+        return { availableBalance: 0, waitingBalance: 0, transferredToBank: 0, hasRecipient: true, canWithdraw, error: err.message };
       }
     }),
 
   // Transferências (TED/saque) reais já feitas - valor bruto, taxa e líquido vêm direto do Pagar.me
   getPagarmeTransfers: organizerProcedure
     .query(async ({ ctx }) => {
-      const user = ctx.user as any;
-      const freshUser = await db.getUserById(user.id);
-      const recipientId = freshUser?.recipientId || user.recipientId;
+      const { recipientId } = await resolveFinanceRecipient(ctx.user as any);
 
       if (!recipientId) return [];
 
@@ -232,9 +247,13 @@ const financeRouter = router({
       amount: z.number().positive('Valor deve ser positivo').optional(),
     }))
     .mutation(async ({ ctx, input }) => {
-      const user = ctx.user as any;
-      const freshUser = await db.getUserById(user.id);
-      const recipientId = freshUser?.recipientId || user.recipientId;
+      const { context, recipientId } = await resolveFinanceRecipient(ctx.user as any);
+
+      // Saque move dinheiro pra conta bancária do PRINCIPAL: só o dono solicita.
+      // Membro com permissão 'finance' enxerga o saldo, mas não saca.
+      if (context.type === 'MEMBER') {
+        throw new TRPCError({ code: 'FORBIDDEN', message: 'Somente o titular da conta pode solicitar a transferência do saldo.' });
+      }
 
       if (!recipientId) {
         throw new TRPCError({ code: 'BAD_REQUEST', message: 'Você precisa configurar seus dados bancários antes de solicitar uma transferência.' });
