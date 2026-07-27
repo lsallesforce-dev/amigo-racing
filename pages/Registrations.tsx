@@ -114,9 +114,11 @@ export default function Registrations() {
   const exportShirtsMutation = trpc.registrations.exportShirts.useMutation();
 
   // Estoque de camisetas (disponibilidade + gestão)
+  // Carrega sempre que há evento (não só com o diálogo de estoque aberto): o select
+  // de camisa do "Editar inscrição" também tira as opções daqui.
   const { data: shirtStock = [] } = trpc.shirtStock.getByEvent.useQuery(
     { eventId: selectedEventId! },
-    { enabled: !!selectedEventId && stockDialogOpen }
+    { enabled: !!selectedEventId }
   );
   // Semeia o formulário editável quando a disponibilidade carrega.
   useEffect(() => {
@@ -319,6 +321,22 @@ export default function Registrations() {
 
 
 
+  // Tamanhos do select de camisa do "Editar inscrição".
+  // Vinham de uma lista fixa minúscula ("pp","p","m"...), mas desde o controle de
+  // estoque por tamanho (fc1e84e) o formulário público grava o token canônico
+  // MAIÚSCULO do estoque ("M", "G1", "INF6"). O valor não batia com nenhuma option
+  // e o Select abria em branco — a camiseta escolhida "sumia".
+  // Agora a fonte é o estoque do evento (mesma do formulário público), e o tamanho
+  // já gravado entra na lista mesmo que não exista mais no estoque.
+  const DEFAULT_SHIRT_SIZES = ["PP", "P", "M", "G", "GG", "G1", "G2", "G3/G4", "INFANTIL"];
+  const shirtSizeOptions = useMemo(() => {
+    const base = shirtStock.length > 0 ? shirtStock.map((s: any) => s.size) : DEFAULT_SHIRT_SIZES;
+    const atuais = [editForm?.pilotShirtSize, editForm?.navigatorShirtSize]
+      .map(normalizeShirtSize)
+      .filter(Boolean);
+    return sortShirtSizes([...new Set([...base, ...atuais])], (s) => s);
+  }, [shirtStock, editForm?.pilotShirtSize, editForm?.navigatorShirtSize]);
+
   const openEditDialog = (registration: any) => {
     setEditForm({
       registrationId: registration.id,
@@ -330,14 +348,14 @@ export default function Registrations() {
       pilotCity: registration.pilotCity || "",
       pilotState: registration.pilotState || "",
       pilotAge: registration.pilotAge ?? "",
-      pilotShirtSize: registration.pilotShirtSize || "",
+      pilotShirtSize: normalizeShirtSize(registration.pilotShirtSize),
       phone: registration.phone || "",
       navigatorName: registration.navigatorName || "",
       navigatorEmail: registration.navigatorEmail || "",
       navigatorCpf: registration.navigatorCpf || "",
       navigatorCity: registration.navigatorCity || "",
       navigatorState: registration.navigatorState || "",
-      navigatorShirtSize: registration.navigatorShirtSize || "",
+      navigatorShirtSize: normalizeShirtSize(registration.navigatorShirtSize),
       team: registration.team || "",
       vehicleBrand: registration.vehicleBrand || "",
       vehicleModel: registration.vehicleModel || "",
@@ -1267,10 +1285,10 @@ export default function Registrations() {
                     <div className="space-y-1">
                       <Label>Camisa</Label>
                       <Select value={editForm.pilotShirtSize} onValueChange={(v) => setEditForm({ ...editForm, pilotShirtSize: v })}>
-                        <SelectTrigger><SelectValue /></SelectTrigger>
+                        <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
                         <SelectContent>
-                          {["pp", "p", "m", "g", "gg", "g1", "g2", "g3", "g4", "infantil"].map(s => (
-                            <SelectItem key={s} value={s}>{s.toUpperCase()}</SelectItem>
+                          {shirtSizeOptions.map(s => (
+                            <SelectItem key={s} value={s}>{s}</SelectItem>
                           ))}
                         </SelectContent>
                       </Select>
@@ -1296,10 +1314,10 @@ export default function Registrations() {
                     <div className="space-y-1">
                       <Label>Camisa</Label>
                       <Select value={editForm.navigatorShirtSize} onValueChange={(v) => setEditForm({ ...editForm, navigatorShirtSize: v })}>
-                        <SelectTrigger><SelectValue /></SelectTrigger>
+                        <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
                         <SelectContent>
-                          {["pp", "p", "m", "g", "gg", "g1", "g2", "g3", "g4", "infantil"].map(s => (
-                            <SelectItem key={s} value={s}>{s.toUpperCase()}</SelectItem>
+                          {shirtSizeOptions.map(s => (
+                            <SelectItem key={s} value={s}>{s}</SelectItem>
                           ))}
                         </SelectContent>
                       </Select>

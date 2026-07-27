@@ -19,6 +19,17 @@ import { toast } from "sonner";
 import { PaymentModal } from "@/components/PaymentModal";
 import { EventDocumentsViewer } from "@/components/EventDocumentsViewer";
 import Navbar from "@/components/Navbar";
+import { normalizeShirtSize, sortShirtSizes } from "@/shared/shirtSizes";
+
+// Mesmo token canônico do estoque/formulário público. A lista fixa minúscula antiga
+// não batia com o que o formulário grava hoje ("M", "G1", "INF6") e o select abria
+// em branco, escondendo a camiseta que a pessoa já tinha escolhido.
+const SHIRT_SIZES = ["PP", "P", "M", "G", "GG", "G1", "G2", "G3/G4", "INFANTIL"];
+const shirtOptionsWith = (...atuais: unknown[]) =>
+  sortShirtSizes(
+    [...new Set([...SHIRT_SIZES, ...atuais.map(normalizeShirtSize).filter(Boolean)])],
+    (s) => s
+  );
 
 function parsePurchasedProducts(purchasedProducts: any): { name: string; price: number; quantity: number; sizes?: string[] }[] {
   if (!purchasedProducts) return [];
@@ -159,11 +170,11 @@ export default function Dashboard() {
       phone: reg.pilotPhone || '',
       pilotCpf: reg.pilotCpf || '',
       pilotAge: reg.pilotAge || '',
-      pilotShirtSize: reg.pilotShirtSize || '',
+      pilotShirtSize: normalizeShirtSize(reg.pilotShirtSize),
       navigatorName: reg.navigatorName || '',
       navigatorEmail: reg.navigatorEmail || '',
       navigatorCpf: reg.navigatorCPF || '',
-      navigatorShirtSize: reg.navigatorShirtSize || '',
+      navigatorShirtSize: normalizeShirtSize(reg.navigatorShirtSize),
       vehicleBrand: reg.vehicleBrand || '',
       vehicleModel: reg.vehicleModel || '',
       vehicleYear: reg.vehicleYear || '',
@@ -825,16 +836,10 @@ export default function Dashboard() {
                         value={editForm.pilotShirtSize || ''}
                         onChange={(e) => setEditForm({ ...editForm, pilotShirtSize: e.target.value })}
                       >
-                        <option value="pp">PP</option>
-                        <option value="p">P</option>
-                        <option value="m">M</option>
-                        <option value="g">G</option>
-                        <option value="gg">GG</option>
-                        <option value="g1">G1</option>
-                        <option value="g2">G2</option>
-                        <option value="g3">G3</option>
-                        <option value="g4">G4</option>
-                        <option value="infantil">Infantil</option>
+                        <option value="">Selecione</option>
+                        {shirtOptionsWith(editForm.pilotShirtSize).map(s => (
+                          <option key={s} value={s}>{s}</option>
+                        ))}
                       </select>
                     </div>
                   )}
@@ -886,16 +891,9 @@ export default function Dashboard() {
                           onChange={(e) => setEditForm({ ...editForm, navigatorShirtSize: e.target.value })}
                         >
                           <option value="">Selecione...</option>
-                          <option value="pp">PP</option>
-                          <option value="p">P</option>
-                          <option value="m">M</option>
-                          <option value="g">G</option>
-                          <option value="gg">GG</option>
-                          <option value="g1">G1</option>
-                          <option value="g2">G2</option>
-                          <option value="g3">G3</option>
-                          <option value="g4">G4</option>
-                          <option value="infantil">Infantil</option>
+                          {shirtOptionsWith(editForm.navigatorShirtSize).map(s => (
+                            <option key={s} value={s}>{s}</option>
+                          ))}
                         </select>
                       </div>
                     )}
