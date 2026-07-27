@@ -92,6 +92,10 @@ const storageRouter = router({
  * Membro convidado (co-organizador com permissão 'finance') não tem recipientId próprio —
  * o dinheiro das inscrições cai no recebedor do principal. Usar ctx.user.id aqui fazia o
  * painel do membro mostrar saldo 0 e esconder o bloco "Saldo Pagar.me".
+ *
+ * O saque também sai por aqui: o POST /withdrawals só credita a conta bancária cadastrada
+ * NO recebedor, não aceita conta de destino. Logo, quem passa no gate 'finance' pode sacar —
+ * não há como desviar o dinheiro pra outra conta.
  */
 async function resolveFinanceRecipient(user: any) {
   const context = await db.getOrganizerContext(user);
@@ -189,11 +193,10 @@ const financeRouter = router({
   // Retorna o saldo Pagar.me da conta (recebedor do principal, mesmo pra membro convidado)
   getPagarmeBalance: organizerProcedure
     .query(async ({ ctx }) => {
-      const { context, recipientId } = await resolveFinanceRecipient(ctx.user as any);
-      const canWithdraw = context.type !== 'MEMBER';
+      const { recipientId } = await resolveFinanceRecipient(ctx.user as any);
 
       if (!recipientId) {
-        return { availableBalance: 0, waitingBalance: 0, transferredToBank: 0, hasRecipient: false, canWithdraw };
+        return { availableBalance: 0, waitingBalance: 0, transferredToBank: 0, hasRecipient: false };
       }
 
       try {
@@ -208,11 +211,10 @@ const financeRouter = router({
           waitingBalance: (balance.waiting_funds_amount || 0) / 100, // a liquidar
           transferredToBank: (balance.transferred_amount || 0) / 100, // já caiu no banco
           hasRecipient: true,
-          canWithdraw,
         };
       } catch (err: any) {
         console.error('[finance.getPagarmeBalance] Erro:', err.message);
-        return { availableBalance: 0, waitingBalance: 0, transferredToBank: 0, hasRecipient: true, canWithdraw, error: err.message };
+        return { availableBalance: 0, waitingBalance: 0, transferredToBank: 0, hasRecipient: true, error: err.message };
       }
     }),
 
@@ -247,13 +249,7 @@ const financeRouter = router({
       amount: z.number().positive('Valor deve ser positivo').optional(),
     }))
     .mutation(async ({ ctx, input }) => {
-      const { context, recipientId } = await resolveFinanceRecipient(ctx.user as any);
-
-      // Saque move dinheiro pra conta bancária do PRINCIPAL: só o dono solicita.
-      // Membro com permissão 'finance' enxerga o saldo, mas não saca.
-      if (context.type === 'MEMBER') {
-        throw new TRPCError({ code: 'FORBIDDEN', message: 'Somente o titular da conta pode solicitar a transferência do saldo.' });
-      }
+      const { recipientId } = await resolveFinanceRecipient(ctx.user as any);
 
       if (!recipientId) {
         throw new TRPCError({ code: 'BAD_REQUEST', message: 'Você precisa configurar seus dados bancários antes de solicitar uma transferência.' });
