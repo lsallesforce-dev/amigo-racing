@@ -326,6 +326,7 @@ export default function StartOrderConfig() {
           headStyles: { fillColor: [31, 41, 55], textColor: [255, 255, 255], fontSize: 9, fontStyle: 'bold', halign: 'center' },
           columnStyles: { 0: { cellWidth: 12, halign: 'center' }, 1: { cellWidth: 35 }, 2: { cellWidth: 25 }, 3: { cellWidth: 12, halign: 'center' }, 4: { cellWidth: 35 }, 5: { cellWidth: 25 }, 6: { cellWidth: 12, halign: 'center' }, 7: { cellWidth: 25 }, 8: { cellWidth: 20, halign: 'center' }, 9: { cellWidth: 35 } },
           styles: { fontSize: 8, cellPadding: 3, valign: 'middle' },
+          rowPageBreak: 'avoid', // não parte a linha do inscrito entre páginas
           margin: { left: 14, right: 14 }
         });
 

@@ -566,6 +566,10 @@ export default function Registrations() {
           headStyles: { fillColor: [31, 41, 55], textColor: [255, 255, 255], fontSize: 11, fontStyle: 'bold', halign: 'center' },
           columnStyles,
           styles: { fontSize: 10, cellPadding: 3, valign: 'middle' },
+          // Sem isso o autoTable parte a linha no meio da quebra de página: o
+          // "#" de um inscrito ficava no fim de uma página e o número dele
+          // sozinho no topo da seguinte.
+          rowPageBreak: 'avoid',
           showHead: 'everyPage',
           margin: { left: 14, right: 14, top: contBannerBaseline + 6 },
           didDrawPage: () => {
@@ -611,11 +615,14 @@ export default function Registrations() {
       filenamePrefix: "lista_evento",
       toastLabel: "Lista do Evento",
       columns: [
-        { head: 'Nº', cellWidth: 12, halign: 'center' },
-        { head: 'Piloto', cellWidth: 44 },
+        // Nº precisa caber "#21" numa linha só (12mm - 6mm de padding não cabia
+        // e o número descia pra segunda linha da célula). Os 4mm saem de Piloto
+        // e Navegador pra soma continuar em 269mm (A4 paisagem - margens).
+        { head: 'Nº', cellWidth: 16, halign: 'center' },
+        { head: 'Piloto', cellWidth: 42 },
         { head: 'CPF Piloto', cellWidth: 31 },
         { head: 'Cam', cellWidth: 15, halign: 'center' },
-        { head: 'Navegador', cellWidth: 44 },
+        { head: 'Navegador', cellWidth: 42 },
         { head: 'CPF Nav.', cellWidth: 31 },
         { head: 'Cam', cellWidth: 15, halign: 'center' },
         { head: 'Equipe', cellWidth: 30 },
@@ -623,7 +630,7 @@ export default function Registrations() {
         { head: 'Extras', cellWidth: 21 },
       ],
       rowMapper: (reg) => [
-        `# ${reg.number}`,
+        `#${reg.number}`,
         reg.pilotName,
         reg.pilotCpf || '-',
         reg.pilotShirtSize || '-',
@@ -650,7 +657,7 @@ export default function Registrations() {
         { head: 'Cidade', cellWidth: 66 },
       ],
       rowMapper: (reg) => [
-        `# ${reg.number}`,
+        `#${reg.number}`,
         reg.pilotName,
         reg.navigatorName || '-',
         (reg.vehicleBrand || reg.vehicleModel) ? `${reg.vehicleBrand || ''} ${reg.vehicleModel || ''}`.trim() : '-',

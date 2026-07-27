@@ -559,6 +559,7 @@ export default function StartOrderManager() {
             cellPadding: 4,
             valign: 'middle'
           },
+          rowPageBreak: 'avoid', // não parte a linha do inscrito entre páginas
           margin: { left: 14, right: 14 },
           didDrawPage: (data) => {
             // Rodapé em cada página
@@ -684,6 +685,7 @@ export default function StartOrderManager() {
             cellPadding: 3,
             valign: 'middle'
           },
+          rowPageBreak: 'avoid', // não parte a linha do inscrito entre páginas
           margin: { left: 14, right: 14 },
           didDrawPage: (data) => {
             doc.setFontSize(8);

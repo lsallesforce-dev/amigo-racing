@@ -550,6 +550,7 @@ export function SorteoPage() {
                         2: { cellWidth: 35, halign: 'center', fontStyle: 'bold' }
                     },
                     styles: { fontSize: 10, cellPadding: 4, valign: 'middle' },
+                    rowPageBreak: 'avoid', // não parte a linha do inscrito entre páginas
                     margin: { left: 14, right: 14 },
                     didDrawPage: (data) => {
                         doc.setFontSize(8);
@@ -648,6 +649,7 @@ export function SorteoPage() {
                         8: { cellWidth: 25, halign: 'center' }
                     },
                     styles: { fontSize: 8, cellPadding: 3, valign: 'middle' },
+                    rowPageBreak: 'avoid', // não parte a linha do inscrito entre páginas
                     margin: { left: 14, right: 14 },
                     didDrawPage: (data) => {
                         doc.setFontSize(8);
