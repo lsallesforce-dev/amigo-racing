@@ -1475,17 +1475,60 @@ export const appRouter = router({
     myRegistrations: protectedProcedure.query(async ({ ctx }) => {
       const regs = await db.getRegistrationsByUserId(ctx.user.id) || [];
 
+      // Buscar startOrderConfig para calcular número/horário de largada.
+      // Os campos registrations.startNumber / startTime podem estar null — o
+      // valor real vive na startOrderConfig + registrationOrder.
+      const eventIds = [...new Set((regs as any[]).map(r => r.eventId))];
+      const configsByEvent = new Map<number, any[]>();
+      for (const eid of eventIds) {
+        try {
+          const configs = await db.getStartOrderConfigsByEventId(eid);
+          if (configs?.length) configsByEvent.set(eid, configs);
+        } catch {}
+      }
+
       // A query traz o navigationFiles cru do evento — com a URL pública de TODAS as
       // planilhas, de todas as categorias. Filtrar isso no front não adianta: o link
       // já teria saído no JSON. Aqui o array vira a versão segura (filtrada por
       // categoria, com o bloqueio calculado e SEM url do que está bloqueado).
-      return (regs as any[]).map((reg) => ({
-        ...reg,
-        eventNavigationFiles: sanitizeNavigationFiles(reg.eventNavigationFiles, {
-          categoryId: reg.categoryId,
-          registrationStatus: reg.status,
-        }),
-      }));
+      return (regs as any[]).map((reg) => {
+        // Calcular número e horário de largada a partir da config
+        let computedStartNumber = reg.startNumber as number | null;
+        let computedStartTime = reg.startTime as string | null;
+
+        const configs = configsByEvent.get(reg.eventId);
+        if (configs) {
+          const config = configs.find((c: any) => c.categoryId === reg.categoryId);
+          if (config?.registrationOrder) {
+            try {
+              const order = typeof config.registrationOrder === 'string'
+                ? JSON.parse(config.registrationOrder)
+                : config.registrationOrder;
+              if (Array.isArray(order)) {
+                const idx = order.indexOf(reg.id);
+                if (idx >= 0) {
+                  computedStartNumber = config.numberStart + idx;
+                  const [h, m, s] = config.startTime.split(':').map(Number);
+                  const base = new Date();
+                  base.setHours(h, m, s || 0, 0);
+                  const t = new Date(base.getTime() + idx * config.intervalSeconds * 1000);
+                  computedStartTime = `${String(t.getHours()).padStart(2, '0')}:${String(t.getMinutes()).padStart(2, '0')}`;
+                }
+              }
+            } catch {}
+          }
+        }
+
+        return {
+          ...reg,
+          startNumber: computedStartNumber,
+          startTime: computedStartTime,
+          eventNavigationFiles: sanitizeNavigationFiles(reg.eventNavigationFiles, {
+            categoryId: reg.categoryId,
+            registrationStatus: reg.status,
+          }),
+        };
+      });
     }),
 
     /**
