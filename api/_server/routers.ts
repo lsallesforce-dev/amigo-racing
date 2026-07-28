@@ -16,6 +16,7 @@ import { products, productOrders, organizerMembers, registrations, events, payme
 import { eq, sql, and, inArray, ne } from "drizzle-orm";
 import { normalizeShirtSize, sortShirtSizes, shirtSizesOfRegistration } from "../../shared/shirtSizes.js";
 import { sanitizeNavigationFiles } from "../../shared/navigationFiles.js";
+import { formatarBrasilia } from "../../shared/horarioBrasilia.js";
 import { ENV } from "./env.js";
 import { sendEmail } from "./email.js";
 
@@ -1533,7 +1534,9 @@ export const appRouter = router({
             code: 'FORBIDDEN',
             message: alvo.lockReason === 'payment'
               ? 'A planilha é liberada após a confirmação do pagamento da sua inscrição.'
-              : `Esta planilha só é liberada em ${new Date(alvo.releaseAt!).toLocaleString('pt-BR')}.`,
+              // Sempre horário de Brasília: aqui roda na Vercel, que está em UTC —
+              // um toLocaleString cru anunciaria 13:00 pra planilha marcada às 10:00.
+              : `Esta planilha só é liberada em ${formatarBrasilia(alvo.releaseAt)} (horário de Brasília).`,
           });
         }
         if (!alvo.url) {

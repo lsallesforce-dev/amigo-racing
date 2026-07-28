@@ -20,6 +20,7 @@ import { PaymentModal } from "@/components/PaymentModal";
 import { EventDocumentsViewer } from "@/components/EventDocumentsViewer";
 import Navbar from "@/components/Navbar";
 import { normalizeShirtSize, sortShirtSizes } from "@/shared/shirtSizes";
+import { formatarBrasilia } from "@/shared/horarioBrasilia";
 
 // Mesmo token canônico do estoque/formulário público. A lista fixa minúscula antiga
 // não batia com o que o formulário grava hoje ("M", "G1", "INF6") e o select abria
@@ -166,21 +167,13 @@ export default function Dashboard() {
   const [baixandoPlanilhaId, setBaixandoPlanilhaId] = useState<string | null>(null);
   const navFileMutation = trpc.registrations.getNavigationFile.useMutation();
 
-  const formatarLiberacao = (iso?: string | null) => {
-    if (!iso) return "";
-    const d = new Date(iso);
-    if (isNaN(d.getTime())) return "";
-    return d.toLocaleString("pt-BR", {
-      day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit",
-    });
-  };
-
   const handleDownloadPlanilha = async (reg: any, file: any) => {
     if (file.locked) {
       if (file.lockReason === "payment") {
         toast.info("Planilha disponível após a confirmação do pagamento da sua inscrição.");
       } else {
-        toast.info(`Esta planilha será liberada em ${formatarLiberacao(file.releaseAt)}.`);
+        // Horário de Brasília, não o fuso da máquina do competidor: é o horário da prova.
+        toast.info(`Esta planilha será liberada em ${formatarBrasilia(file.releaseAt)} (horário de Brasília).`);
       }
       return;
     }
