@@ -575,6 +575,10 @@ export async function getRegistrationsByUserId(userId: number) {
       eventNotificationEmail: sql<string | null>`events."notificationEmail"`,
       eventHasShirts: events.hasShirts,
       acceptsCreditCard: events.accepts_credit_card,
+      eventDate: events.startDate,
+      eventLocation: events.location,
+      eventCity: events.city,
+      eventState: events.state,
       championshipId: championshipStages.championshipId,
     })
     .from(registrations)

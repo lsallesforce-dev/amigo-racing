@@ -400,28 +400,30 @@ export default function Dashboard() {
                       </div>
                     </CardHeader>
                     <CardContent className="space-y-2">
-                      <div className="flex items-center gap-2 text-sm">
-                        <Calendar className="h-4 w-4 text-muted-foreground" />
-                        <span>Evento ID: {reg.eventId}</span>
-                      </div>
-                      <div className="flex items-center gap-2 text-sm">
-                        <Car className="h-4 w-4 text-muted-foreground" />
-                        <span>Veículo ID: {reg.vehicleId}</span>
-                      </div>
                       {reg.startNumber && (
-                        <div className="flex items-center gap-2 text-sm font-medium text-orange-600">
-                          <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 20l4-16m2 16l4-16M6 9h14M4 15h14" />
-                          </svg>
-                          <span>Número de Largada: {reg.startNumber}</span>
+                        <div className="flex items-center gap-2 text-sm">
+                          <Hash className="h-4 w-4 text-muted-foreground" />
+                          <span>Número: <strong>{reg.startNumber}</strong></span>
                         </div>
                       )}
                       {reg.startTime && (
-                        <div className="flex items-center gap-2 text-sm font-medium text-orange-600">
-                          <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <div className="flex items-center gap-2 text-sm">
+                          <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-muted-foreground" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
                           </svg>
-                          <span>Horário de Largada: {reg.startTime.substring(0, 5)}</span>
+                          <span>Horário de Largada: <strong>{reg.startTime.substring(0, 5)}</strong></span>
+                        </div>
+                      )}
+                      {reg.eventDate && (
+                        <div className="flex items-center gap-2 text-sm">
+                          <Calendar className="h-4 w-4 text-muted-foreground" />
+                          <span>Data: {format(new Date(reg.eventDate), "dd/MM/yyyy (EEEE)", { locale: ptBR })}</span>
+                        </div>
+                      )}
+                      {reg.eventLocation && (
+                        <div className="flex items-center gap-2 text-sm">
+                          <MapPin className="h-4 w-4 text-muted-foreground" />
+                          <span>{reg.eventLocation}{reg.eventCity ? ` — ${reg.eventCity}` : ''}{reg.eventState ? `/${reg.eventState}` : ''}</span>
                         </div>
                       )}
                       {formatExtras((reg as any).purchasedProducts) && (
