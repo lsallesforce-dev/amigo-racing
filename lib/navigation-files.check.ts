@@ -72,7 +72,43 @@ async function main() {
   // 8) organizador/admin enxerga tudo liberado mesmo com inscrição pendente
   check("bypass do organizador", paraOrganizador.every(x => !x.locked && !!x.url), `${paraOrganizador.length} planilhas, todas com url`);
 
-  // 9) o payload real de myRegistrations não vaza url pra inscrição pendente
+  // 9) planilha de DUAS categorias aparece nas duas e some nas outras
+  if (outraCategoria !== undefined) {
+    const duasCats = [{
+      id: "duas-cats", name: "graduado-e-turismo.nbp", url: "https://r2/duas.nbp", type: "nbp",
+      categoryIds: [paga.categoryId, outraCategoria], categoryId: null, releaseAt: ONTEM,
+    }];
+    const naPrimeira = sanitizeNavigationFiles(duasCats, { categoryId: paga.categoryId, registrationStatus: "paid" });
+    const naSegunda = sanitizeNavigationFiles(duasCats, { categoryId: outraCategoria, registrationStatus: "paid" });
+    const terceira = regs.find(r => r.categoryId !== paga.categoryId && r.categoryId !== outraCategoria)?.categoryId;
+    const naTerceira = terceira === undefined
+      ? []
+      : sanitizeNavigationFiles(duasCats, { categoryId: terceira, registrationStatus: "paid" });
+
+    check("multi: aparece na 1ª categoria", naPrimeira.length === 1 && !!naPrimeira[0].url, `cat ${paga.categoryId}`);
+    check("multi: aparece na 2ª categoria", naSegunda.length === 1 && !!naSegunda[0].url, `cat ${outraCategoria}`);
+    check("multi: some numa 3ª categoria", terceira === undefined || naTerceira.length === 0, `cat ${terceira}`);
+    check("multi: devolve categoryIds", naPrimeira[0]?.categoryIds?.length === 2, JSON.stringify(naPrimeira[0]?.categoryIds));
+
+    // multi + agenda: continua bloqueando nas duas
+    const futura = [{ ...duasCats[0], releaseAt: AMANHA }];
+    const bloq1 = sanitizeNavigationFiles(futura, { categoryId: paga.categoryId, registrationStatus: "paid" })[0];
+    const bloq2 = sanitizeNavigationFiles(futura, { categoryId: outraCategoria, registrationStatus: "paid" })[0];
+    check("multi + agendada bloqueia nas duas",
+      bloq1?.locked && !bloq1?.url && bloq2?.locked && !bloq2?.url,
+      `${bloq1?.lockReason}/${bloq2?.lockReason}`);
+  }
+
+  // 10) planilha legada (categoryId único, sem categoryIds) continua funcionando
+  const legada = [{ id: "legada", name: "legada.nbp", url: "https://r2/legada.nbp", type: "nbp", categoryId: paga.categoryId, releaseAt: null }];
+  const legadaNaCat = sanitizeNavigationFiles(legada, { categoryId: paga.categoryId, registrationStatus: "paid" });
+  const legadaForaDaCat = outraCategoria === undefined
+    ? []
+    : sanitizeNavigationFiles(legada, { categoryId: outraCategoria, registrationStatus: "paid" });
+  check("legada categoryId único ainda vale", legadaNaCat.length === 1 && !!legadaNaCat[0].url, JSON.stringify(legadaNaCat[0]?.categoryIds));
+  check("legada não vaza pra outra categoria", legadaForaDaCat.length === 0, `${legadaForaDaCat.length} planilhas`);
+
+  // 11) o payload real de myRegistrations não vaza url pra inscrição pendente
   const doUsuario = await db.getRegistrationsByUserId(pendente.userId) as any[];
   const comoNoRouter = doUsuario.map(r => ({
     ...r,

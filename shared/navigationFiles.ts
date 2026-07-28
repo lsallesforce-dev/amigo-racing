@@ -12,7 +12,10 @@ export interface NavigationFile {
   name?: string;
   url?: string;
   type?: string;
+  /** Legado: uma categoria só. Planilhas antigas continuam com este campo. */
   categoryId?: number | string | null;
+  /** Uma planilha pode servir a várias categorias (ex.: Graduado + Turismo). Vazio = geral. */
+  categoryIds?: (number | string)[] | null;
   releaseAt?: string | null;
   uploadedAt?: string;
 }
@@ -24,6 +27,7 @@ export interface SafeNavigationFile {
   name: string;
   type: string;
   categoryId: number | string | null;
+  categoryIds: (number | string)[];
   releaseAt: string | null;
   locked: boolean;
   lockReason: LockReason | null;
@@ -35,14 +39,30 @@ export function navigationFileId(file: NavigationFile, index: number): string {
   return file?.id ? String(file.id) : String(index);
 }
 
+/**
+ * Categorias que a planilha atende, normalizadas. Lê o `categoryIds` novo e cai no
+ * `categoryId` legado das planilhas enviadas antes do multi-categoria.
+ * Lista vazia = planilha geral (vale pra todo mundo do evento).
+ */
+export function navigationFileCategories(file: NavigationFile): number[] {
+  const brutas = Array.isArray(file?.categoryIds)
+    ? file.categoryIds
+    : (file?.categoryId !== undefined && file?.categoryId !== null ? [file.categoryId] : []);
+
+  return brutas
+    .filter(c => c !== null && c !== undefined && c !== "all" && c !== "")
+    .map(c => Number(c))
+    .filter(n => !isNaN(n));
+}
+
 /** Planilha sem categoria (ou "all") é geral: vale pra todo mundo do evento. */
 export function isNavigationFileOfCategory(
   file: NavigationFile,
   categoryId: number | null | undefined
 ): boolean {
-  const alvo = file?.categoryId;
-  if (alvo === null || alvo === undefined || alvo === "all" || alvo === "") return true;
-  return Number(alvo) === Number(categoryId);
+  const alvos = navigationFileCategories(file);
+  if (alvos.length === 0) return true;
+  return alvos.includes(Number(categoryId));
 }
 
 /** true quando a hora de liberação ainda não chegou. */
@@ -97,6 +117,7 @@ export function sanitizeNavigationFiles(
         name: String(file?.name || "Planilha"),
         type: String(file?.type || "bin"),
         categoryId: (file?.categoryId ?? null) as number | string | null,
+        categoryIds: navigationFileCategories(file),
         releaseAt: file?.releaseAt || null,
         locked: motivo !== null,
         lockReason: motivo,

@@ -2,10 +2,11 @@ import { useState, useEffect } from "react";
 import { trpc } from "@/lib/trpc";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Trash2, Plus, FileCode, Loader2, Tag, Clock } from "lucide-react";
+import { Trash2, Plus, FileCode, Loader2, Tag, Clock, X } from "lucide-react";
 import { toast } from "sonner";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { isoParaInputBrasilia, inputBrasiliaParaIso, formatarBrasilia } from "@/shared/horarioBrasilia";
+import { navigationFileCategories } from "@/shared/navigationFiles";
 import { Badge } from "@/components/ui/badge";
 
 interface EventNavigationFilesManagerProps {
@@ -13,6 +14,63 @@ interface EventNavigationFilesManagerProps {
     files: any[];
     categories?: any[];
     onUpdate: (files: any[]) => void;
+}
+
+/**
+ * Escolha de categorias da planilha: chips do que já foi marcado + um select pra
+ * somar mais uma. Nenhuma marcada = planilha pública (vale pra todo mundo).
+ * É multi porque uma mesma planilha costuma servir a duas categorias
+ * (ex.: Carros Graduado e Turismo compartilham a mesma média).
+ */
+function SeletorCategorias({ selecionadas, subcategorias, nomeCategoria, onToggle, compacto }: {
+    selecionadas: number[];
+    subcategorias: any[];
+    nomeCategoria: (id: number) => string;
+    onToggle: (categoryId: number) => void;
+    compacto?: boolean;
+}) {
+    const disponiveis = subcategorias.filter((cat: any) => !selecionadas.includes(Number(cat.id)));
+
+    return (
+        <div className={`flex flex-wrap items-center gap-1 ${compacto ? "" : "w-full sm:w-[220px]"}`}>
+            {selecionadas.length === 0 && (
+                <Badge variant="outline" className="text-[9px] h-5 px-1.5 bg-muted/50 text-muted-foreground border-muted-foreground/20">
+                    Público (Geral)
+                </Badge>
+            )}
+            {selecionadas.map((id) => (
+                <Badge
+                    key={id}
+                    variant="outline"
+                    className="text-[9px] h-5 pl-1.5 pr-0.5 gap-0.5 bg-primary/5 text-primary border-primary/20"
+                >
+                    {nomeCategoria(id)}
+                    <button
+                        type="button"
+                        onClick={() => onToggle(id)}
+                        className="ml-0.5 rounded-sm hover:bg-primary/20 p-0.5"
+                        aria-label={`Remover ${nomeCategoria(id)}`}
+                    >
+                        <X className="h-2.5 w-2.5" />
+                    </button>
+                </Badge>
+            ))}
+            {disponiveis.length > 0 && (
+                <Select value="" onValueChange={(v) => onToggle(Number(v))}>
+                    <SelectTrigger className={`${compacto ? "h-5 w-[112px] text-[9px]" : "h-7 w-[150px] text-[10px]"} bg-background`}>
+                        <SelectValue placeholder="+ categoria" />
+                    </SelectTrigger>
+                    <SelectContent>
+                        {disponiveis.map((cat: any) => (
+                            <SelectItem key={cat.id} value={String(cat.id)} className="text-xs">
+                                {nomeCategoria(Number(cat.id))}
+                            </SelectItem>
+                        ))}
+                    </SelectContent>
+                </Select>
+            )}
+        </div>
+    );
 }
 
 // O horário digitado é SEMPRE horário de Brasília (é o horário da prova), não o
@@ -28,7 +86,9 @@ function rotuloLiberacao(iso?: string | null): string {
 export function EventNavigationFilesManager({ eventId, files: filesProp, categories = [], onUpdate }: EventNavigationFilesManagerProps) {
     const [files, setFiles] = useState<any[]>([]);
     const [isUploading, setIsUploading] = useState(false);
-    const [selectedCategoryId, setSelectedCategoryId] = useState<string>("all");
+    // Uma planilha pode servir a várias categorias (ex.: Graduado + Turismo).
+    // Lista vazia = pública (vale pra todo mundo do evento).
+    const [selectedCategoryIds, setSelectedCategoryIds] = useState<number[]>([]);
     // Liberação escolhida para o PRÓXIMO arquivo enviado. Vazio = libera assim que salvar.
     const [releaseAtInput, setReleaseAtInput] = useState<string>("");
 
@@ -36,6 +96,16 @@ export function EventNavigationFilesManager({ eventId, files: filesProp, categor
     useEffect(() => {
         setFiles(Array.isArray(filesProp) ? filesProp : []);
     }, [filesProp]);
+
+    // Só subcategorias entram na escolha (as categorias-pai são agrupadores).
+    const subcategorias = categories.filter((cat: any) => cat.parentId !== null);
+
+    const nomeCategoria = (id: number) => {
+        const cat = categories.find((c: any) => Number(c.id) === Number(id));
+        if (!cat) return "Categoria removida";
+        const parent = categories.find((p: any) => p.id === cat.parentId);
+        return parent ? `${parent.name} - ${cat.name}` : cat.name;
+    };
 
     const getSignedUrl = trpc.storage.getSignedUrl.useMutation();
 
@@ -71,7 +141,9 @@ export function EventNavigationFilesManager({ eventId, files: filesProp, categor
                 name: file.name,
                 url: publicUrl,
                 type: file.name.split('.').pop()?.toLowerCase() || "bin",
-                categoryId: selectedCategoryId === "all" ? null : Number(selectedCategoryId),
+                categoryIds: selectedCategoryIds,
+                // mantido para as telas antigas que ainda leem categoryId
+                categoryId: selectedCategoryIds.length === 1 ? selectedCategoryIds[0] : null,
                 releaseAt: inputBrasiliaParaIso(releaseAtInput),
                 uploadedAt: new Date().toISOString()
             };
@@ -99,6 +171,29 @@ export function EventNavigationFilesManager({ eventId, files: filesProp, categor
             i === index ? { ...f, releaseAt: inputBrasiliaParaIso(valor) } : f
         );
         onUpdate(updatedFiles);
+    };
+
+    // Adiciona/remove categoria de uma planilha já enviada (também sem reenviar).
+    const handleToggleCategoria = (index: number, categoryId: number) => {
+        const updatedFiles = files.map((f, i) => {
+            if (i !== index) return f;
+            const atuais = navigationFileCategories(f);
+            const novas = atuais.includes(categoryId)
+                ? atuais.filter(c => c !== categoryId)
+                : [...atuais, categoryId];
+            return {
+                ...f,
+                categoryIds: novas,
+                categoryId: novas.length === 1 ? novas[0] : null,
+            };
+        });
+        onUpdate(updatedFiles);
+    };
+
+    const toggleCategoriaUpload = (categoryId: number) => {
+        setSelectedCategoryIds(prev =>
+            prev.includes(categoryId) ? prev.filter(c => c !== categoryId) : [...prev, categoryId]
+        );
     };
 
     return (
@@ -143,26 +238,20 @@ export function EventNavigationFilesManager({ eventId, files: filesProp, categor
                                 accept=".nbp,.bin,.txt,.totem"
                             />
                             <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2">
-                                <Select value={selectedCategoryId} onValueChange={setSelectedCategoryId}>
-                                    <SelectTrigger className="w-full sm:w-[200px] h-9 text-xs bg-background">
-                                        <SelectValue placeholder="Escolher Categoria" />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        <SelectItem value="all" className="text-xs font-semibold">🏁 Todas as Categorias</SelectItem>
-                                        {categories
-                                            .filter((cat: any) => cat.parentId !== null)
-                                            .map((cat: any) => {
-                                                const parent = categories.find((p: any) => p.id === cat.parentId);
-                                                const displayName = parent ? `${parent.name} - ${cat.name}` : cat.name;
-                                                return (
-                                                    <SelectItem key={cat.id} value={String(cat.id)} className="text-xs">
-                                                        {displayName}
-                                                    </SelectItem>
-                                                );
-                                            })
-                                        }
-                                    </SelectContent>
-                                </Select>
+                                <div className="w-full sm:w-[230px]">
+                                    <p className="text-[10px] uppercase font-bold text-muted-foreground mb-1">
+                                        Categorias desta planilha
+                                    </p>
+                                    <SeletorCategorias
+                                        selecionadas={selectedCategoryIds}
+                                        subcategorias={subcategorias}
+                                        nomeCategoria={nomeCategoria}
+                                        onToggle={toggleCategoriaUpload}
+                                    />
+                                    <p className="text-[10px] text-muted-foreground mt-1">
+                                        Pode marcar mais de uma. Nenhuma = vale pra todas.
+                                    </p>
+                                </div>
 
                                 <Button
                                     type="button"
@@ -197,26 +286,20 @@ export function EventNavigationFilesManager({ eventId, files: filesProp, categor
                                             <div className="p-2 bg-orange-100 dark:bg-orange-900/30 rounded">
                                                 <FileCode className="h-5 w-5 text-orange-600 dark:text-orange-400" />
                                             </div>
-                                            <div>
+                                            <div className="min-w-0">
                                                 <p className="text-sm font-medium">{file.name}</p>
                                                 <p className="text-[10px] text-muted-foreground uppercase font-semibold">
                                                     {file.type} • {file.url.split('/').pop()?.substring(0, 8)}...
-                                                    {file.categoryId ? (() => {
-                                                        const cat = categories.find((c: any) => c.id === file.categoryId);
-                                                        const parent = cat ? categories.find((p: any) => p.id === cat.parentId) : null;
-                                                        const label = parent ? `${parent.name} - ${cat?.name}` : (cat?.name || 'Categoria Removida');
-                                                        return (
-                                                            <Badge variant="outline" className="ml-2 text-[8px] h-3.5 px-1 bg-primary/5 text-primary border-primary/20">
-                                                                {label}
-                                                            </Badge>
-                                                        );
-                                                    })() : (
-                                                        <Badge variant="outline" className="ml-2 text-[8px] h-3.5 px-1 bg-muted/50 text-muted-foreground border-muted-foreground/20">
-                                                            Público (Geral)
-                                                        </Badge>
-                                                    )}
-
                                                 </p>
+                                                <div className="mt-1">
+                                                    <SeletorCategorias
+                                                        compacto
+                                                        selecionadas={navigationFileCategories(file)}
+                                                        subcategorias={subcategorias}
+                                                        nomeCategoria={nomeCategoria}
+                                                        onToggle={(catId) => handleToggleCategoria(index, catId)}
+                                                    />
+                                                </div>
                                             </div>
                                         </div>
                                         <div className="flex items-center gap-2 shrink-0">
