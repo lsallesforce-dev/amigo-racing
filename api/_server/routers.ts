@@ -15,6 +15,7 @@ import { getDb } from "./db.js";
 import { products, productOrders, organizerMembers, registrations, events, payments, championshipStages, championshipRequests, users, championships, organizers, categories } from "./schema.js";
 import { eq, sql, and, inArray, ne } from "drizzle-orm";
 import { normalizeShirtSize, sortShirtSizes, shirtSizesOfRegistration } from "../../shared/shirtSizes.js";
+import { sanitizeNavigationFiles } from "../../shared/navigationFiles.js";
 import { ENV } from "./env.js";
 import { sendEmail } from "./email.js";
 
@@ -1471,8 +1472,95 @@ export const appRouter = router({
       return await db.getRegistrationById(input.id);
     }),
     myRegistrations: protectedProcedure.query(async ({ ctx }) => {
-      return await db.getRegistrationsByUserId(ctx.user.id) || [];
+      const regs = await db.getRegistrationsByUserId(ctx.user.id) || [];
+
+      // A query traz o navigationFiles cru do evento — com a URL pública de TODAS as
+      // planilhas, de todas as categorias. Filtrar isso no front não adianta: o link
+      // já teria saído no JSON. Aqui o array vira a versão segura (filtrada por
+      // categoria, com o bloqueio calculado e SEM url do que está bloqueado).
+      return (regs as any[]).map((reg) => ({
+        ...reg,
+        eventNavigationFiles: sanitizeNavigationFiles(reg.eventNavigationFiles, {
+          categoryId: reg.categoryId,
+          registrationStatus: reg.status,
+        }),
+      }));
     }),
+
+    /**
+     * Download de planilha de navegação. O arquivo NUNCA é servido por link direto
+     * enquanto bloqueado — o competidor pede por id e o servidor decide.
+     * Devolve base64 (mesmo padrão do events.getLogoDataUrl); só cai pro link direto
+     * se o arquivo for grande demais pro limite de resposta da Vercel.
+     */
+    getNavigationFile: protectedProcedure
+      .input(z.object({ registrationId: z.number(), fileId: z.string() }))
+      .mutation(async ({ ctx, input }) => {
+        const user = ctx.user as any;
+        const reg = await db.getRegistrationById(input.registrationId) as any;
+        if (!reg) throw new TRPCError({ code: 'NOT_FOUND', message: 'Inscrição não encontrada' });
+
+        const event = reg.eventId ? await db.getEventById(reg.eventId) as any : null;
+        if (!event) throw new TRPCError({ code: 'NOT_FOUND', message: 'Evento não encontrado' });
+
+        // Organizador do evento e admin baixam a qualquer hora (precisam conferir
+        // a planilha antes de soltar). Mesmo padrão de ownership do assertStartOrderAccess.
+        let bypass = user?.role === 'admin';
+        if (!bypass) {
+          const context = await db.getOrganizerContext(user);
+          const organizer = await db.getOrganizerById(event.organizerId) as any;
+          const principal = await db.getUserById(context.principalUserId) as any;
+          bypass = !!organizer && organizer.ownerId === principal?.openId;
+        }
+
+        if (!bypass && reg.userId !== user.id) {
+          throw new TRPCError({ code: 'FORBIDDEN', message: 'Esta inscrição não é sua' });
+        }
+
+        // Reusa exatamente a mesma regra do payload: o que não aparece lá não baixa aqui.
+        const liberados = sanitizeNavigationFiles(event.navigationFiles, {
+          categoryId: reg.categoryId,
+          registrationStatus: reg.status,
+          bypass,
+        });
+        const alvo = liberados.find(f => f.id === input.fileId);
+
+        if (!alvo) {
+          throw new TRPCError({ code: 'NOT_FOUND', message: 'Planilha não encontrada para esta inscrição' });
+        }
+        if (alvo.locked) {
+          throw new TRPCError({
+            code: 'FORBIDDEN',
+            message: alvo.lockReason === 'payment'
+              ? 'A planilha é liberada após a confirmação do pagamento da sua inscrição.'
+              : `Esta planilha só é liberada em ${new Date(alvo.releaseAt!).toLocaleString('pt-BR')}.`,
+          });
+        }
+        if (!alvo.url) {
+          throw new TRPCError({ code: 'NOT_FOUND', message: 'Arquivo da planilha indisponível' });
+        }
+
+        try {
+          const resp = await fetch(alvo.url);
+          if (!resp.ok) throw new Error(`storage respondeu ${resp.status}`);
+          const buf = Buffer.from(await resp.arrayBuffer());
+
+          // base64 infla ~33%; acima disso estoura o limite de resposta da função.
+          if (buf.length > 3 * 1024 * 1024) {
+            return { name: alvo.name, dataUrl: null as string | null, url: alvo.url };
+          }
+
+          const contentType = resp.headers.get('content-type') || 'application/octet-stream';
+          return {
+            name: alvo.name,
+            dataUrl: `data:${contentType};base64,${buf.toString('base64')}`,
+            url: null as string | null,
+          };
+        } catch (err: any) {
+          console.error('[registrations.getNavigationFile] Erro:', err.message);
+          throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Não foi possível baixar a planilha agora. Tente de novo.' });
+        }
+      }),
     updateMyRegistration: protectedProcedure
       .input(z.object({
         registrationId: z.number(),

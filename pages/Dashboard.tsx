@@ -9,7 +9,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { getLoginUrl } from "@/api/_server/const";
 import { trpc } from "@/lib/trpc";
-import { Car, Calendar, MapPin, Plus, Loader2, QrCode, CreditCard, AlertCircle, X, ShoppingBag, Hash, Download, FileText, Trophy } from "lucide-react";
+import { Car, Calendar, MapPin, Plus, Loader2, QrCode, CreditCard, AlertCircle, X, ShoppingBag, Hash, Download, FileText, Trophy, Lock } from "lucide-react";
 import { Link, useLocation } from "wouter";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -158,6 +158,51 @@ export default function Dashboard() {
       return `${year}-${month}-${day}`;
     } catch {
       return '';
+    }
+  };
+
+  // Planilhas de navegação: o link não vem mais no payload. O competidor pede o
+  // arquivo pelo id e o servidor decide se libera (inscrição paga + hora chegada).
+  const [baixandoPlanilhaId, setBaixandoPlanilhaId] = useState<string | null>(null);
+  const navFileMutation = trpc.registrations.getNavigationFile.useMutation();
+
+  const formatarLiberacao = (iso?: string | null) => {
+    if (!iso) return "";
+    const d = new Date(iso);
+    if (isNaN(d.getTime())) return "";
+    return d.toLocaleString("pt-BR", {
+      day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit",
+    });
+  };
+
+  const handleDownloadPlanilha = async (reg: any, file: any) => {
+    if (file.locked) {
+      if (file.lockReason === "payment") {
+        toast.info("Planilha disponível após a confirmação do pagamento da sua inscrição.");
+      } else {
+        toast.info(`Esta planilha será liberada em ${formatarLiberacao(file.releaseAt)}.`);
+      }
+      return;
+    }
+
+    const chave = `${reg.id}:${file.id}`;
+    setBaixandoPlanilhaId(chave);
+    try {
+      const r = await navFileMutation.mutateAsync({ registrationId: reg.id, fileId: String(file.id) });
+      const href = r.dataUrl || r.url;
+      if (!href) throw new Error("Arquivo indisponível");
+
+      const a = document.createElement("a");
+      a.href = href;
+      a.download = r.name || file.name || "planilha";
+      if (!r.dataUrl) { a.target = "_blank"; a.rel = "noopener noreferrer"; }
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+    } catch (err: any) {
+      toast.error(err?.message || "Não foi possível baixar a planilha.");
+    } finally {
+      setBaixandoPlanilhaId(null);
     }
   };
 
@@ -425,16 +470,11 @@ export default function Dashboard() {
                               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                                 {(() => {
                                   try {
-                                    const navFiles = typeof reg.eventNavigationFiles === 'string'
-                                      ? JSON.parse(reg.eventNavigationFiles)
-                                      : reg.eventNavigationFiles;
-
-                                    if (!Array.isArray(navFiles)) return null;
-
-                                    // Filtro: Mostrar apenas arquivos da categoria do piloto ou arquivos "Geral" (null/all)
-                                    const visibleFiles = navFiles.filter((file: any) =>
-                                      !file.categoryId || file.categoryId === "all" || file.categoryId === reg.categoryId
-                                    );
+                                    // Já vem do backend filtrado pela categoria e com o
+                                    // bloqueio calculado; planilha bloqueada nem traz url.
+                                    const visibleFiles = Array.isArray(reg.eventNavigationFiles)
+                                      ? reg.eventNavigationFiles as any[]
+                                      : [];
 
                                     if (visibleFiles.length === 0) {
                                       return <p className="text-[10px] text-muted-foreground italic col-span-full">Nenhuma planilha vinculada à sua categoria.</p>;
@@ -442,17 +482,20 @@ export default function Dashboard() {
 
                                     return visibleFiles.map((file: any, idx: number) => (
                                       <Button
-                                        key={idx}
+                                        key={file.id || idx}
                                         variant="secondary"
                                         size="sm"
-                                        className="h-9 justify-start text-xs font-semibold gap-2 border bg-white hover:bg-muted transition-all"
-                                        asChild
+                                        className={`h-9 justify-start text-xs font-semibold gap-2 border transition-all ${file.locked ? 'bg-muted/40 text-muted-foreground hover:bg-muted/60' : 'bg-white hover:bg-muted'}`}
+                                        disabled={baixandoPlanilhaId === `${reg.id}:${file.id}`}
+                                        onClick={() => handleDownloadPlanilha(reg, file)}
                                       >
-                                        <a href={file.url} download={file.name} target="_blank" rel="noopener noreferrer">
-                                          <Hash className="h-3.5 w-3.5 text-primary" />
-                                          <span className="truncate">{file.name || 'Planilha'}</span>
-                                          <Download className="h-3 w-3 ml-auto opacity-40" />
-                                        </a>
+                                        {file.locked
+                                          ? <Lock className="h-3.5 w-3.5 text-muted-foreground" />
+                                          : <Hash className="h-3.5 w-3.5 text-primary" />}
+                                        <span className="truncate">{file.name || 'Planilha'}</span>
+                                        {baixandoPlanilhaId === `${reg.id}:${file.id}`
+                                          ? <Loader2 className="h-3 w-3 ml-auto animate-spin" />
+                                          : <Download className={`h-3 w-3 ml-auto ${file.locked ? 'opacity-20' : 'opacity-40'}`} />}
                                       </Button>
                                     ));
                                   } catch {
