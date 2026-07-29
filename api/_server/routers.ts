@@ -290,6 +290,34 @@ const financeRouter = router({
     }),
 });
 
+/**
+ * Alinha o que a loja grava com o estoque de camiseta do evento:
+ *
+ * - `availableSizes` vira o token canônico ("Inf 4" digitado à mão virava um tamanho
+ *   que não existe no estoque; "G3" o sistema junta em G3/G4). Sai normalizado e
+ *   sem duplicata.
+ * - `stock` é ignorado quando o evento controla por tamanho — quem manda é o
+ *   event_shirt_stock. Guardar um segundo número só criava divergência.
+ */
+async function normalizarEstoqueDoProduto(input: {
+  eventId?: number; stock?: number; availableSizes?: string;
+}): Promise<{ stock?: number; availableSizes?: string }> {
+  const out: { stock?: number; availableSizes?: string } = {};
+
+  if (input.availableSizes !== undefined) {
+    const canonicos = String(input.availableSizes)
+      .split(',')
+      .map(s => normalizeShirtSize(s))
+      .filter(Boolean);
+    out.availableSizes = [...new Set(canonicos)].join(',');
+  }
+
+  if (await db.hasShirtStockControl(input.eventId)) {
+    out.stock = 0; // não é usado; a vitrine deriva do estoque por tamanho
+  }
+  return out;
+}
+
 const storeRouter = router({
   create: organizerProcedure
     .input(z.object({
@@ -309,6 +337,7 @@ const storeRouter = router({
       }
       return await db.createProduct({
         ...input,
+        ...(await normalizarEstoqueDoProduto(input)),
         userId: context.principalUserId
       } as any);
     }),
@@ -356,7 +385,10 @@ const storeRouter = router({
         throw new TRPCError({ code: 'FORBIDDEN', message: 'Sem permissão para loja' });
       }
       const { id, ...data } = input;
-      const result = await db.updateProduct(id, context.principalUserId, data as any);
+      const result = await db.updateProduct(id, context.principalUserId, {
+        ...data,
+        ...(await normalizarEstoqueDoProduto(input)),
+      } as any);
       if (!result) throw new TRPCError({ code: 'NOT_FOUND', message: 'Produto não encontrado ou você não tem permissão' });
       return result;
     }),

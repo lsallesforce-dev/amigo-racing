@@ -18,6 +18,7 @@ import { compressImage } from '@/lib/imageCompression';
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import Navbar from "@/components/Navbar";
+import { sortShirtSizes } from "@/shared/shirtSizes";
 
 const formatCurrency = (value: number) => {
     return new Intl.NumberFormat('pt-BR', {
@@ -50,6 +51,16 @@ export default function OrganizerStore() {
     const { data: products, isLoading: productsLoading } = trpc.store.getAll.useQuery({ eventId }, {
         enabled: isAuthenticated && (user?.role === 'organizer' || user?.role === 'admin')
     });
+
+    // Estoque de camiseta por tamanho do evento. Quando existe, é ELE quem manda:
+    // o produto não tem estoque numérico próprio e os tamanhos saem daqui, em vez
+    // de serem digitados à mão (era assim que nascia "Inf 4", tamanho sem estoque).
+    const { data: shirtStock = [] } = trpc.shirtStock.getByEvent.useQuery(
+        { eventId: eventId! },
+        { enabled: !!eventId }
+    );
+    const controlaPorTamanho = shirtStock.length > 0;
+    const totalDisponivel = (shirtStock as any[]).reduce((acc, s) => acc + Math.max(0, s.available), 0);
 
     const { data: orders, isLoading: ordersLoading } = trpc.store.getOrganizerOrders.useQuery({ eventId }, {
         enabled: isAuthenticated && (user?.role === 'organizer' || user?.role === 'admin')
@@ -136,9 +147,16 @@ export default function OrganizerStore() {
             return;
         }
 
-        const stockNum = parseInt(productForm.stock, 10);
-        if (isNaN(stockNum) || stockNum < 0) {
+        // Com estoque por tamanho o campo nem aparece: o backend ignora este número
+        // e deriva tudo do event_shirt_stock.
+        const stockNum = controlaPorTamanho ? 0 : parseInt(productForm.stock, 10);
+        if (!controlaPorTamanho && (isNaN(stockNum) || stockNum < 0)) {
             toast.error("Estoque não pode ser negativo");
+            return;
+        }
+
+        if (controlaPorTamanho && !productForm.availableSizes) {
+            toast.error("Marque pelo menos um tamanho que a loja vai vender");
             return;
         }
 
@@ -258,21 +276,65 @@ export default function OrganizerStore() {
                                         <Label htmlFor="desc">Descrição</Label>
                                         <Textarea id="desc" value={productForm.description} onChange={e => setProductForm(f => ({ ...f, description: e.target.value }))} placeholder="Detalhes, tamanho, material..." rows={3} />
                                     </div>
-                                    <div className="grid grid-cols-2 gap-4">
+                                    <div className={controlaPorTamanho ? "" : "grid grid-cols-2 gap-4"}>
                                         <div className="space-y-2">
                                             <Label htmlFor="price">Preço (R$) *</Label>
                                             <Input id="price" type="number" step="0.01" min="0" value={productForm.price} onChange={e => setProductForm(f => ({ ...f, price: e.target.value }))} placeholder="0.00" />
                                         </div>
+                                        {!controlaPorTamanho && (
+                                            <div className="space-y-2">
+                                                <Label htmlFor="stock">Estoque Inicial *</Label>
+                                                <Input id="stock" type="number" step="1" min="0" value={productForm.stock} onChange={e => setProductForm(f => ({ ...f, stock: e.target.value }))} />
+                                            </div>
+                                        )}
+                                    </div>
+
+                                    {controlaPorTamanho ? (
+                                        // Estoque por tamanho ligado: os tamanhos são os do evento e o
+                                        // organizador só marca quais a loja vende. Sem digitar nada, sem
+                                        // segundo contador de estoque.
                                         <div className="space-y-2">
-                                            <Label htmlFor="stock">Estoque Inicial *</Label>
-                                            <Input id="stock" type="number" step="1" min="0" value={productForm.stock} onChange={e => setProductForm(f => ({ ...f, stock: e.target.value }))} />
+                                            <Label>Tamanhos que a loja vende *</Label>
+                                            <div className="flex flex-wrap gap-1.5">
+                                                {sortShirtSizes(shirtStock as any[], (s: any) => s.size).map((s: any) => {
+                                                    const marcados = productForm.availableSizes ? productForm.availableSizes.split(',').filter(Boolean) : [];
+                                                    const ativo = marcados.includes(s.size);
+                                                    const esgotado = s.available <= 0;
+                                                    return (
+                                                        <button
+                                                            key={s.size}
+                                                            type="button"
+                                                            onClick={() => {
+                                                                const novos = ativo
+                                                                    ? marcados.filter(m => m !== s.size)
+                                                                    : [...marcados, s.size];
+                                                                setProductForm(f => ({ ...f, availableSizes: novos.join(',') }));
+                                                            }}
+                                                            className={`px-2 py-1 rounded-md border text-xs font-medium transition-colors ${ativo
+                                                                ? 'bg-primary text-primary-foreground border-primary'
+                                                                : 'bg-background hover:bg-muted border-input text-muted-foreground'}`}
+                                                        >
+                                                            {s.size}
+                                                            <span className={`ml-1 text-[10px] ${esgotado ? 'text-red-400' : 'opacity-70'}`}>
+                                                                {esgotado ? 'esgotado' : s.available}
+                                                            </span>
+                                                        </button>
+                                                    );
+                                                })}
+                                            </div>
+                                            <p className="text-xs text-muted-foreground">
+                                                O número ao lado é quanto sobra de cada tamanho — vem do estoque do evento
+                                                (<strong>{totalDisponivel}</strong> no total). O cliente não consegue comprar tamanho esgotado.
+                                                Para produzir mais, use <strong>Inscrições → Estoque de Camisetas</strong>.
+                                            </p>
                                         </div>
-                                    </div>
-                                    <div className="space-y-2">
-                                        <Label htmlFor="sizes">Tamanhos Disponíveis (Opcional)</Label>
-                                        <Input id="sizes" value={productForm.availableSizes} onChange={e => setProductForm(f => ({ ...f, availableSizes: e.target.value }))} placeholder="Ex: P, M, G, GG" />
-                                        <p className="text-xs text-muted-foreground">Deixe em branco se não aplicável</p>
-                                    </div>
+                                    ) : (
+                                        <div className="space-y-2">
+                                            <Label htmlFor="sizes">Tamanhos Disponíveis (Opcional)</Label>
+                                            <Input id="sizes" value={productForm.availableSizes} onChange={e => setProductForm(f => ({ ...f, availableSizes: e.target.value }))} placeholder="Ex: P, M, G, GG" />
+                                            <p className="text-xs text-muted-foreground">Deixe em branco se não aplicável</p>
+                                        </div>
+                                    )}
                                     <div className="space-y-2">
                                         <Label htmlFor="image">Imagem (Opcional)</Label>
                                         <Input
@@ -360,7 +422,28 @@ export default function OrganizerStore() {
                                                     {p.stock} em estoque
                                                 </span>
                                             </div>
-                                            {p.availableSizes && (
+                                            {(p as any).stockControlledBySize ? (
+                                                // Estoque real por tamanho: o que a loja vende x quanto sobra.
+                                                <div className="mt-2 text-xs bg-muted/50 p-1.5 rounded-md border">
+                                                    <div className="flex flex-wrap gap-1 justify-center">
+                                                        {((p as any).sizeAvailability || [])
+                                                            .filter((s: any) => !p.availableSizes || p.availableSizes.split(',').includes(s.size))
+                                                            .map((s: any) => (
+                                                                <span
+                                                                    key={s.size}
+                                                                    className={`px-1.5 py-0.5 rounded border text-[10px] font-medium ${s.available > 0
+                                                                        ? 'bg-background text-foreground/80'
+                                                                        : 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300 border-red-200'}`}
+                                                                >
+                                                                    {s.size} {s.available > 0 ? s.available : '0'}
+                                                                </span>
+                                                            ))}
+                                                    </div>
+                                                    <p className="text-[10px] text-muted-foreground text-center mt-1">
+                                                        estoque do evento · por tamanho
+                                                    </p>
+                                                </div>
+                                            ) : p.availableSizes && (
                                                 <div className="mt-2 text-xs text-muted-foreground bg-muted/50 p-1.5 rounded-md border text-center">
                                                     Variações: <span className="font-semibold text-foreground/80">{p.availableSizes}</span>
                                                 </div>

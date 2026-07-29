@@ -1863,57 +1863,63 @@ export async function getProductsByUserId(userId: number, eventId?: number) {
     conditions = and(conditions, eq(products.eventId, eventId)) as any;
   }
 
-  return await db.select().from(products)
+  const rows = await db.select().from(products)
     .where(conditions)
     .orderBy(desc(products.createdAt));
+
+  // Painel do organizador mostra o mesmo número da vitrine (mas sem esconder o
+  // que está esgotado — ele precisa ver o produto pra repor).
+  return await enriquecerProdutosComEstoque(rows as any[]);
 }
 
 export async function getAvailableProducts(filters?: { eventId?: number; organizerId?: number }) {
   const db = await getDb();
   if (!db) return [];
 
-  let query = db.select().from(products).where(gte(products.stock, 1));
+  // Sem filtro de stock no SQL: para produto controlado por tamanho o número da
+  // coluna não vale nada — quem decide se está esgotado é o event_shirt_stock,
+  // e isso só dá pra saber depois do enriquecimento (ver filtro no fim).
+  let query = db.select().from(products);
 
   if (filters?.eventId) {
     // If eventId is provided, show products for that event OR general products of that organizer
     if (filters.organizerId) {
       query = db.select().from(products).where(
-        and(
-          gte(products.stock, 1),
-          or(
-            eq(products.eventId, filters.eventId),
-            and(eq(products.userId, filters.organizerId), sql`${products.eventId} IS NULL`)
-          )
+        or(
+          eq(products.eventId, filters.eventId),
+          and(eq(products.userId, filters.organizerId), sql`${products.eventId} IS NULL`)
         )
-      );
+      ) as any;
     } else {
-      query = db.select().from(products).where(
-        and(
-          gte(products.stock, 1),
-          eq(products.eventId, filters.eventId)
-        )
-      );
+      query = db.select().from(products).where(eq(products.eventId, filters.eventId)) as any;
     }
   } else if (filters?.organizerId) {
-    query = db.select().from(products).where(
-      and(
-        gte(products.stock, 1),
-        eq(products.userId, filters.organizerId)
-      )
-    );
+    query = db.select().from(products).where(eq(products.userId, filters.organizerId)) as any;
   }
 
   const rows = await query.orderBy(desc(products.createdAt));
+  const enriquecidos = await enriquecerProdutosComEstoque(rows as any[]);
 
-  // products.stock é um contador próprio da loja, decrementado a cada compra.
-  // Quando o evento controla camiseta por tamanho, quem manda é o
-  // event_shirt_stock (produzido - reservado por inscrições E pedidos) — manter
-  // os dois números levava a loja a anunciar estoque que não existe.
-  // Aqui o stock exibido passa a ser derivado, e vai junto a disponibilidade
-  // por tamanho pro front desabilitar o que acabou.
+  // Vitrine: só o que dá pra comprar de verdade.
+  return enriquecidos.filter(p => (p.stock ?? 0) >= 1);
+}
+
+/**
+ * products.stock é um contador próprio da loja, decrementado a cada compra.
+ * Quando o evento controla camiseta por tamanho, quem manda é o event_shirt_stock
+ * (produzido - reservado por inscrições E pedidos) — manter os dois números levava
+ * a loja a anunciar estoque que não existe (59 anunciados x 11 reais).
+ *
+ * Aqui o `stock` do produto passa a ser DERIVADO da soma dos disponíveis, e vai
+ * junto `sizeAvailability` (por tamanho) e `stockControlledBySize` pro front saber
+ * que não deve pedir estoque numérico. Produto sem evento, ou de evento sem estoque
+ * cadastrado, passa intacto.
+ */
+export async function enriquecerProdutosComEstoque(rows: any[]) {
   const out: any[] = [];
   const cache = new Map<number, { size: string; available: number }[]>();
-  for (const p of rows as any[]) {
+
+  for (const p of rows) {
     if (!p.eventId) { out.push(p); continue; }
 
     if (!cache.has(p.eventId)) {
@@ -1925,8 +1931,27 @@ export async function getAvailableProducts(filters?: { eventId?: number; organiz
     if (avail.length === 0) { out.push(p); continue; }
 
     const total = avail.reduce((acc, a) => acc + Math.max(0, a.available), 0);
-    if (total <= 0) continue; // esgotado de verdade: some da loja
-    out.push({ ...p, stock: total, sizeAvailability: avail });
+
+    // O availableSizes gravado é texto livre antigo ("Inf 2, Inf 4, G3"): normaliza
+    // e descarta tamanho que não tem linha de estoque no evento. Assim a loja nunca
+    // oferece o que ninguém mandou produzir, sem precisar reeditar produto por produto.
+    const doEstoque = new Set(avail.map(a => a.size));
+    const oferecidos = String(p.availableSizes || "")
+      .split(',')
+      .map((s: string) => normalizeShirtSize(s))
+      .filter((s: string) => s && doEstoque.has(s));
+    const availableSizes = [...new Set(oferecidos)].join(',');
+
+    // Sem nada marcado, a loja vende todos os tamanhos do estoque.
+    const vendidos = availableSizes ? availableSizes.split(',') : avail.map(a => a.size);
+
+    out.push({
+      ...p,
+      stock: total,
+      availableSizes,
+      sizeAvailability: avail.filter(a => vendidos.includes(a.size)),
+      stockControlledBySize: true,
+    });
   }
   return out;
 }

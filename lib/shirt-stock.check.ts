@@ -2,7 +2,7 @@
 // Roda com: npx tsx tmp/check-shirt-locks.ts
 import "dotenv/config";
 import * as db from "../api/_server/db.js";
-import { shirtSizesOfRegistration } from "../shared/shirtSizes.js";
+import { shirtSizesOfRegistration, normalizeShirtSize } from "../shared/shirtSizes.js";
 
 const EVENT = 1;
 let falhas = 0;
@@ -55,6 +55,33 @@ async function main() {
   const p: any = prods[0];
   const somaPositivos = avail.reduce((acc, a) => acc + Math.max(0, a.available), 0);
   check("products.stock derivado", p?.stock === somaPositivos, `stock=${p?.stock} (soma disponíveis=${somaPositivos}) sizeAvailability=${p?.sizeAvailability?.length} tamanhos`);
+
+  // 10) painel do organizador e vitrine mostram o MESMO numero (antes: 59 x 11)
+  const doPainel = await db.getProductsByUserId(1, EVENT) as any[];
+  const p2: any = doPainel[0];
+  check("painel do organizador usa o estoque real", p2?.stock === somaPositivos,
+    `painel=${p2?.stock} vitrine=${p?.stock} soma=${somaPositivos}`);
+  check("painel marca controle por tamanho", p2?.stockControlledBySize === true,
+    `stockControlledBySize=${p2?.stockControlledBySize} sizeAvailability=${p2?.sizeAvailability?.length}`);
+
+  // 11) tamanho oferecido pela loja tem que existir no estoque do evento.
+  // O dado gravado é texto livre antigo ("Inf 2, Inf 4, G3") — a leitura normaliza
+  // e descarta o que não tem linha de estoque, então a UI nunca vê um órfão.
+  const doEstoque = new Set(avail.map(a => a.size));
+  const oferecidos = String(p2?.availableSizes || "").split(",").filter(Boolean);
+  const orfaos = oferecidos.filter((s: string) => !doEstoque.has(s));
+  check("tamanhos da loja existem no estoque", orfaos.length === 0,
+    orfaos.length ? `sem estoque: ${orfaos.join(", ")}` : `${oferecidos.length} tamanhos, todos com linha de estoque`);
+
+  const bruto = String((await db.getProductById(p2.id) as any)?.availableSizes || "");
+  check("dado bruto continua intacto no banco", bruto.length > 0,
+    `banco="${bruto}" -> exibido="${p2?.availableSizes}"`);
+
+  // 12) sizeAvailability só traz o que a loja realmente vende
+  const naVitrine = ((p2?.sizeAvailability || []) as any[]).map(s => s.size);
+  check("disponibilidade só dos tamanhos vendidos",
+    naVitrine.every((s: string) => oferecidos.includes(s)),
+    `vende=[${oferecidos.join(",")}] mostra=[${naVitrine.join(",")}]`);
 
   console.log(falhas === 0 ? "\nTODOS OS CHECKS PASSARAM" : `\n${falhas} CHECK(S) FALHARAM`);
   process.exit(falhas === 0 ? 0 : 1);
