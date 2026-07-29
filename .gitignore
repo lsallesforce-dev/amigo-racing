@@ -9,3 +9,7 @@ node_modules
 temp_api_extract/
 tmp/
 tmp_*
+
+# Dump local de env vars da Vercel (contem segredos)
+.env.vercel.tmp
+.env*.tmp
