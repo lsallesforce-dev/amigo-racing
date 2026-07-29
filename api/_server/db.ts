@@ -37,6 +37,8 @@ import {
   championshipResults,
   InsertChampionshipResult,
   eventShirtStock,
+  eventEmails,
+  eventEmailRecipients,
 } from "./schema.js";
 import { normalizeShirtSize, shirtSizesOfRegistration } from "../../shared/shirtSizes.js";
 import { ENV } from './env.js';
@@ -2121,4 +2123,235 @@ export async function setShirtStock(eventId: number, items: { size?: string; qua
     `);
   }
   return await getShirtStockByEventId(eventId);
+}
+
+// ===== Central de e-mails do evento =====
+
+export interface FiltrosDestinatarios {
+  /** 'paid' | 'pending' | 'all' — status da inscrição */
+  status?: "paid" | "pending" | "all";
+  /** Só estas categorias (vazio = todas) */
+  categoryIds?: number[];
+  /** Inclui o e-mail do navegador, quando existir */
+  incluirNavegador?: boolean;
+  /** Inclui quem comprou na loja sem se inscrever */
+  incluirCompradoresLoja?: boolean;
+}
+
+export interface DestinatarioEvento {
+  email: string;
+  name: string;
+  registrationId: number | null;
+  /** A inscrição inteira, pra resolver as variáveis do e-mail. */
+  reg: any | null;
+}
+
+const emailValido = (e: unknown) => !!String(e || "").trim() && /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(String(e).trim());
+
+/**
+ * Lista de destinatários do evento, já desduplicada por e-mail (piloto que também
+ * é navegador de outra dupla recebe uma vez só) e em minúsculas.
+ * A ordem importa: piloto ganha da entrada de navegador, porque é dele a inscrição
+ * que resolve {{numero}} e {{horario_largada}}.
+ */
+export async function getEventEmailAudience(
+  eventId: number,
+  filtros: FiltrosDestinatarios = {}
+): Promise<DestinatarioEvento[]> {
+  const db = await getDb();
+  if (!db) return [];
+
+  const status = filtros.status || "all";
+  const regs = (await getRegistrationsByEventId(eventId)) as any[];
+  const porEmail = new Map<string, DestinatarioEvento>();
+
+  const adicionar = (email: unknown, name: unknown, reg: any | null) => {
+    if (!emailValido(email)) return;
+    const chave = String(email).trim().toLowerCase();
+    if (porEmail.has(chave)) return;
+    porEmail.set(chave, {
+      email: chave,
+      name: String(name || "").trim() || chave,
+      registrationId: reg?.id ?? null,
+      reg,
+    });
+  };
+
+  const elegiveis = regs.filter(r => {
+    if (r.status === "cancelled") return false; // cancelado nunca recebe
+    if (status === "paid") return r.status === "paid";
+    if (status === "pending") return r.status === "pending";
+    return true;
+  }).filter(r => {
+    if (!filtros.categoryIds?.length) return true;
+    return filtros.categoryIds.map(Number).includes(Number(r.categoryId));
+  });
+
+  for (const reg of elegiveis) adicionar(reg.pilotEmail, reg.pilotName, reg);
+  if (filtros.incluirNavegador) {
+    for (const reg of elegiveis) adicionar(reg.navigatorEmail, reg.navigatorName, reg);
+  }
+
+  if (filtros.incluirCompradoresLoja) {
+    const pedidos = await db
+      .select({ email: productOrders.buyerEmail, name: productOrders.buyerName })
+      .from(productOrders)
+      .where(and(eq(productOrders.eventId, eventId), ne(productOrders.status, "CANCELLED")));
+    for (const p of pedidos) adicionar(p.email, p.name, null);
+  }
+
+  return [...porEmail.values()];
+}
+
+export async function createEventEmail(data: {
+  eventId: number;
+  subject: string;
+  body: string;
+  kind?: "manual" | "auto_pendente";
+  autoStage?: string | null;
+  filters?: any;
+  createdBy?: number | null;
+}) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  const [row] = await db.insert(eventEmails).values({
+    eventId: data.eventId,
+    subject: data.subject,
+    body: data.body,
+    kind: data.kind || "manual",
+    autoStage: data.autoStage || null,
+    filters: data.filters ?? null,
+    createdBy: data.createdBy ?? null,
+  } as any).returning();
+  return row;
+}
+
+/** Insere os destinatários do disparo. ON CONFLICT ignora e-mail repetido. */
+export async function addEventEmailRecipients(
+  emailId: string,
+  eventId: number,
+  destinatarios: DestinatarioEvento[]
+) {
+  const db = await getDb();
+  if (!db || destinatarios.length === 0) return 0;
+
+  const inseridos = await db.insert(eventEmailRecipients).values(
+    destinatarios.map(d => ({
+      emailId,
+      eventId,
+      registrationId: d.registrationId,
+      email: d.email,
+      name: d.name,
+    })) as any
+  ).onConflictDoNothing().returning({ id: eventEmailRecipients.id });
+
+  await db.update(eventEmails)
+    .set({ totalRecipients: inseridos.length })
+    .where(eq(eventEmails.id, emailId));
+
+  return inseridos.length;
+}
+
+export async function getEventEmailById(emailId: string) {
+  const db = await getDb();
+  if (!db) return undefined;
+  const [row] = await db.select().from(eventEmails).where(eq(eventEmails.id, emailId)).limit(1);
+  return row;
+}
+
+export async function getPendingRecipients(emailId: string, limite: number) {
+  const db = await getDb();
+  if (!db) return [];
+  return await db.select().from(eventEmailRecipients)
+    .where(and(eq(eventEmailRecipients.emailId, emailId), eq(eventEmailRecipients.status, "pending")))
+    .limit(limite);
+}
+
+export async function markRecipientResult(id: string, ok: boolean, erro?: string) {
+  const db = await getDb();
+  if (!db) return;
+  await db.update(eventEmailRecipients)
+    .set({
+      status: ok ? "sent" : "failed",
+      error: ok ? null : String(erro || "").slice(0, 500),
+      sentAt: new Date(),
+    })
+    .where(eq(eventEmailRecipients.id, id));
+}
+
+/** Recalcula os contadores do disparo a partir dos destinatários. */
+export async function refreshEventEmailCounters(emailId: string) {
+  const db = await getDb();
+  if (!db) return undefined;
+
+  const linhas = await db.select({ status: eventEmailRecipients.status })
+    .from(eventEmailRecipients)
+    .where(eq(eventEmailRecipients.emailId, emailId));
+
+  const sent = linhas.filter(l => l.status === "sent").length;
+  const failed = linhas.filter(l => l.status === "failed").length;
+  const pending = linhas.filter(l => l.status === "pending").length;
+
+  const [row] = await db.update(eventEmails)
+    .set({
+      sentCount: sent,
+      failedCount: failed,
+      totalRecipients: linhas.length,
+      status: pending > 0 ? "sending" : (failed > 0 && sent === 0 ? "failed" : "done"),
+      finishedAt: pending > 0 ? null : new Date(),
+    })
+    .where(eq(eventEmails.id, emailId))
+    .returning();
+
+  return { ...row, pending };
+}
+
+export async function getEventEmails(eventId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  return await db.select().from(eventEmails)
+    .where(eq(eventEmails.eventId, eventId))
+    .orderBy(desc(eventEmails.createdAt));
+}
+
+export async function getEventEmailRecipients(emailId: string) {
+  const db = await getDb();
+  if (!db) return [];
+  return await db.select().from(eventEmailRecipients)
+    .where(eq(eventEmailRecipients.emailId, emailId))
+    .orderBy(desc(eventEmailRecipients.createdAt));
+}
+
+/**
+ * Marcos da régua já enviados para uma inscrição — é o que impede o lembrete de
+ * repetir quando o cron roda de novo no mesmo dia.
+ */
+export async function getAutoChargeStagesSent(registrationId: number): Promise<string[]> {
+  const db = await getDb();
+  if (!db) return [];
+
+  const linhas = await db
+    .select({ stage: eventEmails.autoStage })
+    .from(eventEmailRecipients)
+    .innerJoin(eventEmails, eq(eventEmailRecipients.emailId, eventEmails.id))
+    .where(and(
+      eq(eventEmailRecipients.registrationId, registrationId),
+      eq(eventEmails.kind, "auto_pendente"),
+      ne(eventEmailRecipients.status, "failed")
+    ));
+
+  return linhas.map(l => l.stage).filter(Boolean) as string[];
+}
+
+/** Eventos com a régua de cobrança ligada e que ainda não aconteceram. */
+export async function getEventsWithAutoCharge() {
+  const db = await getDb();
+  if (!db) return [];
+  return await db.select().from(events).where(
+    and(
+      eq(events.autoChargeEnabled, true),
+      gte(events.startDate, new Date())
+    )
+  );
 }

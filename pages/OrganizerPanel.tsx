@@ -10,7 +10,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { getLoginUrl } from "@/api/_server/const";
 import { trpc } from "@/lib/trpc";
-import { Calendar, MapPin, Plus, Loader2, Users, DollarSign, Trash2, Pencil, ShoppingBag, Trophy, ClipboardCheck, Upload, X, CalendarDays, ArrowLeft } from "lucide-react";
+import { Calendar, MapPin, Plus, Loader2, Users, DollarSign, Trash2, Pencil, ShoppingBag, Trophy, ClipboardCheck, Upload, X, CalendarDays, ArrowLeft, Mail } from "lucide-react";
 import { Link } from "wouter";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -1522,6 +1522,12 @@ export default function OrganizerPanel() {
                            </Button>
                          </Link>
                        )}
+                       <Link href={`/organizer/events/${event.id}/emails`} className="w-full">
+                         <Button size="sm" variant="outline" className="w-full bg-primary/10 hover:bg-primary/20 text-primary border-primary/20">
+                           <Mail className="h-4 w-4 mr-2" />
+                           E-mails
+                         </Button>
+                       </Link>
                        <Link href={`/organizer/events/${event.id}/secretariat`} className="w-full">
                          <Button size="sm" variant="outline" className="w-full bg-primary/10 hover:bg-primary/20 text-primary border-primary/20">
                            <ClipboardCheck className="h-4 w-4 mr-2" />

@@ -17,6 +17,10 @@ import { eq, sql, and, inArray, ne } from "drizzle-orm";
 import { normalizeShirtSize, sortShirtSizes, shirtSizesOfRegistration } from "../../shared/shirtSizes.js";
 import { sanitizeNavigationFiles } from "../../shared/navigationFiles.js";
 import { formatarBrasilia } from "../../shared/horarioBrasilia.js";
+import { renderEmail, textoParaHtml } from "../../shared/emailLayout.js";
+import { VARIAVEIS_EMAIL, valoresDaInscricao, aplicarVariaveis, aplicarVariaveisTexto, variaveisDesconhecidas } from "../../shared/emailVars.js";
+import { resolveStartOrder } from "../../shared/startOrderLookup.js";
+import { COBRANCA_ASSUNTO_PADRAO, COBRANCA_CORPO_PADRAO } from "../../shared/cobrancaTemplate.js";
 import { ENV } from "./env.js";
 import { sendEmail } from "./email.js";
 
@@ -317,6 +321,295 @@ async function normalizarEstoqueDoProduto(input: {
   }
   return out;
 }
+
+/**
+ * Só o organizador dono do evento (ou admin) mexe nos e-mails dele.
+ * Mesmo padrão de ownership do assertStartOrderAccess.
+ */
+async function assertEventEmailAccess(user: any, eventId: number) {
+  const event = await db.getEventById(eventId) as any;
+  if (!event) throw new TRPCError({ code: 'NOT_FOUND', message: 'Evento não encontrado' });
+  if (user?.role === 'admin') return event;
+
+  const context = await db.getOrganizerContext(user);
+  const organizer = await db.getOrganizerById(event.organizerId) as any;
+  const principal = await db.getUserById(context.principalUserId) as any;
+
+  if (!organizer || organizer.ownerId !== principal?.openId) {
+    throw new TRPCError({ code: 'FORBIDDEN', message: 'Somente o organizador do evento pode enviar e-mails' });
+  }
+  return event;
+}
+
+/** Quantos e-mails saem por chamada. SMTP é sequencial e lento; o front chama em laço. */
+const LOTE_EMAIL = 8;
+
+/**
+ * Monta e envia o e-mail de UM destinatário, resolvendo as variáveis com os dados
+ * da inscrição dele. Compartilhado pelo envio manual e pela régua automática.
+ */
+async function enviarEmailDoEvento(args: {
+  destinatario: { email: string; name: string | null; registrationId: number | null };
+  assunto: string;
+  corpo: string;
+  evento: any;
+  regs: any[];
+  configs: any[];
+  cta?: { label: string; url: string } | null;
+  rodapeExtra?: string | null;
+}) {
+  const { destinatario, assunto, corpo, evento, regs, configs, cta, rodapeExtra } = args;
+
+  const reg = destinatario.registrationId
+    ? regs.find(r => Number(r.id) === Number(destinatario.registrationId))
+    : null;
+
+  const largada = reg ? resolveStartOrder(reg, configs) : { numero: null, horario: null };
+  const valores = valoresDaInscricao({
+    reg: reg || { pilotName: destinatario.name },
+    evento,
+    categoriaNome: reg?.categoryGroup ? `${reg.categoryGroup} - ${reg.categoryName}` : reg?.categoryName,
+    numero: largada.numero,
+    horario: largada.horario,
+  });
+
+  const html = renderEmail({
+    bodyHtml: aplicarVariaveis(textoParaHtml(corpo), valores),
+    logoUrl: evento?.logoUrl || null,
+    eventName: evento?.name || null,
+    cta: cta || null,
+    rodapeExtra: rodapeExtra || `Você recebeu este e-mail porque está inscrito em ${evento?.name || 'um evento'}.`,
+  });
+
+  return await sendEmail(destinatario.email, aplicarVariaveisTexto(assunto, valores), html);
+}
+
+const emailsRouter = router({
+  /** Variáveis disponíveis, pra montar a barra de atalhos na tela. */
+  variaveis: organizerProcedure.query(() => VARIAVEIS_EMAIL),
+
+  /** Prévia dos destinatários: contagem e lista, com os filtros escolhidos. */
+  previewDestinatarios: organizerProcedure
+    .input(z.object({
+      eventId: z.number(),
+      status: z.enum(["paid", "pending", "all"]).default("all"),
+      categoryIds: z.array(z.number()).optional(),
+      incluirNavegador: z.boolean().default(false),
+      incluirCompradoresLoja: z.boolean().default(false),
+    }))
+    .query(async ({ ctx, input }) => {
+      await assertEventEmailAccess(ctx.user as any, input.eventId);
+      const lista = await db.getEventEmailAudience(input.eventId, input);
+      return {
+        total: lista.length,
+        destinatarios: lista.map(d => ({
+          email: d.email,
+          name: d.name,
+          registrationId: d.registrationId,
+          status: d.reg?.status || null,
+          categoria: d.reg?.categoryName || null,
+        })),
+      };
+    }),
+
+  /** Como o e-mail vai ficar para a primeira pessoa da lista. */
+  preview: organizerProcedure
+    .input(z.object({
+      eventId: z.number(),
+      subject: z.string(),
+      body: z.string(),
+      status: z.enum(["paid", "pending", "all"]).default("all"),
+      categoryIds: z.array(z.number()).optional(),
+      incluirNavegador: z.boolean().default(false),
+      incluirCompradoresLoja: z.boolean().default(false),
+    }))
+    .query(async ({ ctx, input }) => {
+      const evento = await assertEventEmailAccess(ctx.user as any, input.eventId);
+      const lista = await db.getEventEmailAudience(input.eventId, input);
+      const alvo = lista[0];
+
+      const regs = await db.getRegistrationsByEventId(input.eventId) as any[];
+      const configs = await db.getStartOrderConfigsByEventId(input.eventId) as any[];
+      const reg = alvo?.registrationId ? regs.find(r => Number(r.id) === Number(alvo.registrationId)) : null;
+      const largada = reg ? resolveStartOrder(reg, configs) : { numero: null, horario: null };
+
+      const valores = valoresDaInscricao({
+        reg: reg || { pilotName: alvo?.name || "Piloto" },
+        evento,
+        categoriaNome: reg?.categoryGroup ? `${reg.categoryGroup} - ${reg.categoryName}` : reg?.categoryName,
+        numero: largada.numero,
+        horario: largada.horario,
+      });
+
+      return {
+        para: alvo?.email || null,
+        assunto: aplicarVariaveisTexto(input.subject, valores),
+        html: renderEmail({
+          bodyHtml: aplicarVariaveis(textoParaHtml(input.body), valores),
+          logoUrl: evento?.logoUrl || null,
+          eventName: evento?.name || null,
+        }),
+        variaveisDesconhecidas: [
+          ...new Set([...variaveisDesconhecidas(input.subject), ...variaveisDesconhecidas(input.body)]),
+        ],
+      };
+    }),
+
+  /** Manda só pra você, pra conferir antes de disparar pra lista toda. */
+  enviarTeste: organizerProcedure
+    .input(z.object({ eventId: z.number(), subject: z.string().min(1), body: z.string().min(1) }))
+    .mutation(async ({ ctx, input }) => {
+      const user = ctx.user as any;
+      const evento = await assertEventEmailAccess(user, input.eventId);
+      if (!user?.email) throw new TRPCError({ code: 'BAD_REQUEST', message: 'Sua conta não tem e-mail cadastrado' });
+
+      const regs = await db.getRegistrationsByEventId(input.eventId) as any[];
+      const configs = await db.getStartOrderConfigsByEventId(input.eventId) as any[];
+      const exemplo = regs.find(r => r.status !== 'cancelled') || null;
+
+      const ok = await enviarEmailDoEvento({
+        destinatario: { email: user.email, name: user.name || 'Organizador', registrationId: exemplo?.id ?? null },
+        assunto: `[TESTE] ${input.subject}`,
+        corpo: input.body,
+        evento, regs, configs,
+        rodapeExtra: 'E-mail de teste enviado pelo painel do organizador.',
+      });
+
+      if (!ok) throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Falha ao enviar o teste. Confira a configuração de SMTP.' });
+      return { success: true, para: user.email };
+    }),
+
+  /**
+   * Cria o disparo e grava a lista. NÃO envia nada aqui: quem envia é o
+   * processarLote, chamado em laço pelo front (SMTP sequencial estoura o tempo
+   * da função se tentar mandar tudo numa requisição só).
+   */
+  criarDisparo: organizerProcedure
+    .input(z.object({
+      eventId: z.number(),
+      subject: z.string().min(1, 'Escreva o assunto'),
+      body: z.string().min(1, 'Escreva a mensagem'),
+      status: z.enum(["paid", "pending", "all"]).default("all"),
+      categoryIds: z.array(z.number()).optional(),
+      incluirNavegador: z.boolean().default(false),
+      incluirCompradoresLoja: z.boolean().default(false),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const user = ctx.user as any;
+      await assertEventEmailAccess(user, input.eventId);
+
+      const lista = await db.getEventEmailAudience(input.eventId, input);
+      if (lista.length === 0) {
+        throw new TRPCError({ code: 'BAD_REQUEST', message: 'Nenhum destinatário com os filtros escolhidos.' });
+      }
+
+      const disparo = await db.createEventEmail({
+        eventId: input.eventId,
+        subject: input.subject,
+        body: input.body,
+        kind: 'manual',
+        filters: {
+          status: input.status,
+          categoryIds: input.categoryIds || [],
+          incluirNavegador: input.incluirNavegador,
+          incluirCompradoresLoja: input.incluirCompradoresLoja,
+        },
+        createdBy: user.id,
+      });
+
+      const total = await db.addEventEmailRecipients(disparo.id, input.eventId, lista);
+      return { emailId: disparo.id, total };
+    }),
+
+  /** Envia o próximo lote e diz quantos ainda faltam. O front chama até zerar. */
+  processarLote: organizerProcedure
+    .input(z.object({ emailId: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      const disparo = await db.getEventEmailById(input.emailId) as any;
+      if (!disparo) throw new TRPCError({ code: 'NOT_FOUND', message: 'Disparo não encontrado' });
+
+      const evento = await assertEventEmailAccess(ctx.user as any, disparo.eventId);
+      const pendentes = await db.getPendingRecipients(input.emailId, LOTE_EMAIL);
+
+      if (pendentes.length > 0) {
+        const regs = await db.getRegistrationsByEventId(disparo.eventId) as any[];
+        const configs = await db.getStartOrderConfigsByEventId(disparo.eventId) as any[];
+
+        await Promise.all(pendentes.map(async (p: any) => {
+          try {
+            const ok = await enviarEmailDoEvento({
+              destinatario: { email: p.email, name: p.name, registrationId: p.registrationId },
+              assunto: disparo.subject,
+              corpo: disparo.body,
+              evento, regs, configs,
+            });
+            await db.markRecipientResult(p.id, ok, ok ? undefined : 'SMTP recusou o envio');
+          } catch (err: any) {
+            await db.markRecipientResult(p.id, false, err?.message);
+          }
+        }));
+      }
+
+      const contadores = await db.refreshEventEmailCounters(input.emailId) as any;
+      return {
+        enviadosAgora: pendentes.length,
+        pendentes: contadores?.pending ?? 0,
+        sent: contadores?.sentCount ?? 0,
+        failed: contadores?.failedCount ?? 0,
+        total: contadores?.totalRecipients ?? 0,
+      };
+    }),
+
+  /** Histórico de disparos do evento. */
+  historico: organizerProcedure
+    .input(z.object({ eventId: z.number() }))
+    .query(async ({ ctx, input }) => {
+      await assertEventEmailAccess(ctx.user as any, input.eventId);
+      return await db.getEventEmails(input.eventId);
+    }),
+
+  /** Relatório de um disparo: quem recebeu, quem falhou e por quê. */
+  detalhes: organizerProcedure
+    .input(z.object({ emailId: z.string() }))
+    .query(async ({ ctx, input }) => {
+      const disparo = await db.getEventEmailById(input.emailId) as any;
+      if (!disparo) throw new TRPCError({ code: 'NOT_FOUND', message: 'Disparo não encontrado' });
+      await assertEventEmailAccess(ctx.user as any, disparo.eventId);
+      return {
+        disparo,
+        destinatarios: await db.getEventEmailRecipients(input.emailId),
+      };
+    }),
+
+  /** Liga/desliga a régua de cobrança e guarda o texto do lembrete. */
+  configCobranca: organizerProcedure
+    .input(z.object({ eventId: z.number() }))
+    .query(async ({ ctx, input }) => {
+      const evento = await assertEventEmailAccess(ctx.user as any, input.eventId);
+      return {
+        enabled: !!evento.autoChargeEnabled,
+        subject: evento.autoChargeSubject || COBRANCA_ASSUNTO_PADRAO,
+        body: evento.autoChargeBody || COBRANCA_CORPO_PADRAO,
+      };
+    }),
+
+  salvarConfigCobranca: organizerProcedure
+    .input(z.object({
+      eventId: z.number(),
+      enabled: z.boolean(),
+      subject: z.string().min(1),
+      body: z.string().min(1),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      await assertEventEmailAccess(ctx.user as any, input.eventId);
+      await db.updateEvent(input.eventId, {
+        autoChargeEnabled: input.enabled,
+        autoChargeSubject: input.subject,
+        autoChargeBody: input.body,
+      } as any);
+      return { success: true };
+    }),
+});
 
 const storeRouter = router({
   create: organizerProcedure
@@ -813,6 +1106,7 @@ ${context || 'Nenhum conhecimento específico encontrado para esta pergunta.'}`;
 export const appRouter = router({
   system: systemRouter,
   finance: financeRouter,
+  emails: emailsRouter,
   store: storeRouter,
   championships: championshipRouter,
   competitor: competitorRouter,

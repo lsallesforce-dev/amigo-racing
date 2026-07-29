@@ -25,6 +25,7 @@ const Login = lazy(() => import("./pages/Login"));
 const CheckIn = lazy(() => import("./pages/CheckIn"));
 const StartOrderManager = lazy(() => import("./pages/StartOrderManager"));
 const OrganizerStore = lazy(() => import("./pages/OrganizerStore"));
+const OrganizerEmails = lazy(() => import("./pages/OrganizerEmails"));
 const SorteoPage = lazy(() => import("./pages/SorteoPage").then(m => ({ default: m.SorteoPage })));
 const Championships = lazy(() => import("./pages/Championships"));
 const ChampionshipDetails = lazy(() => import("./pages/ChampionshipDetails"));
@@ -53,6 +54,7 @@ function Router() {
         <Route path="/organizer/finance" component={OrganizerFinance} />
         <Route path="/organizer/store" component={OrganizerStore} />
         <Route path="/organizer/events/:id/store" component={OrganizerStore} />
+        <Route path="/organizer/events/:id/emails" component={OrganizerEmails} />
         <Route path="/organizer/championships" component={Championships} />
         <Route path="/organizer/championships/:id" component={ChampionshipDetails} />
         <Route path="/registrations" component={Registrations} />

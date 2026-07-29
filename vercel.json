@@ -8,6 +8,10 @@
         {
             "path": "/api/keep-alive",
             "schedule": "*/5 * * * *"
+        },
+        {
+            "path": "/api/cron/cobranca-inscricoes",
+            "schedule": "0 12 * * *"
         }
     ],
     "rewrites": [

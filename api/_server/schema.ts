@@ -116,6 +116,11 @@ export const events = pgTable("events", {
   gallery: json("gallery"), // Array of strings (image URLs)
   navigationFiles: json("navigationFiles"), // JSON: [{name, url, type}]
   accepts_credit_card: boolean("accepts_credit_card").default(true).notNull(),
+  // Régua de cobrança de inscrição pendente (1 dia / 3 dias / véspera).
+  // Nasce desligada: evento antigo não começa a mandar e-mail sozinho.
+  autoChargeEnabled: boolean("autoChargeEnabled").default(false).notNull(),
+  autoChargeSubject: text("autoChargeSubject"),
+  autoChargeBody: text("autoChargeBody"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().notNull(),
 });
@@ -470,3 +475,53 @@ export const championshipRequests = pgTable("championship_requests", {
 
 export type ChampionshipRequest = typeof championshipRequests.$inferSelect;
 export type InsertChampionshipRequest = typeof championshipRequests.$inferInsert;
+
+/**
+ * Central de e-mails do evento — a campanha (um disparo).
+ * `kind` separa o que o organizador escreveu do lembrete automático de cobrança.
+ */
+export const eventEmails = pgTable("event_emails", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  eventId: integer("eventId").notNull(),
+  subject: text("subject").notNull(),
+  /** Texto puro digitado pelo organizador (com {{variaveis}}); o HTML é montado no envio. */
+  body: text("body").notNull(),
+  kind: varchar("kind", { length: 30 }).$type<"manual" | "auto_pendente">().default("manual").notNull(),
+  /** Marco da régua automática: 'd1' | 'd3' | 'vespera'. Null no envio manual. */
+  autoStage: varchar("autoStage", { length: 20 }),
+  /** Filtros de destinatário usados, pra repetir/auditar o envio depois. */
+  filters: json("filters"),
+  status: varchar("status", { length: 20 }).$type<"pending" | "sending" | "done" | "failed">().default("pending").notNull(),
+  totalRecipients: integer("totalRecipients").default(0).notNull(),
+  sentCount: integer("sentCount").default(0).notNull(),
+  failedCount: integer("failedCount").default(0).notNull(),
+  createdBy: integer("createdBy"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  finishedAt: timestamp("finishedAt"),
+});
+
+export type EventEmail = typeof eventEmails.$inferSelect;
+export type InsertEventEmail = typeof eventEmails.$inferInsert;
+
+/**
+ * Um destinatário do disparo. É esta tabela que deixa o envio ser retomado sem
+ * mandar duas vezes pra mesma pessoa e permite o relatório de falhas.
+ */
+export const eventEmailRecipients = pgTable("event_email_recipients", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  emailId: uuid("emailId").notNull(),
+  eventId: integer("eventId").notNull(),
+  registrationId: integer("registrationId"),
+  email: varchar("email", { length: 320 }).notNull(),
+  name: text("name"),
+  status: varchar("status", { length: 20 }).$type<"pending" | "sent" | "failed">().default("pending").notNull(),
+  error: text("error"),
+  sentAt: timestamp("sentAt"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+}, (t) => ({
+  // O mesmo e-mail nunca entra duas vezes no mesmo disparo.
+  emailDestinatarioUnico: unique().on(t.emailId, t.email),
+}));
+
+export type EventEmailRecipient = typeof eventEmailRecipients.$inferSelect;
+export type InsertEventEmailRecipient = typeof eventEmailRecipients.$inferInsert;

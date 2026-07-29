@@ -13,6 +13,7 @@ import { ENV } from "./env.js";
 import { setupSitemapRoute } from "./sitemapRoute.js";
 import { imageProxyHandler } from "./imageProxy.js";
 import { qrCodeProxyHandler } from "./qrCodeProxy.js";
+import { cronCobrancaHandler } from "./cronCobranca.js";
 import pagarmeWebhook from "./pagarme.js";
 import uploadRoute from "./uploadRoute.js";
 import { setupMetaRoutes } from "./metaRoute.js";
@@ -85,6 +86,9 @@ export async function createExpressApp() {
     setupSitemapRoute(app);
     app.get('/api/images/:key(*)', imageProxyHandler);
     app.get('/api/qr-code', qrCodeProxyHandler);
+    // Régua de cobrança de inscrição pendente (cron diário — ver vercel.json).
+    // ?dryRun=1 lista o que seria enviado sem mandar nada.
+    app.get('/api/cron/cobranca-inscricoes', cronCobrancaHandler);
     app.use('/api', uploadRoute);
 
     app.use(

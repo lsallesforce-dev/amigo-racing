@@ -70,6 +70,27 @@ export function inputBrasiliaParaIso(valor?: string | null): string | null {
   return isNaN(d.getTime()) ? null : d.toISOString();
 }
 
+/**
+ * Data vinda de coluna `timestamp without time zone` (events.startDate e afins).
+ *
+ * Esse tipo guarda relógio de parede, sem fuso: o banco tem "2026-08-02 09:00:00"
+ * porque a largada é 09:00 em Salto de Pirapora, ponto. O drizzle devolve isso
+ * como se fosse 09:00 UTC, então QUALQUER conversão de fuso em cima estraga o
+ * valor — formatarBrasilia() jogaria pra 06:00.
+ *
+ * Aqui os componentes são lidos direto em UTC, que são exatamente os dígitos
+ * gravados. Nada de conversão.
+ */
+export function formatarDataDoBanco(valor?: string | Date | null, opts?: { comHora?: boolean }): string {
+  if (!valor) return "";
+  const d = valor instanceof Date ? valor : new Date(valor);
+  if (isNaN(d.getTime())) return "";
+
+  const data = `${pad(d.getUTCDate())}/${pad(d.getUTCMonth() + 1)}/${d.getUTCFullYear()}`;
+  if (!opts?.comHora) return data;
+  return `${data} às ${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}`;
+}
+
 /** "01/08/2026 às 10:00" — sempre em Brasília, rode no browser ou no servidor. */
 export function formatarBrasilia(iso?: string | null, opts?: { comAno?: boolean }): string {
   if (!iso) return "";
