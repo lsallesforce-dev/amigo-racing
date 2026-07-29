@@ -22,6 +22,29 @@ export function escapeHtml(valor: unknown): string {
     .replace(/'/g, "&#39;");
 }
 
+/**
+ * URL de imagem pronta pra entrar num <img src> de e-mail.
+ *
+ * Duas armadilhas:
+ * - ESPAÇO na URL (nome de arquivo tipo "WhatsApp Image 2026-07-11 at 17.51.48.jpeg")
+ *   quebra o atributo e o proxy de imagem do Gmail não busca. encodeURI resolve,
+ *   e não re-escapa o que já estiver codificado (ele não mexe em "%").
+ * - data: URI não é renderizado por Gmail/Outlook — melhor não exibir imagem
+ *   nenhuma do que exibir o ícone de quebrado.
+ *
+ * Devolve null quando não dá pra usar.
+ */
+export function urlDeImagemParaEmail(url?: string | null): string | null {
+  const bruta = String(url || "").trim();
+  if (!bruta) return null;
+  if (!/^https?:\/\//i.test(bruta)) return null; // data:, blob:, caminho relativo
+  try {
+    return encodeURI(bruta);
+  } catch {
+    return null;
+  }
+}
+
 export interface EmailLayoutOpts {
   /** Conteúdo já em HTML (parágrafos, listas). */
   bodyHtml: string;
@@ -40,11 +63,16 @@ export interface EmailLayoutOpts {
 export function renderEmail(opts: EmailLayoutOpts): string {
   const { bodyHtml, titulo, logoUrl, eventName, cta, rodapeExtra } = opts;
 
-  const cabecalho = logoUrl
-    ? `<img src="${escapeHtml(logoUrl)}" alt="${escapeHtml(eventName || "Evento")}" style="max-width:180px;max-height:80px;display:block;margin:0 auto 12px;" />`
-    : eventName
-      ? `<p style="margin:0 0 12px;text-align:center;font-size:14px;font-weight:bold;color:${LARANJA};text-transform:uppercase;letter-spacing:1px;">${escapeHtml(eventName)}</p>`
-      : "";
+  // Logo inutilizável (data:, caminho relativo) cai no nome do evento em texto —
+  // melhor que o ícone de imagem quebrada.
+  const logoSegura = urlDeImagemParaEmail(logoUrl);
+  const nomeEmTexto = eventName
+    ? `<p style="margin:0 0 12px;text-align:center;font-size:14px;font-weight:bold;color:${LARANJA};text-transform:uppercase;letter-spacing:1px;">${escapeHtml(eventName)}</p>`
+    : "";
+
+  const cabecalho = logoSegura
+    ? `<img src="${escapeHtml(logoSegura)}" alt="${escapeHtml(eventName || "Evento")}" width="180" style="max-width:180px;max-height:80px;width:auto;height:auto;display:block;margin:0 auto 12px;border:0;outline:none;text-decoration:none;" />`
+    : nomeEmTexto;
 
   const botao = cta
     ? `<div style="text-align:center;margin:28px 0 8px;">

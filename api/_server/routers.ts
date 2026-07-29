@@ -3126,7 +3126,12 @@ export const appRouter = router({
       .mutation(async ({ input }) => {
         const { base64, fileName, contentType } = input;
         const buffer = Buffer.from(base64.split(',')[1], 'base64');
-        const relativePath = `uploads/${Date.now()}-${fileName}`;
+        // Nome do arquivo vira parte da URL pública. Sem sanitizar, "WhatsApp Image
+        // 2026-07-11 at 17.51.48.jpeg" gera URL com ESPAÇO — o <img src> quebra em
+        // cliente de e-mail (foi assim que a logo sumiu no e-mail do Gmail).
+        // Mesma normalização do uploadRoute.ts e do storage.getSignedUrl.
+        const safeName = fileName.replace(/[^a-zA-Z0-9.-]/g, "_");
+        const relativePath = `uploads/${Date.now()}-${safeName}`;
 
         try {
           // Try official storage first

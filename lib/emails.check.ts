@@ -109,6 +109,24 @@ async function main() {
   check("HTML do e-mail montado", corpo.startsWith("<!DOCTYPE html>") && corpo.includes("</html>"),
     `${corpo.length} caracteres`);
 
+  // ---- 7b) logo no cabeçalho: URL com espaço quebrava o <img> no Gmail
+  const comLogo = renderEmail({ bodyHtml: "<p>oi</p>", logoUrl: evento?.logoUrl, eventName: evento?.name });
+  const srcLogo = comLogo.match(/<img src="([^"]+)"/)?.[1] || "";
+  check("logo do evento entra no e-mail", !!srcLogo, srcLogo.slice(0, 80) + "...");
+  check("src da logo sem espaço cru", !!srcLogo && !srcLogo.includes(" "),
+    srcLogo.includes("%20") ? "espaços codificados como %20" : "sem espaços no nome");
+
+  const respostaLogo = await fetch(srcLogo.replace(/&amp;/g, "&"));
+  check("logo responde na URL do e-mail", respostaLogo.ok,
+    `HTTP ${respostaLogo.status} ${respostaLogo.headers.get("content-type")}`);
+
+  const comDataUri = renderEmail({ bodyHtml: "<p>oi</p>", logoUrl: "data:image/png;base64,iVBOR", eventName: "Rally X" });
+  check("data: URI não vira <img> quebrada", !comDataUri.includes("<img") && comDataUri.includes("Rally X"),
+    "cai no nome do evento em texto");
+
+  const semLogo = renderEmail({ bodyHtml: "<p>oi</p>", eventName: "Rally Y" });
+  check("sem logo mostra o nome do evento", !semLogo.includes("<img") && semLogo.includes("Rally Y"), "ok");
+
   // ---- 8) régua de cobrança: marcos
   const hoje = new Date();
   const marco = (diasAtras: number, diasAteEvento: number, jaEnviados: string[] = []) =>
