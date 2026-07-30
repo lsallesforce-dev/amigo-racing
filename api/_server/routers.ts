@@ -267,21 +267,45 @@ const financeRouter = router({
         const apiUrl = ENV.pagarmeApiUrl;
         const authHeader = `Basic ${Buffer.from(`${apiKey}:`).toString('base64')}`;
 
-        const withdrawBody: any = { type: 'ted' };
-        if (input.amount) {
-          withdrawBody.amount = Math.round(input.amount * 100); // reais -> centavos
+        // amount é OBRIGATÓRIO na rota de transferências. O painel pede "saque de
+        // tudo" sem informar valor, então aqui o valor sai do saldo real do
+        // recebedor — nunca de um número que veio do browser.
+        let centavos = input.amount ? Math.round(input.amount * 100) : 0;
+        if (!centavos) {
+          const saldo = await pagarme.getRecipientBalance(recipientId);
+          centavos = Number(saldo?.available_amount || 0);
         }
 
-        const response = await fetch(`${apiUrl}/recipients/${recipientId}/withdrawals`, {
+        if (centavos <= 0) {
+          throw new TRPCError({ code: 'BAD_REQUEST', message: 'Não há saldo disponível para transferir.' });
+        }
+
+        // POST /transfers, não /recipients/{id}/withdrawals: a rota de saque foi
+        // descontinuada pelo Pagar.me e passou a recusar com "The request is
+        // invalid.". A leitura (getTransfers) já usava /transfers.
+        // A Idempotency-Key evita transferência dobrada se a requisição for
+        // repetida (clique duplo, retry de rede) — em dinheiro isso importa.
+        const response = await fetch(`${apiUrl}/transfers`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json', Authorization: authHeader },
-          body: JSON.stringify(withdrawBody),
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: authHeader,
+            'Idempotency-Key': `payout-${recipientId}-${centavos}-${new Date().toISOString().slice(0, 16)}`,
+          },
+          body: JSON.stringify({ amount: centavos, recipient_id: recipientId }),
         });
 
         const result = await response.json() as any;
 
         if (!response.ok) {
-          throw new Error(result?.message || `Erro ${response.status} ao solicitar transferência`);
+          // O Pagar.me devolve "The request is invalid." genérico e o detalhe do
+          // que faltou vai em `errors`. Engolir isso deixava o organizador (e eu)
+          // sem saber o motivo.
+          const detalhe = result?.errors
+            ? Object.entries(result.errors).map(([campo, msgs]: any) => `${campo}: ${[].concat(msgs).join(', ')}`).join(' | ')
+            : '';
+          console.error('[finance.requestPayout] Pagar.me recusou:', response.status, JSON.stringify(result));
+          throw new Error([result?.message, detalhe].filter(Boolean).join(' — ') || `Erro ${response.status} ao solicitar transferência`);
         }
 
         return { success: true, withdrawal: result };
