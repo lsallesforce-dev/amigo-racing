@@ -10,7 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Download, Users, DollarSign, Calendar, CheckCircle, Clock, History, ArrowLeft, Trash2, Pencil, Shirt } from "lucide-react";
+import { Download, Users, DollarSign, Calendar, CheckCircle, Clock, History, ArrowLeft, Trash2, Pencil, Shirt, Link2, Copy, MessageCircle, Mail } from "lucide-react";
 
 import { toast } from "sonner";
 import { jsPDF } from "jspdf";
@@ -336,6 +336,57 @@ export default function Registrations() {
       .filter(Boolean);
     return sortShirtSizes([...new Set([...base, ...atuais])], (s) => s);
   }, [shirtStock, editForm?.pilotShirtSize, editForm?.navigatorShirtSize]);
+
+  // ---- Link de cobrança pra mandar pro competidor (WhatsApp/e-mail).
+  // Abre em /pagar/:accessHash, que paga sem login (o hash é o token da inscrição).
+  const [cobranca, setCobranca] = useState<any>(null);
+
+  const totalDaInscricao = (reg: any) => {
+    let extras = 0;
+    try {
+      const itens = typeof reg?.purchasedProducts === 'string'
+        ? JSON.parse(reg.purchasedProducts)
+        : reg?.purchasedProducts;
+      if (Array.isArray(itens)) {
+        extras = itens.reduce((s: number, p: any) => s + ((p.price || 0) * (p.quantity || 1)), 0);
+      }
+    } catch { /* extras malformados não podem travar a cobrança */ }
+    return (reg?.categoryPrice || 0) + extras;
+  };
+
+  const linkCobranca = (reg: any) =>
+    reg?.accessHash ? `${window.location.origin}/pagar/${reg.accessHash}` : "";
+
+  const mensagemCobranca = (reg: any) => {
+    const evento = events.find(e => e.id === selectedEventId);
+    return [
+      `Olá ${reg?.pilotName || ''}! Tudo bem?`,
+      ``,
+      `Sua inscrição no ${evento?.name || 'evento'} está registrada, mas o pagamento de ${formatCurrency(totalDaInscricao(reg))} ainda não foi confirmado — a vaga só fica garantida depois disso.`,
+      ``,
+      `Dá pra pagar por este link, direto no Pix (não precisa de senha nem login):`,
+      linkCobranca(reg),
+      ``,
+      `Qualquer dúvida, é só chamar!`,
+    ].join('\n');
+  };
+
+  const abrirCobranca = (reg: any) => {
+    if (!reg?.accessHash) {
+      toast.error("Esta inscrição não tem link de acesso. Salve a inscrição novamente para gerar.");
+      return;
+    }
+    setCobranca(reg);
+  };
+
+  const copiar = async (texto: string, aviso: string) => {
+    try {
+      await navigator.clipboard.writeText(texto);
+      toast.success(aviso);
+    } catch {
+      toast.error("Não foi possível copiar. Selecione o texto e copie na mão.");
+    }
+  };
 
   const openEditDialog = (registration: any) => {
     setEditForm({
@@ -957,6 +1008,19 @@ export default function Registrations() {
                                     <TableCell className="px-1 sm:px-2">{registration.team || "-"}</TableCell>
                                     <TableCell className="text-right px-1 sm:px-2">
                                       <div className="flex items-center justify-end gap-2">
+                                        {/* Cobrança só pra quem ainda não pagou */}
+                                        {registration.status === 'pending' && (
+                                          <Button
+                                            size="sm"
+                                            variant="outline"
+                                            className="gap-1.5 text-green-700 border-green-300 hover:bg-green-50 dark:text-green-400 dark:border-green-800 dark:hover:bg-green-950/30"
+                                            title="Link de cobrança pra mandar pro competidor"
+                                            onClick={() => abrirCobranca(registration)}
+                                          >
+                                            <Link2 className="h-4 w-4" />
+                                            Cobrar
+                                          </Button>
+                                        )}
                                         <Button
                                           size="sm"
                                           variant="outline"
@@ -1039,6 +1103,91 @@ export default function Registrations() {
         </Dialog>
 
         {/* Dialog de Confirmação de Exclusão */}
+        {/* Link de cobrança */}
+        <Dialog open={!!cobranca} onOpenChange={(o) => !o && setCobranca(null)}>
+          <DialogContent className="sm:max-w-lg">
+            <DialogHeader>
+              <DialogTitle>Cobrar {cobranca?.pilotName}</DialogTitle>
+              <DialogDescription>
+                O link abre a tela de pagamento já com os dados da inscrição — o competidor
+                paga no Pix sem precisar de login nem senha.
+              </DialogDescription>
+            </DialogHeader>
+
+            <div className="space-y-4">
+              <div className="rounded-lg border p-3 bg-muted/30 text-sm space-y-1">
+                <div className="flex justify-between gap-2">
+                  <span className="text-muted-foreground">Categoria</span>
+                  <span className="font-medium text-right">
+                    {cobranca?.categoryGroup ? `${cobranca.categoryGroup} - ${cobranca.categoryName}` : cobranca?.categoryName}
+                  </span>
+                </div>
+                <div className="flex justify-between gap-2 font-bold">
+                  <span>Total a cobrar</span>
+                  <span className="text-primary">{formatCurrency(totalDaInscricao(cobranca))}</span>
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label className="text-xs">Link de cobrança</Label>
+                <div className="flex gap-2">
+                  <Input readOnly value={linkCobranca(cobranca)} className="font-mono text-xs" onFocus={e => e.currentTarget.select()} />
+                  <Button variant="outline" size="icon" title="Copiar link"
+                    onClick={() => copiar(linkCobranca(cobranca), "Link copiado")}>
+                    <Copy className="h-4 w-4" />
+                  </Button>
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label className="text-xs">Mensagem pronta</Label>
+                <Textarea readOnly rows={9} value={mensagemCobranca(cobranca)} className="text-xs" />
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                <Button
+                  className="gap-2 bg-[#25D366] hover:bg-[#1da851] text-white"
+                  onClick={() => {
+                    const fone = String(cobranca?.phone || "").replace(/\D/g, "");
+                    const texto = encodeURIComponent(mensagemCobranca(cobranca));
+                    // Sem telefone na inscrição, abre o WhatsApp pra escolher o contato.
+                    const numero = fone.length >= 10 ? (fone.startsWith("55") ? fone : `55${fone}`) : "";
+                    window.open(`https://wa.me/${numero}?text=${texto}`, "_blank", "noopener");
+                  }}
+                >
+                  <MessageCircle className="h-4 w-4" /> WhatsApp
+                </Button>
+                <Button
+                  variant="outline"
+                  className="gap-2"
+                  onClick={() => {
+                    const evento = events.find(e => e.id === selectedEventId);
+                    const assunto = encodeURIComponent(`Pagamento da sua inscrição - ${evento?.name || ''}`);
+                    const corpo = encodeURIComponent(mensagemCobranca(cobranca));
+                    window.location.href = `mailto:${cobranca?.pilotEmail || ''}?subject=${assunto}&body=${corpo}`;
+                  }}
+                >
+                  <Mail className="h-4 w-4" /> E-mail
+                </Button>
+                <Button
+                  variant="outline"
+                  className="gap-2"
+                  onClick={() => copiar(mensagemCobranca(cobranca), "Mensagem copiada")}
+                >
+                  <Copy className="h-4 w-4" /> Copiar tudo
+                </Button>
+              </div>
+
+              {!cobranca?.phone && (
+                <p className="text-[11px] text-muted-foreground">
+                  Esta inscrição não tem telefone cadastrado — o WhatsApp vai abrir pra você
+                  escolher o contato.
+                </p>
+              )}
+            </div>
+          </DialogContent>
+        </Dialog>
+
         <Dialog open={deleteConfirmDialogOpen} onOpenChange={setDeleteConfirmDialogOpen}>
           <DialogContent className="sm:max-w-[425px]">
             <DialogHeader>

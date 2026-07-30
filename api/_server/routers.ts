@@ -23,6 +23,7 @@ import { resolveStartOrder } from "../../shared/startOrderLookup.js";
 import { COBRANCA_ASSUNTO_PADRAO, COBRANCA_CORPO_PADRAO } from "../../shared/cobrancaTemplate.js";
 import { ENV } from "./env.js";
 import { sendEmail } from "./email.js";
+import { timingSafeEqual } from "crypto";
 
 import { championshipRouter, calculateChampionshipStandings } from "./backend_routers/championship.js";
 import { whatsappRouter } from "./backend_routers/whatsapp.js";
@@ -343,6 +344,54 @@ async function assertEventEmailAccess(user: any, eventId: number) {
 
 /** Quantos e-mails saem por chamada. SMTP é sequencial e lento; o front chama em laço. */
 const LOTE_EMAIL = 8;
+
+/**
+ * Quem pode gerar cobrança de uma inscrição.
+ *
+ * O createPayment é público porque o link de cobrança precisa funcionar sem login —
+ * então a autorização é explícita aqui, e é MAIS restrita que antes: como
+ * protectedProcedure, qualquer usuário logado podia criar pagamento de qualquer
+ * inscrição, sem checagem de dono.
+ *
+ * Passa quem for: dono da inscrição, organizador do evento, admin, ou quem
+ * apresentar o accessHash daquela inscrição (é o segredo do link).
+ * Pedido avulso da loja (orderId) segue exigindo login, como antes.
+ */
+async function assertPodePagarInscricao(
+  ctx: any,
+  input: { registrationId?: number; orderId?: string; accessHash?: string }
+) {
+  const user = ctx?.user as any;
+
+  if (input.orderId) {
+    if (!user?.id) throw new TRPCError({ code: 'UNAUTHORIZED', message: 'Faça login para pagar este pedido.' });
+    return;
+  }
+
+  const reg = await db.getRegistrationById(input.registrationId!) as any;
+  if (!reg) throw new TRPCError({ code: 'NOT_FOUND', message: 'Inscrição não encontrada' });
+
+  // Posse do link vale como autorização — é o token da própria inscrição.
+  // Comparação de tamanho fixo pra não vazar o hash por tempo de resposta.
+  if (input.accessHash && reg.accessHash) {
+    const a = Buffer.from(String(input.accessHash));
+    const b = Buffer.from(String(reg.accessHash));
+    if (a.length === b.length && timingSafeEqual(a, b)) return;
+  }
+
+  if (!user?.id) {
+    throw new TRPCError({ code: 'UNAUTHORIZED', message: 'Faça login ou use o link de cobrança que o organizador enviou.' });
+  }
+  if (user.role === 'admin' || Number(reg.userId) === Number(user.id)) return;
+
+  const evento = await db.getEventById(reg.eventId) as any;
+  const organizer = evento ? await db.getOrganizerById(evento.organizerId) as any : null;
+  const context = await db.getOrganizerContext(user);
+  const principal = await db.getUserById(context.principalUserId) as any;
+  if (organizer && organizer.ownerId === principal?.openId) return;
+
+  throw new TRPCError({ code: 'FORBIDDEN', message: 'Esta inscrição não é sua.' });
+}
 
 /**
  * Monta e envia o e-mail de UM destinatário, resolvendo as variáveis com os dados
@@ -2392,6 +2441,42 @@ export const appRouter = router({
   }),
 
   payments: router({
+    /**
+     * Dados da inscrição para a página pública de cobrança (/pagar/:hash).
+     * Só o necessário para a pessoa se reconhecer e pagar — nada de CPF, e-mail
+     * ou telefone, que o link não precisa expor.
+     */
+    getCobrancaByHash: publicProcedure
+      .input(z.object({ accessHash: z.string().min(8) }))
+      .query(async ({ input }) => {
+        const reg = await db.getRegistrationByAccessHash(input.accessHash) as any;
+        if (!reg) throw new TRPCError({ code: 'NOT_FOUND', message: 'Link de cobrança inválido ou expirado.' });
+
+        const evento = await db.getEventById(reg.eventId) as any;
+        const categoria = await db.getCategoryById(reg.categoryId) as any;
+        const paiCategoria = categoria?.parentId ? await db.getCategoryById(categoria.parentId) as any : null;
+        const extras = db.sumPurchasedProducts(reg.purchasedProducts);
+
+        return {
+          registrationId: reg.id,
+          pilotName: reg.pilotName,
+          navigatorName: reg.navigatorName,
+          status: reg.status as string,
+          categoryName: paiCategoria ? `${paiCategoria.name} - ${categoria?.name}` : (categoria?.name || '-'),
+          categoryPrice: categoria?.price || 0,
+          extrasLabel: extras.label || null,
+          extrasTotal: extras.total || 0,
+          total: (categoria?.price || 0) + (extras.total || 0),
+          acceptsCreditCard: evento?.accepts_credit_card !== false,
+          event: evento ? {
+            name: evento.name,
+            startDate: evento.startDate,
+            location: [evento.location, evento.city, evento.state].filter(Boolean).join(' - '),
+            logoUrl: evento.logoUrl || null,
+          } : null,
+        };
+      }),
+
     getPaymentStatus: publicProcedure.input(z.object({ registrationId: z.number() })).query(async ({ input }) => {
       try {
         const reg = await db.getRegistrationById(input.registrationId) as any;
@@ -2422,10 +2507,16 @@ export const appRouter = router({
         return { status: 'pending', paid: false, success: true };
       }
     }),
-    createPayment: protectedProcedure
+    // publicProcedure + gate explícito, para o link de cobrança funcionar sem login
+    // (o competidor pendente costuma não lembrar a senha). Quem manda é o
+    // assertPodePagarInscricao logo abaixo: sem login, só passa com o accessHash
+    // da própria inscrição. Pedido avulso da loja (orderId) continua exigindo login.
+    createPayment: publicProcedure
       .input(z.object({
         registrationId: z.number().optional(),
         orderId: z.string().uuid().optional(),
+        /** Token do link de cobrança (registrations.accessHash), no lugar do login. */
+        accessHash: z.string().optional(),
         paymentMethod: z.enum(['pix', 'credit_card']).default('pix'),
         cardData: z.object({
           number: z.string(),
@@ -2450,6 +2541,8 @@ export const appRouter = router({
           if (!input.registrationId && !input.orderId) {
             throw new Error("É necessário fornecer um ID de inscrição ou de pedido.");
           }
+
+          await assertPodePagarInscricao(ctx, input);
 
           let reg: any = null;
           let category: any = null;

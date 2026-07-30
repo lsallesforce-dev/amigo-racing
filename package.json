@@ -13,7 +13,8 @@
     "check:nav-files": "tsx lib/navigation-files.check.ts",
     "check:horario": "tsx lib/horario-brasilia.check.ts",
     "migrate:emails": "tsx lib/migrate-emails.ts",
-    "check:emails": "tsx lib/emails.check.ts"
+    "check:emails": "tsx lib/emails.check.ts",
+    "check:cobranca": "tsx lib/cobranca-link.check.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1078.0",

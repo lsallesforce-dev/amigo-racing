@@ -2355,3 +2355,24 @@ export async function getEventsWithAutoCharge() {
     )
   );
 }
+
+/**
+ * Inscrição pelo token do link (accessHash) — usado pelo passaporte público e
+ * pela página de cobrança. É o segredo que autoriza pagar sem login.
+ */
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+export async function getRegistrationByAccessHash(accessHash: string) {
+  const db = await getDb();
+  if (!db || !accessHash) return undefined;
+
+  // A coluna é uuid: comparar com texto que não é uuid faz o Postgres estourar
+  // (22P02) e o endpoint público devolveria 500 em vez de "link inválido".
+  // Qualquer lixo na URL /pagar/:hash cai aqui.
+  if (!UUID_RE.test(String(accessHash).trim())) return undefined;
+
+  const [row] = await db.select().from(registrations)
+    .where(eq(registrations.accessHash, String(accessHash).trim()))
+    .limit(1);
+  return row;
+}

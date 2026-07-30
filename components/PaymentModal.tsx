@@ -15,6 +15,8 @@ interface PaymentModalProps {
     onOpenChange: (open: boolean) => void;
     registrationId?: number;
     orderId?: string;
+    /** Token do link de cobranca: deixa pagar sem login (pagina /pagar/:hash). */
+    accessHash?: string;
     amount: number;
     eventName: string;
     categoryName: string;
@@ -26,6 +28,7 @@ export function PaymentModal({
     onOpenChange,
     registrationId,
     orderId,
+    accessHash,
     amount,
     eventName,
     categoryName,
@@ -204,6 +207,7 @@ export function PaymentModal({
         createPayment.mutate({
             registrationId,
             orderId,
+            accessHash,
             paymentMethod,
             cardData: formattedCardData,
         });
@@ -443,6 +447,7 @@ export function PaymentModal({
                                             setPaymentError('');
                                             createPayment.mutate({
                                                 registrationId: registrationId!,
+                                                accessHash,
                                                 paymentMethod: 'credit_card',
                                                 cardData: {
                                                     number: cardData.card_number.replace(/\D/g, ''),
