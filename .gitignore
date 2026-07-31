@@ -13,3 +13,6 @@ tmp_*
 # Dump local de env vars da Vercel (contem segredos)
 .env.vercel.tmp
 .env*.tmp
+
+dist/
+check_inf_shirt.*
