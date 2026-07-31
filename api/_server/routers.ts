@@ -3460,10 +3460,12 @@ export const appRouter = router({
             const cat = categoryMap.get(config.categoryId);
             const parent = cat?.parentId ? categoryMap.get(cat.parentId) : null;
             const time = new Date(baseTime.getTime() + (i * config.intervalSeconds * 1000)).toTimeString().slice(0, 5);
+            // Kraken so acha a categoria pelo nome completo junto ("Carros Master"),
+            // sem separador; CATEGORIA e SUBCATEGORIA levam a mesma string.
+            const nomeCategoria = (parent ? `${parent.name} ${cat?.name}` : cat?.name) || 'N/A';
 
             data.push({
-              // Modelo Kraken separa categoria e subcategoria em colunas distintas
-              'CATEGORIA': (parent ? parent.name : cat?.name) || 'N/A',
+              'CATEGORIA': nomeCategoria,
               'NÚMERO': config.numberStart + i,
               'HORA LARGADA': time,
               'NOME PILOTO': reg?.pilotName || '',
@@ -3481,7 +3483,7 @@ export const appRouter = router({
               'VEÍCULO': reg ? `${reg.vehicleBrand || ''} ${reg.vehicleModel || ''}` : '',
               'D1': '',
               'D2': '',
-              'SUBCATEGORIA': parent ? (cat?.name || '') : '',
+              'SUBCATEGORIA': nomeCategoria,
             });
           }
         }
