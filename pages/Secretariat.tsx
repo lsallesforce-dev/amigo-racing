@@ -12,7 +12,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { toast } from "sonner";
 import Navbar from "@/components/Navbar";
 import { gerarListaDeKitsPdf, gerarEtiquetasPdf, carregarLogoAmigo, nomeDeArquivo } from "@/lib/kitPdf";
-import { montarDadosDeKits, gradeDeEtiquetas, folhasDeEtiquetas, type FormatoEtiqueta } from "@/shared/kits";
+import { montarDadosDeKits, gradeDeEtiquetas, folhasDeEtiquetas, ROTULOS_ETIQUETA, type FormatoEtiqueta } from "@/shared/kits";
 import { normalizeShirtSize } from "@/shared/shirtSizes";
 
 export default function Secretariat() {
@@ -331,7 +331,7 @@ export default function Secretariat() {
                         </DialogDescription>
                     </DialogHeader>
                     <div className="grid gap-3">
-                        {(["10x15", "10x7"] as FormatoEtiqueta[]).map((formato) => {
+                        {(["10x15", "a6", "10x7"] as FormatoEtiqueta[]).map((formato) => {
                             const grade = gradeDeEtiquetas(formato);
                             const folhas = folhasDeEtiquetas(dadosDeKits.totalKits, formato);
                             return (
@@ -342,9 +342,7 @@ export default function Secretariat() {
                                     className="flex items-center justify-between rounded-xl border p-4 text-left transition-colors hover:bg-muted/50 disabled:opacity-50"
                                 >
                                     <div>
-                                        <p className="font-semibold">
-                                            {formato === "10x15" ? "10 x 15 cm (grande)" : "10 x 7,4 cm (compacto)"}
-                                        </p>
+                                        <p className="font-semibold">{ROTULOS_ETIQUETA[formato]}</p>
                                         <p className="text-sm text-muted-foreground">
                                             {grade.porFolha} por folha A4 · {folhas} folha(s) no total
                                         </p>

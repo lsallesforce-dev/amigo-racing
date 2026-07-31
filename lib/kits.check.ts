@@ -110,8 +110,8 @@ async function main() {
   check("toda inscrição tem accessHash pro QR", semHash.length === 0,
     semHash.length ? `sem hash: ${semHash.map(k => `#${k.id}`).join(",")}` : "todas com hash");
 
-  // 9) grade das etiquetas cabe na A4 nos dois formatos
-  for (const formato of ["10x15", "10x7"] as const) {
+  // 9) grade das etiquetas cabe na A4 nos três formatos
+  for (const formato of ["10x15", "a6", "10x7"] as const) {
     const g = gradeDeEtiquetas(formato);
     const cabe = g.margemX >= 0 && g.margemY >= 0
       && g.margemX * 2 + g.colunas * g.larguraMm <= 210.01

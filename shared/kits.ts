@@ -164,7 +164,7 @@ export function montarDadosDeKits(
 
 // ---------------------------------------------------------------- etiquetas: grade
 
-export type FormatoEtiqueta = "10x15" | "10x7";
+export type FormatoEtiqueta = "10x15" | "a6" | "10x7";
 
 export interface GradeEtiquetas {
   larguraMm: number;
@@ -179,12 +179,32 @@ export interface GradeEtiquetas {
 const A4_LARGURA = 210;
 const A4_ALTURA = 297;
 
+// A4 = 210x297. As medidas de cada formato saem daí:
+//  10x15 -> 2 lado a lado; a segunda fileira não cabe (300 > 297)
+//  a6    -> 105x148,5 é exatamente um quarto da folha: 2x2 sem sobra
+//  10x7  -> o adesivo A4 comum, 2x3
+// As linhas são fixadas de propósito, não calculadas: no compacto caberiam 4
+// fileiras (296 de 297mm), mas cortar com meio milímetro de folga é pedir para
+// errar. Três fileiras deixam margem para a tesoura.
+const MEDIDAS: Record<FormatoEtiqueta, { largura: number; altura: number; linhas: number }> = {
+  "10x15": { largura: 100, altura: 150, linhas: 1 },
+  a6: { largura: 105, altura: 148.5, linhas: 2 },
+  "10x7": { largura: 100, altura: 74, linhas: 3 },
+};
+
+export const ROTULOS_ETIQUETA: Record<FormatoEtiqueta, string> = {
+  "10x15": "10 x 15 cm (grande)",
+  a6: "10,5 x 14,8 cm (A6)",
+  "10x7": "10 x 7,4 cm (compacto)",
+};
+
 /** Quantas etiquetas cabem na A4 e onde começam, por formato. */
 export function gradeDeEtiquetas(formato: FormatoEtiqueta): GradeEtiquetas {
-  const larguraMm = 100;
-  const alturaMm = formato === "10x15" ? 150 : 74;
-  const colunas = Math.floor(A4_LARGURA / larguraMm);            // 2
-  const linhas = Math.floor((A4_ALTURA - 10) / alturaMm);         // 1 (10x15) | 3 (10x7)
+  const medida = MEDIDAS[formato] || MEDIDAS["10x15"];
+  const larguraMm = medida.largura;
+  const alturaMm = medida.altura;
+  const colunas = Math.floor(A4_LARGURA / larguraMm);      // 2 em todos
+  const linhas = medida.linhas;
   return {
     larguraMm,
     alturaMm,

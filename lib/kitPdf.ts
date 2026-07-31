@@ -69,7 +69,9 @@ function desenharCabecalho(doc: jsPDF, titulo: string, subtitulo: string, logos:
   if (logos.evento) {
     try {
       const props = doc.getImageProperties(logos.evento);
-      const maxW = 45, maxH = 28;
+      // Caixa maior que a dos outros PDFs do site (45x28): na lista de kits o
+      // logo do evento é o que identifica a folha na mesa de montagem.
+      const maxW = 55, maxH = 34;
       const ratio = Math.min(maxW / props.width, maxH / props.height);
       doc.addImage(logos.evento, (props as any).fileType || "PNG",
         14, 12 + (maxH - props.height * ratio) / 2, props.width * ratio, props.height * ratio);
@@ -251,13 +253,15 @@ export async function gerarEtiquetasPdf(
   formato: FormatoEtiqueta,
 ): Promise<jsPDF> {
   const grade = gradeDeEtiquetas(formato);
-  const grande = formato === "10x15";
+  // O A6 é quase a etiqueta grande (105x148,5 contra 100x150), então usa o
+  // mesmo porte de desenho; só o compacto encolhe tudo.
+  const grande = formato !== "10x7";
   const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
 
   // Escala do desenho: o compacto é a mesma etiqueta com logo, número e QR menores.
   const s = {
-    logoH: grande ? 26 : 10,
-    numero: grande ? 72 : 30,
+    logoH: grande ? 30 : 14,
+    numero: grande ? 62 : 28,
     piloto: grande ? 17 : 10.5,
     nav: grande ? 11.5 : 8,
     camisa: grande ? 20 : 11,
@@ -382,7 +386,7 @@ function desenharEtiqueta(
   }
 
   // Faixa das camisetas — o que quem monta o kit precisa ver primeiro.
-  const faixaH = grande ? (kit.extrasTamanhos.length ? 25 : 17) : (kit.extrasTamanhos.length ? 13 : 9.5);
+  const faixaH = grande ? (kit.extrasTamanhos.length ? 22 : 15) : (kit.extrasTamanhos.length ? 13 : 9.5);
   cursor += grande ? 4 : 2;
   doc.setFillColor(243, 244, 246);
   doc.rect(x + pad, cursor, larguraUtil, faixaH, "F");
@@ -393,30 +397,39 @@ function desenharEtiqueta(
     `PILOTO ${kit.camisaPiloto || "-"}`,
     kit.camisaNavegador ? `NAV ${kit.camisaNavegador}` : "",
   ].filter(Boolean).join("   ·   ");
-  doc.text(camisas, centro, cursor + (grande ? 11.5 : 6.5), { align: "center", maxWidth: larguraUtil - 2 });
+  doc.text(camisas, centro, cursor + (grande ? 10 : 6.5), { align: "center", maxWidth: larguraUtil - 2 });
   if (kit.extrasTamanhos.length) {
     doc.setFont("helvetica", "normal");
     doc.setFontSize(grande ? 9.5 : 7);
     doc.setTextColor(75, 85, 99);
     doc.text(
       `+ ${kit.extrasTamanhos.length} da loja (${kit.extrasTamanhos.join(", ")})`,
-      centro, cursor + (grande ? 20 : 11),
+      centro, cursor + (grande ? 17.5 : 11),
       { align: "center", maxWidth: larguraUtil - 2 },
     );
   }
-  cursor += faixaH + (grande ? 6 : 3);
+  cursor += faixaH + (grande ? 4 : 2.5);
 
   // Categoria e horário, logo abaixo da faixa e na largura toda.
   doc.setFont("helvetica", "normal");
   doc.setFontSize(s.rodape);
   doc.setTextColor(107, 114, 128);
-  const linhaInfo = [kit.categoriaNome, kit.horario ? `larga ${kit.horario}` : ""].filter(Boolean).join(" · ");
-  doc.text(doc.splitTextToSize(linhaInfo, larguraUtil).slice(0, 2), x + pad, cursor);
+  // O rodapé é uma faixa RESERVADA para o QR: ele fica sempre do mesmo tamanho,
+  // e a categoria/horário divide a linha com ele em vez de empurrá-lo. Antes o
+  // QR era ancorado no fim da etiqueta e, quando o conteúdo crescia (nome de
+  // duas linhas, logo maior, extras da loja), ele caía em cima da faixa das
+  // camisetas. O mínimo continua valendo como rede de segurança.
+  const ladoQr = Math.max(12, Math.min(s.qr, y + h - pad - 4 - cursor));
+  const qrX = x + w - pad - ladoQr;
+  const qrY = y + h - pad - 4 - ladoQr;
+  if (qr) desenharQr(doc, qr, qrX, qrY, ladoQr);
 
-  // QR + número da inscrição, ancorados no rodapé da etiqueta.
-  const qrX = x + w - pad - s.qr;
-  const qrY = y + h - pad - s.qr;
-  if (qr) desenharQr(doc, qr, qrX, qrY, s.qr);
+  const linhaInfo = [kit.categoriaNome, kit.horario ? `larga ${kit.horario}` : ""].filter(Boolean).join(" · ");
+  doc.text(
+    doc.splitTextToSize(linhaInfo, larguraUtil - ladoQr - 3).slice(0, 2),
+    x + pad,
+    Math.min(cursor, qrY + 4),
+  );
   doc.setFontSize(s.rodape);
   doc.setTextColor(107, 114, 128);
   doc.text(`Inscrição #${kit.id}`, x + pad, y + h - pad - 1);
@@ -425,10 +438,11 @@ function desenharEtiqueta(
   if (!kit.pago) {
     doc.setTextColor(220, 38, 38);
     doc.setFont("helvetica", "bold");
-    doc.setFontSize(grande ? 26 : 13);
+    doc.setFontSize(grande ? 22 : 13);
     // Na faixa livre abaixo dos dados: chama atenção sem cobrir o número nem os
     // tamanhos de camiseta, que é o que a montagem precisa ler.
-    doc.text("PENDENTE", x + w * (grande ? 0.5 : 0.32), y + h * (grande ? 0.82 : 0.93), { align: "center", angle: 12 });
+    // À esquerda do QR: o rodapé da direita é dele.
+    doc.text("PENDENTE", x + w * 0.31, y + h * (grande ? 0.87 : 0.86), { align: "center", angle: 12 });
   }
 }
 
