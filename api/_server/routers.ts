@@ -3462,7 +3462,8 @@ export const appRouter = router({
             const time = new Date(baseTime.getTime() + (i * config.intervalSeconds * 1000)).toTimeString().slice(0, 5);
 
             data.push({
-              'CATEGORIA': parent ? `${parent.name} - ${cat?.name}` : cat?.name || 'N/A',
+              // Modelo Kraken separa categoria e subcategoria em colunas distintas
+              'CATEGORIA': (parent ? parent.name : cat?.name) || 'N/A',
               'NÚMERO': config.numberStart + i,
               'HORA LARGADA': time,
               'NOME PILOTO': reg?.pilotName || '',
@@ -3480,6 +3481,7 @@ export const appRouter = router({
               'VEÍCULO': reg ? `${reg.vehicleBrand || ''} ${reg.vehicleModel || ''}` : '',
               'D1': '',
               'D2': '',
+              'SUBCATEGORIA': parent ? (cat?.name || '') : '',
             });
           }
         }
