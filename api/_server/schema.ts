@@ -176,6 +176,7 @@ export const registrations = pgTable("registrations", {
   navigatorCpf: varchar("navigatorCpf", { length: 14 }),
   navigatorCity: varchar("navigatorCity", { length: 100 }),
   navigatorState: varchar("navigatorState", { length: 2 }),
+  navigatorPhone: varchar("navigatorPhone", { length: 20 }),
 
   // Team and vehicle
   team: varchar("team", { length: 200 }),

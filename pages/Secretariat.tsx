@@ -5,8 +5,9 @@ import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
-import { ArrowLeft, Search, Loader2, Package, CheckCircle2, FileText, Tags } from "lucide-react";
+import { ArrowLeft, Search, Loader2, Package, CheckCircle2, FileText, Tags, QrCode, ListChecks, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { toast } from "sonner";
@@ -21,6 +22,10 @@ export default function Secretariat() {
     const [searchTerm, setSearchTerm] = useState("");
     const [etiquetasAberto, setEtiquetasAberto] = useState(false);
     const [gerando, setGerando] = useState(false);
+    // Modo lote: só aparece quando o usuário pede, pra não encher a tela de
+    // caixinhas no uso normal (um competidor por vez no balcão).
+    const [modoLote, setModoLote] = useState(false);
+    const [selecionados, setSelecionados] = useState<number[]>([]);
 
     const { data: event, isLoading: eventLoading } = trpc.events.get.useQuery(
         { id: eventId },
@@ -48,6 +53,15 @@ export default function Secretariat() {
         onSuccess: () => {
             utils.registrations.getEventRegistrationsForSecretariat.invalidate({ eventId });
         }
+    });
+
+    const loteMutation = trpc.registrations.toggleCheckinStatusBulk.useMutation({
+        onSuccess: (r) => {
+            utils.registrations.getEventRegistrationsForSecretariat.invalidate({ eventId });
+            toast.success(`${r.atualizadas} inscrição(ões) atualizada(s)`);
+            setSelecionados([]);
+        },
+        onError: (e) => toast.error(e.message || "Não foi possível atualizar em lote"),
     });
 
     if (eventLoading || regsLoading || categoriesLoading) {
@@ -125,6 +139,20 @@ export default function Secretariat() {
         }
     };
 
+    const alternarSelecao = (id: number) => {
+        setSelecionados(atual => atual.includes(id) ? atual.filter(i => i !== id) : [...atual, id]);
+    };
+
+    const aplicarNoLote = (campo: "kitDelivered" | "isCheckedIn", valor: boolean) => {
+        if (!selecionados.length) return;
+        loteMutation.mutate({ registrationIds: selecionados, [campo]: valor } as any);
+    };
+
+    const sairDoLote = () => {
+        setModoLote(false);
+        setSelecionados([]);
+    };
+
     const getCategoryName = (categoryId: number) => {
         return categories?.find((c: any) => c.id === categoryId)?.name || 'Desconhecida';
     };
@@ -178,6 +206,88 @@ export default function Secretariat() {
                         </Button>
                     </div>
 
+                    {/* Leitor de QR e marcação em lote */}
+                    <div className="flex gap-2 mb-3">
+                        <Link href="/check-in" className="flex-1">
+                            <Button variant="outline" className="w-full h-10">
+                                <QrCode className="mr-2 h-4 w-4" />
+                                Ler QR
+                            </Button>
+                        </Link>
+                        <Button
+                            variant={modoLote ? "default" : "outline"}
+                            className="flex-1 h-10"
+                            onClick={() => (modoLote ? sairDoLote() : setModoLote(true))}
+                        >
+                            {modoLote ? <X className="mr-2 h-4 w-4" /> : <ListChecks className="mr-2 h-4 w-4" />}
+                            {modoLote ? "Sair do lote" : "Marcar em lote"}
+                        </Button>
+                    </div>
+
+                    {modoLote && (
+                        <div className="mb-3 rounded-lg border bg-muted/40 p-3 space-y-2">
+                            <div className="flex items-center justify-between text-sm">
+                                <span className="font-semibold">
+                                    {selecionados.length} selecionado(s)
+                                </span>
+                                <div className="flex gap-3">
+                                    <button
+                                        className="text-primary hover:underline"
+                                        onClick={() => setSelecionados(filteredRegistrations.map((r: any) => r.id))}
+                                    >
+                                        Selecionar {searchTerm ? "os filtrados" : "todos"}
+                                    </button>
+                                    {selecionados.length > 0 && (
+                                        <button className="text-muted-foreground hover:underline" onClick={() => setSelecionados([])}>
+                                            Limpar
+                                        </button>
+                                    )}
+                                </div>
+                            </div>
+                            <div className="grid grid-cols-2 gap-2">
+                                <Button
+                                    size="sm"
+                                    variant="outline"
+                                    disabled={!selecionados.length || loteMutation.isPending}
+                                    onClick={() => aplicarNoLote("kitDelivered", true)}
+                                >
+                                    <Package className="mr-2 h-4 w-4" />
+                                    Kit entregue
+                                </Button>
+                                <Button
+                                    size="sm"
+                                    variant="outline"
+                                    disabled={!selecionados.length || loteMutation.isPending}
+                                    onClick={() => aplicarNoLote("isCheckedIn", true)}
+                                >
+                                    <CheckCircle2 className="mr-2 h-4 w-4" />
+                                    Check-in
+                                </Button>
+                            </div>
+                            {/* Desmarcar existe porque marcar em lote erra em lote também. */}
+                            <div className="grid grid-cols-2 gap-2">
+                                <Button
+                                    size="sm"
+                                    variant="ghost"
+                                    className="text-xs text-muted-foreground"
+                                    disabled={!selecionados.length || loteMutation.isPending}
+                                    onClick={() => aplicarNoLote("kitDelivered", false)}
+                                >
+                                    Desfazer kit
+                                </Button>
+                                <Button
+                                    size="sm"
+                                    variant="ghost"
+                                    className="text-xs text-muted-foreground"
+                                    disabled={!selecionados.length || loteMutation.isPending}
+                                    onClick={() => aplicarNoLote("isCheckedIn", false)}
+                                >
+                                    Desfazer check-in
+                                </Button>
+                            </div>
+                        </div>
+                    )}
+
                     <div className="relative">
                         <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground focus:text-primary transition-colors" />
                         <Input
@@ -199,19 +309,30 @@ export default function Secretariat() {
                     filteredRegistrations.map((reg: any) => {
                         const isCompleted = reg.isCheckedIn;
                         const hasPendingPayment = reg.status !== "paid" && reg.status !== "confirmed";
+                        const selecionado = selecionados.includes(reg.id);
 
                         return (
                             <Card
                                 key={reg.id}
-                                className={`overflow-hidden transition-all duration-300 ${isCompleted
-                                    ? "border-green-500/50 bg-green-50/10 dark:bg-green-950/20"
-                                    : "border-border shadow-sm"
+                                className={`overflow-hidden transition-all duration-300 ${selecionado
+                                    ? "border-primary ring-2 ring-primary/30"
+                                    : isCompleted
+                                        ? "border-green-500/50 bg-green-50/10 dark:bg-green-950/20"
+                                        : "border-border shadow-sm"
                                     }`}
+                                onClick={modoLote ? () => alternarSelecao(reg.id) : undefined}
                             >
                                 {/* Cabeçalho do Card */}
                                 <CardHeader className="p-4 pb-2">
                                     <div className="flex justify-between items-start gap-2">
-                                        <div>
+                                        {modoLote && (
+                                            <Checkbox
+                                                checked={selecionado}
+                                                onCheckedChange={() => alternarSelecao(reg.id)}
+                                                className="mt-1 scale-125"
+                                            />
+                                        )}
+                                        <div className="flex-1 min-w-0">
                                             <CardTitle className="text-lg leading-tight mb-1 flex items-center gap-2">
                                                 {reg.pilotName}
                                                 {isCompleted && <CheckCircle2 className="h-5 w-5 text-green-500" />}
@@ -273,6 +394,7 @@ export default function Secretariat() {
                                 </CardContent>
 
                                 {/* Rodapé do Card: A Ação (Switches Grandes) */}
+                                {!modoLote && (
                                 <CardFooter className="p-4 bg-card border-t grid grid-cols-1 gap-4">
 
                                     <div className="flex items-center justify-between p-2 rounded-lg hover:bg-muted/50 transition-colors">
@@ -315,6 +437,7 @@ export default function Secretariat() {
                                     </div>
 
                                 </CardFooter>
+                                )}
                             </Card>
                         );
                     })

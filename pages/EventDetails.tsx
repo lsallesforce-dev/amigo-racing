@@ -11,6 +11,7 @@ import { Separator } from "@/components/ui/separator";
 import { getLoginUrl } from "@/api/_server/const";
 import { trpc } from "@/lib/trpc";
 import { normalizeShirtSize } from "@/shared/shirtSizes";
+import { formatarTelefone } from "@/shared/telefone";
 import { Calendar, MapPin, ArrowLeft, Users, DollarSign, Car, Trash2, Pencil, ShoppingBag, Trophy, Plus, Loader2, ArrowRight, GripVertical } from "lucide-react";
 import { Link, useParams } from "wouter";
 import { format } from "date-fns";
@@ -306,6 +307,7 @@ export default function EventDetails() {
     pilot_phone: "",
     navigator_name: "",
     navigator_email: "",
+    navigator_phone: "",
     navigator_cpf: "",
     navigator_city: "",
     navigator_state: "",
@@ -346,6 +348,7 @@ export default function EventDetails() {
         pilot_phone: "",
         navigator_name: "",
         navigator_email: "",
+        navigator_phone: "",
         navigator_cpf: "",
         navigator_city: "",
         navigator_state: "",
@@ -431,6 +434,7 @@ export default function EventDetails() {
       phone: formData.pilot_phone,
       navigatorName: formData.navigator_name || null,
       navigatorEmail: formData.navigator_email || null,
+      navigatorPhone: formData.navigator_phone ? formData.navigator_phone.replace(/\D/g, '') : null,
       navigatorCpf: formData.navigator_cpf || null,
       navigatorCity: formData.navigator_city || null,
       navigatorState: formData.navigator_state || null,
@@ -981,18 +985,10 @@ export default function EventDetails() {
                         <Input
                           id="pilot_phone"
                           value={formData.pilot_phone}
-                          onChange={(e) => {
-                            const value = e.target.value.replace(/\D/g, '');
-                            const formatted = value.length <= 11
-                              ? value.replace(/(\d{2})(\d{0,5})(\d{0,4})/, (_, ddd, p1, p2) => {
-                                let result = ddd;
-                                if (p1) result += ` ${p1}`;
-                                if (p2) result += `-${p2}`;
-                                return result;
-                              })
-                              : formData.pilot_phone;
-                            setFormData({ ...formData, pilot_phone: formatted });
-                          }}
+                          onChange={(e) => setFormData({
+                            ...formData,
+                            pilot_phone: formatarTelefone(e.target.value, formData.pilot_phone),
+                          })}
                           placeholder="11 98765-4321"
                           maxLength={15}
                         />
@@ -1025,6 +1021,19 @@ export default function EventDetails() {
                               value={formData.navigator_email}
                               onChange={(e) => setFormData({ ...formData, navigator_email: e.target.value })}
                               placeholder="email@exemplo.com"
+                            />
+                          </div>
+                          <div className="space-y-2">
+                            <Label htmlFor="navigator_phone">Telefone</Label>
+                            <Input
+                              id="navigator_phone"
+                              value={formData.navigator_phone}
+                              onChange={(e) => setFormData({
+                                ...formData,
+                                navigator_phone: formatarTelefone(e.target.value, formData.navigator_phone),
+                              })}
+                              placeholder="11 98765-4321"
+                              maxLength={15}
                             />
                           </div>
                           <div className="space-y-2">

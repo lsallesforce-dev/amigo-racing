@@ -1754,6 +1754,7 @@ export const appRouter = router({
         phone: z.string(),
         navigatorName: z.string().nullable().optional(),
         navigatorEmail: z.string().nullable().optional(),
+        navigatorPhone: z.string().nullable().optional(),
         navigatorCpf: z.string().nullable().optional(),
         navigatorCity: z.string().nullable().optional(),
         navigatorState: z.string().nullable().optional(),
@@ -2019,6 +2020,7 @@ export const appRouter = router({
         pilotShirtSize: z.string().optional(),
         navigatorName: z.string().nullable().optional(),
         navigatorEmail: z.string().nullable().optional(),
+        navigatorPhone: z.string().nullable().optional(),
         navigatorCpf: z.string().nullable().optional(),
         navigatorShirtSize: z.string().nullable().optional(),
         vehicleBrand: z.string().nullable().optional(),
@@ -2275,6 +2277,7 @@ export const appRouter = router({
         phone: z.string().nullable().optional(),
         navigatorName: z.string().nullable().optional(),
         navigatorEmail: z.string().nullable().optional(),
+        navigatorPhone: z.string().nullable().optional(),
         navigatorCpf: z.string().nullable().optional(),
         navigatorCity: z.string().nullable().optional(),
         navigatorState: z.string().nullable().optional(),
@@ -2453,6 +2456,44 @@ export const appRouter = router({
         }
 
         return { success: true };
+      }),
+    /**
+     * Mesma coisa do toggleCheckinStatus, mas pra uma seleção inteira — na mesa
+     * da secretaria são dezenas de kits e um switch por vez é lento demais.
+     * O UPDATE é um só; o ownership é conferido pelo evento, não por inscrição,
+     * porque a seleção sai de uma tela que já é de um evento só.
+     */
+    toggleCheckinStatusBulk: protectedProcedure
+      .input(z.object({
+        registrationIds: z.array(z.number()).min(1).max(500),
+        isCheckedIn: z.boolean().optional(),
+        kitDelivered: z.boolean().optional(),
+        waiverSigned: z.boolean().optional(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        const user = ctx.user as any;
+        const { registrationIds, ...updates } = input;
+        if (Object.keys(updates).length === 0) return { atualizadas: 0 };
+
+        const dbInstance = await getDb();
+        if (!dbInstance) throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Database fail' });
+
+        const alvos = await dbInstance.select({ id: registrations.id, eventId: registrations.eventId })
+          .from(registrations)
+          .where(inArray(registrations.id, registrationIds));
+        if (alvos.length === 0) throw new TRPCError({ code: 'NOT_FOUND', message: 'Inscrições não encontradas' });
+
+        // Uma seleção que atravessa eventos é sinal de id vindo de fora da tela:
+        // confere o acesso de cada evento envolvido antes de gravar.
+        for (const eventId of new Set(alvos.map(a => a.eventId))) {
+          await assertStartOrderAccess(user, eventId);
+        }
+
+        await dbInstance.update(registrations)
+          .set(updates)
+          .where(inArray(registrations.id, alvos.map(a => a.id)));
+
+        return { atualizadas: alvos.length };
       }),
     markReceivedOffline: protectedProcedure
       .input(z.object({ registrationId: z.number() }))
@@ -3524,6 +3565,7 @@ export const appRouter = router({
               'ESTADO PILOTO': reg?.pilotState || '',
               'NOME NAVEGADOR': reg?.navigatorName || '',
               'EMAIL NAVEGADOR': reg?.navigatorEmail || '',
+              'TELEFONE NAVEGADOR': reg?.navigatorPhone || '',
               'CPF NAVEGADOR': reg?.navigatorCpf || '',
               'CIDADE NAVEGADOR': reg?.navigatorCity || '',
               'ESTADO NAVEGADOR': reg?.navigatorState || '',

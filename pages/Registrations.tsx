@@ -17,6 +17,7 @@ import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
 import Navbar from "@/components/Navbar";
 import { normalizeShirtSize, sortShirtSizes } from "@/shared/shirtSizes";
+import { formatarTelefone, somenteDigitos } from "@/shared/telefone";
 
 
 const calculateStartTime = (baseTime: string, index: number, intervalSeconds: number): string => {
@@ -403,6 +404,7 @@ export default function Registrations() {
       phone: registration.phone || "",
       navigatorName: registration.navigatorName || "",
       navigatorEmail: registration.navigatorEmail || "",
+      navigatorPhone: formatarTelefone(registration.navigatorPhone || ""),
       navigatorCpf: registration.navigatorCpf || "",
       navigatorCity: registration.navigatorCity || "",
       navigatorState: registration.navigatorState || "",
@@ -424,6 +426,8 @@ export default function Registrations() {
     if (!editForm) return;
     updateFullMutation.mutate({
       ...editForm,
+      // O campo mostra "11 98765-4321"; o banco guarda só os dígitos.
+      navigatorPhone: editForm.navigatorPhone ? somenteDigitos(editForm.navigatorPhone) : null,
       pilotAge: editForm.pilotAge === "" ? null : Number(editForm.pilotAge),
       vehicleYear: editForm.vehicleYear === "" ? null : Number(editForm.vehicleYear),
       startNumber: editForm.startNumber === "" ? null : Number(editForm.startNumber),
@@ -1462,6 +1466,15 @@ export default function Registrations() {
                     <div className="space-y-1">
                       <Label>Email</Label>
                       <Input value={editForm.navigatorEmail} onChange={(e) => setEditForm({ ...editForm, navigatorEmail: e.target.value })} />
+                    </div>
+                    <div className="space-y-1">
+                      <Label>Telefone</Label>
+                      <Input
+                        value={editForm.navigatorPhone}
+                        onChange={(e) => setEditForm({ ...editForm, navigatorPhone: formatarTelefone(e.target.value, editForm.navigatorPhone) })}
+                        placeholder="11 98765-4321"
+                        maxLength={15}
+                      />
                     </div>
                     <div className="space-y-1">
                       <Label>CPF</Label>

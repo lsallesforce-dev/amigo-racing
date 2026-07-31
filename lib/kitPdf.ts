@@ -111,15 +111,16 @@ export function gerarListaDeKitsPdf(dados: DadosDeKits, eventName: string, logos
 
   // Soma 269mm = A4 paisagem menos as margens de 14mm.
   const colunas = [
-    { head: "Nº", cellWidth: 14, halign: "center" as const },
-    { head: "Piloto", cellWidth: 46 },
-    { head: "Telefone", cellWidth: 30, halign: "center" as const },
-    { head: "Cam.", cellWidth: 16, halign: "center" as const },
-    { head: "Navegador", cellWidth: 46 },
-    { head: "Cam.", cellWidth: 16, halign: "center" as const },
-    { head: "Extras da loja", cellWidth: 58 },
-    { head: "Status", cellWidth: 25, halign: "center" as const },
-    { head: "OK", cellWidth: 18, halign: "center" as const },
+    { head: "Nº", cellWidth: 12, halign: "center" as const },
+    { head: "Piloto", cellWidth: 40 },
+    { head: "Telefone", cellWidth: 27, halign: "center" as const },
+    { head: "Cam.", cellWidth: 15, halign: "center" as const },
+    { head: "Navegador", cellWidth: 40 },
+    { head: "Telefone", cellWidth: 27, halign: "center" as const },
+    { head: "Cam.", cellWidth: 15, halign: "center" as const },
+    { head: "Extras da loja", cellWidth: 47 },
+    { head: "Status", cellWidth: 24, halign: "center" as const },
+    { head: "OK", cellWidth: 16, halign: "center" as const },
   ];
   const head = [colunas.map(c => c.head)];
   const columnStyles: any = {};
@@ -136,6 +137,7 @@ export function gerarListaDeKitsPdf(dados: DadosDeKits, eventName: string, logos
       k.telefone || "-",
       k.camisaPiloto || "-",
       k.navigatorName || "-",
+      k.telefoneNavegador || "-",
       k.camisaNavegador || "-",
       k.extras || "-",
       k.pago ? "Pago" : "PENDENTE",

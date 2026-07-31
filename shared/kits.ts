@@ -18,6 +18,7 @@ export interface Kit {
   pilotName: string;
   navigatorName: string | null;
   telefone: string | null;
+  telefoneNavegador: string | null;
   camisaPiloto: string;
   camisaNavegador: string;
   /** Extras da loja, já formatados: "2x Camiseta Extra (M, G)". */
@@ -101,8 +102,8 @@ export function montarDadosDeKits(
         categoriaNome: nomeDaCategoria(reg.categoryId),
         pilotName: reg.pilotName || "-",
         navigatorName: reg.navigatorName || null,
-        // Só existe o telefone da inscrição (do piloto): não há navigatorPhone.
         telefone: reg.phone || null,
+        telefoneNavegador: reg.navigatorPhone || null,
         camisaPiloto: normalizeShirtSize(reg.pilotShirtSize),
         camisaNavegador: normalizeShirtSize(reg.navigatorShirtSize),
         extras: extras.texto,

@@ -20,6 +20,7 @@ import { PaymentModal } from "@/components/PaymentModal";
 import { EventDocumentsViewer } from "@/components/EventDocumentsViewer";
 import Navbar from "@/components/Navbar";
 import { normalizeShirtSize, sortShirtSizes } from "@/shared/shirtSizes";
+import { formatarTelefone, somenteDigitos } from "@/shared/telefone";
 import { formatarBrasilia } from "@/shared/horarioBrasilia";
 import { estadoPrazoEdicao, mensagemPrazoEdicao } from "@/shared/prazoEdicao";
 
@@ -216,6 +217,7 @@ export default function Dashboard() {
       pilotShirtSize: normalizeShirtSize(reg.pilotShirtSize),
       navigatorName: reg.navigatorName || '',
       navigatorEmail: reg.navigatorEmail || '',
+      navigatorPhone: formatarTelefone(reg.navigatorPhone || ''),
       navigatorCpf: reg.navigatorCPF || '',
       navigatorShirtSize: normalizeShirtSize(reg.navigatorShirtSize),
       vehicleBrand: reg.vehicleBrand || '',
@@ -290,6 +292,7 @@ export default function Dashboard() {
       // Garantir que opcionais vazios vão como null para o backend
       navigatorName: editForm.navigatorName || null,
       navigatorEmail: editForm.navigatorEmail || null,
+      navigatorPhone: editForm.navigatorPhone ? somenteDigitos(editForm.navigatorPhone) : null,
       vehicleBrand: editForm.vehicleBrand || null,
       vehicleModel: editForm.vehicleModel || null,
       vehicleColor: editForm.vehicleColor || null,
@@ -916,6 +919,16 @@ export default function Dashboard() {
                         type="email"
                         value={editForm.navigatorEmail || ''}
                         onChange={(e) => setEditForm({ ...editForm, navigatorEmail: e.target.value })}
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="navigatorPhone">Telefone do Navegador</Label>
+                      <Input
+                        id="navigatorPhone"
+                        value={editForm.navigatorPhone || ''}
+                        onChange={(e) => setEditForm({ ...editForm, navigatorPhone: formatarTelefone(e.target.value, editForm.navigatorPhone || '') })}
+                        placeholder="11 98765-4321"
+                        maxLength={15}
                       />
                     </div>
                     <div>

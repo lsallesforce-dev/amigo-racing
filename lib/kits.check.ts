@@ -8,6 +8,7 @@ import "dotenv/config";
 import * as db from "../api/_server/db.js";
 import { montarDadosDeKits, gradeDeEtiquetas, folhasDeEtiquetas } from "../shared/kits.js";
 import { resolveStartOrder } from "../shared/startOrderLookup.js";
+import { formatarTelefone, somenteDigitos } from "../shared/telefone.js";
 
 const EVENT = 1;
 let falhas = 0;
@@ -121,10 +122,23 @@ async function main() {
       `${g.colunas}x${g.linhas} = ${g.porFolha}/folha · ${dados.totalKits} kits = ${folhas} folha(s) · margens ${g.margemX.toFixed(1)}x${g.margemY.toFixed(1)}mm`);
   }
 
-  // 10) telefone: existe só o da inscrição (piloto). Quantos estão vazios?
-  const semTelefone = dados.kits.filter(k => !k.telefone).length;
-  console.log(`\nTelefone: ${dados.totalKits - semTelefone}/${dados.totalKits} kits têm telefone` +
-    (semTelefone ? ` (${semTelefone} sairão com "-" na lista)` : ""));
+  // 10) telefones: o do piloto (`phone`) e o do navegador (`navigatorPhone`,
+  // criado em 31/07). O do navegador nasce vazio para quem já estava inscrito.
+  const comTelPiloto = dados.kits.filter(k => k.telefone).length;
+  const comTelNav = dados.kits.filter(k => k.telefoneNavegador).length;
+  const comNavegador = dados.kits.filter(k => k.navigatorName).length;
+  check("telefone do navegador chega no kit",
+    dados.kits.every(k => k.telefoneNavegador === null || typeof k.telefoneNavegador === "string"),
+    `${comTelNav}/${comNavegador} inscrições com navegador têm o telefone dele`);
+
+  // A máscara do formulário nunca pode virar o que vai pro banco
+  check("máscara de telefone formata e limpa",
+    formatarTelefone("11987654321") === "11 98765-4321"
+    && somenteDigitos("11 98765-4321") === "11987654321"
+    && formatarTelefone("123456789012", "11 98765-4321") === "11 98765-4321",
+    `"11987654321" -> "${formatarTelefone("11987654321")}" (dígito a mais é recusado)`);
+
+  console.log(`\nTelefone: piloto ${comTelPiloto}/${dados.totalKits} · navegador ${comTelNav}/${comNavegador}`);
   console.log(`Resumo: ${dados.totalKits} kits · ${dados.totalCamisetas} camisetas · ${dados.totalPendentes} pendente(s)`);
   console.log("Por tamanho: " + dados.totaisPorTamanho.map(t => `${t.size}=${t.total}`).join(" "));
 
