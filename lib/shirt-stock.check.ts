@@ -15,36 +15,49 @@ async function main() {
   const avail = await db.getShirtAvailability(EVENT);
   console.log("Disponível hoje:", avail.map(a => `${a.size}=${a.available}`).join(" "));
 
+  // Os tamanhos são escolhidos AGORA, não chumbados: o estoque muda a cada
+  // inscrição/cancelamento e um teste preso em "M está esgotado" quebra sozinho
+  // sem nada de errado no sistema.
+  const esgotado = avail.find(a => a.available <= 0);
+  const comFolga = [...avail].sort((a, b) => b.available - a.available)[0];
+  if (!esgotado || !comFolga || comFolga.available < 1) {
+    throw new Error("preciso de um tamanho esgotado e um com folga no evento 1 para testar");
+  }
+  console.log(`Usando: esgotado=${esgotado.size}(${esgotado.available}) folga=${comFolga.size}(${comFolga.available})\n`);
+
   // 1) tamanho esgotado é barrado
-  const c1 = await db.checkShirtSizesAvailable(EVENT, ["M"]);
-  check("pedido de M (esgotado)", !!c1, JSON.stringify(c1));
+  const c1 = await db.checkShirtSizesAvailable(EVENT, [esgotado.size]);
+  check(`pedido de ${esgotado.size} (esgotado)`, !!c1, JSON.stringify(c1));
 
   // 2) tamanho com folga passa
-  const c2 = await db.checkShirtSizesAvailable(EVENT, ["G2"]);
-  check("pedido de G2 (5 livres)", c2 === null, String(c2));
+  const c2 = await db.checkShirtSizesAvailable(EVENT, [comFolga.size]);
+  check(`pedido de ${comFolga.size} (${comFolga.available} livres)`, c2 === null, String(c2));
 
   // 3) minúsculo antigo normaliza igual
-  const c3 = await db.checkShirtSizesAvailable(EVENT, ["m"]);
-  check("pedido de 'm' minúsculo", !!c3, JSON.stringify(c3));
+  const c3 = await db.checkShirtSizesAvailable(EVENT, [esgotado.size.toLowerCase()]);
+  check(`pedido de '${esgotado.size.toLowerCase()}' minúsculo`, !!c3, JSON.stringify(c3));
 
   // 4) pedir mais do que tem no mesmo pedido
-  const c4 = await db.checkShirtSizesAvailable(EVENT, ["G2", "G2", "G2", "G2", "G2", "G2"]);
-  check("6x G2 com 5 livres", !!c4, JSON.stringify(c4));
+  const demais = Array(comFolga.available + 1).fill(comFolga.size);
+  const c4 = await db.checkShirtSizesAvailable(EVENT, demais);
+  check(`${demais.length}x ${comFolga.size} com ${comFolga.available} livres`, !!c4, JSON.stringify(c4));
 
-  // 5) EDIÇÃO que não mexe na camiseta não pode ser barrada
+  // 5) EDIÇÃO que não mexe na camiseta não pode ser barrada — inclusive quando o
+  // tamanho da inscrição está esgotado (ela já ocupa a própria vaga)
   const regs = await db.getRegistrationsByEventId(EVENT) as any[];
-  const alvo = regs.find(r => r.status !== "cancelled" && String(r.pilotShirtSize).toUpperCase() === "M");
+  const alvo = regs.find(r => r.status !== "cancelled"
+    && shirtSizesOfRegistration(r).includes(esgotado.size)) || regs.find(r => r.status !== "cancelled");
   const mesmos = shirtSizesOfRegistration(alvo);
   const c5 = await db.checkShirtSizesAvailable(EVENT, mesmos, mesmos);
-  check(`edição sem trocar tamanho (#${alvo.id}, M esgotado)`, c5 === null, String(c5));
+  check(`edição sem trocar tamanho (#${alvo.id}: ${mesmos.join("+")})`, c5 === null, String(c5));
 
-  // 6) EDIÇÃO trocando M -> G2 (tem folga) passa
-  const c6 = await db.checkShirtSizesAvailable(EVENT, ["G2"], ["M"]);
-  check("edição M -> G2", c6 === null, String(c6));
+  // 6) EDIÇÃO trocando esgotado -> com folga passa
+  const c6 = await db.checkShirtSizesAvailable(EVENT, [comFolga.size], [esgotado.size]);
+  check(`edição ${esgotado.size} -> ${comFolga.size}`, c6 === null, String(c6));
 
-  // 7) EDIÇÃO trocando G2 -> M (esgotado) é barrada
-  const c7 = await db.checkShirtSizesAvailable(EVENT, ["M"], ["G2"]);
-  check("edição G2 -> M (esgotado)", !!c7, JSON.stringify(c7));
+  // 7) EDIÇÃO trocando com folga -> esgotado é barrada
+  const c7 = await db.checkShirtSizesAvailable(EVENT, [esgotado.size], [comFolga.size]);
+  check(`edição ${comFolga.size} -> ${esgotado.size} (esgotado)`, !!c7, JSON.stringify(c7));
 
   // 8) evento sem estoque cadastrado não trava nada (retrocompatível)
   const c8 = await db.checkShirtSizesAvailable(99999, ["M", "M", "M"]);

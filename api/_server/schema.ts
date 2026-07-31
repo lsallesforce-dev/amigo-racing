@@ -111,6 +111,9 @@ export const events = pgTable("events", {
   allowCancellation: boolean("allowCancellation").default(false),
   hasShirts: boolean("hasShirts").default(true).notNull(),
   cancellationDeadlineDays: integer("cancellationDeadlineDays").default(0),
+  // Dias antes do evento em que o COMPETIDOR para de poder editar a própria
+  // inscrição (a organização continua editando). 0 = sem trava.
+  editDeadlineDays: integer("editDeadlineDays").default(2).notNull(),
   refundEnabled: boolean("refundEnabled").default(false),
   sponsors: json("sponsors"), // Array of strings (image URLs)
   gallery: json("gallery"), // Array of strings (image URLs)

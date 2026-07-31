@@ -141,6 +141,7 @@ export function EventEditDialog({ open, onOpenChange, event, onSuccess }: EventE
                 terms: event.terms || "",
                 navigationFiles: event.navigationFiles || [],
                 accepts_credit_card: event.accepts_credit_card ?? true,
+                editDeadlineDays: (event as any).editDeadlineDays ?? 2,
             });
 
             // We need to fetch the stage link separately or have it passed
@@ -476,6 +477,31 @@ export function EventEditDialog({ open, onOpenChange, event, onSuccess }: EventE
                             <Label htmlFor="edit-allow-cancellation" className="text-sm font-normal cursor-pointer">
                                 Permitir que competidores solicitem cancelamento da inscrição
                             </Label>
+                        </div>
+                        <div className="rounded-lg border p-3 bg-muted/20 space-y-1.5">
+                            <Label htmlFor="edit-deadline-days" className="text-sm font-medium">
+                                Travar edição das inscrições
+                            </Label>
+                            <div className="flex items-center gap-2">
+                                <Input
+                                    id="edit-deadline-days"
+                                    type="number"
+                                    min={0}
+                                    max={60}
+                                    className="w-20 h-9"
+                                    value={editingEvent.editDeadlineDays ?? 2}
+                                    onChange={(e) => setEditingEvent({
+                                        ...editingEvent,
+                                        editDeadlineDays: Math.max(0, Math.min(60, parseInt(e.target.value, 10) || 0)),
+                                    })}
+                                />
+                                <span className="text-xs text-muted-foreground">dias antes do evento</span>
+                            </div>
+                            <p className="text-[11px] text-muted-foreground">
+                                A partir daí o competidor não altera mais a própria inscrição — você continua
+                                editando normalmente pela tela de Inscritos. Use <strong>0</strong> para deixar
+                                editar até o dia do evento.
+                            </p>
                         </div>
                         <div className="flex items-center space-x-2">
                             <input

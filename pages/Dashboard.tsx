@@ -21,6 +21,7 @@ import { EventDocumentsViewer } from "@/components/EventDocumentsViewer";
 import Navbar from "@/components/Navbar";
 import { normalizeShirtSize, sortShirtSizes } from "@/shared/shirtSizes";
 import { formatarBrasilia } from "@/shared/horarioBrasilia";
+import { estadoPrazoEdicao, mensagemPrazoEdicao } from "@/shared/prazoEdicao";
 
 // Mesmo token canônico do estoque/formulário público. A lista fixa minúscula antiga
 // não batia com o que o formulário grava hoje ("M", "G1", "INF6") e o select abria
@@ -140,12 +141,16 @@ export default function Dashboard() {
     },
   });
 
+  // Prazo de edição do competidor. A mesma regra roda no backend
+  // (updateMyRegistration) — aqui é só pra não mostrar um botão que vai falhar.
+  const prazoEdicaoDe = (reg: any) => estadoPrazoEdicao({
+    startDate: reg?.eventStartDate,
+    editDeadlineDays: reg?.eventEditDeadlineDays,
+  });
+
   const canEditRegistration = (reg: any) => {
     if (reg.status === 'cancelled') return false;
-
-    // Verificar se ainda é possível editar (até 1 dia antes do evento)
-    // Como não temos a data do evento aqui, vamos permitir e deixar o backend validar
-    return true;
+    return !prazoEdicaoDe(reg).bloqueado;
   };
 
   // Função para formatar data para input type="date"
@@ -504,7 +509,7 @@ export default function Dashboard() {
                       </div>
                     )}
                     <CardFooter className="flex flex-wrap gap-2">
-                      {canEditRegistration(reg) && (
+                      {canEditRegistration(reg) ? (
                         <Button
                           size="sm"
                           variant="outline"
@@ -513,6 +518,13 @@ export default function Dashboard() {
                         >
                           Editar Inscrição
                         </Button>
+                      ) : reg.status !== 'cancelled' && prazoEdicaoDe(reg).bloqueado && (
+                        // Some o botão e explica o motivo — sem isso o competidor
+                        // acha que quebrou.
+                        <p className="w-full text-[11px] text-muted-foreground flex items-start gap-1.5 rounded-md border bg-muted/30 p-2">
+                          <Lock className="h-3 w-3 mt-0.5 shrink-0" />
+                          {mensagemPrazoEdicao(prazoEdicaoDe(reg))}
+                        </p>
                       )}
                       {reg.status === 'pending' && (
                         <>

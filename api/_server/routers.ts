@@ -21,6 +21,7 @@ import { renderEmail, textoParaHtml } from "../../shared/emailLayout.js";
 import { VARIAVEIS_EMAIL, valoresDaInscricao, aplicarVariaveis, aplicarVariaveisTexto, variaveisDesconhecidas } from "../../shared/emailVars.js";
 import { resolveStartOrder } from "../../shared/startOrderLookup.js";
 import { COBRANCA_ASSUNTO_PADRAO, COBRANCA_CORPO_PADRAO } from "../../shared/cobrancaTemplate.js";
+import { estadoPrazoEdicao, mensagemPrazoEdicao } from "../../shared/prazoEdicao.js";
 import { ENV } from "./env.js";
 import { sendEmail } from "./email.js";
 import { timingSafeEqual } from "crypto";
@@ -1540,6 +1541,7 @@ export const appRouter = router({
         allowCancellation: z.boolean().optional().nullable(),
         hasShirts: z.boolean().optional().nullable(),
         cancellationDeadlineDays: z.number().optional().nullable(),
+        editDeadlineDays: z.number().int().min(0).max(60).optional().nullable(),
         refundEnabled: z.boolean().optional().nullable(),
         terms: z.string().optional().nullable(),
         documents: z.string().optional().nullable(),
@@ -2043,6 +2045,46 @@ export const appRouter = router({
         const reg = await db.getRegistrationById(registrationId);
         if (!reg || reg.userId !== ctx.user.id) {
           throw new TRPCError({ code: 'UNAUTHORIZED', message: 'Inscrição não encontrada ou sem permissão' });
+        }
+
+        const eventoDaInscricao = await db.getEventById(reg.eventId) as any;
+
+        // Perto do evento a lista precisa parar de mexer: a organização fecha
+        // largada, kit e camiseta em cima destes dados. Só o competidor é barrado
+        // aqui — a organização edita por registrations.updateFull, sem prazo.
+        const prazo = estadoPrazoEdicao({
+          startDate: eventoDaInscricao?.startDate,
+          editDeadlineDays: eventoDaInscricao?.editDeadlineDays,
+        });
+        if (prazo.bloqueado) {
+          throw new TRPCError({ code: 'FORBIDDEN', message: mensagemPrazoEdicao(prazo) });
+        }
+
+        // Trocar tamanho de camiseta também consome estoque. A trava existia na
+        // inscrição nova e na edição pelo painel do organizador; faltava aqui.
+        const mexeuNaCamiseta =
+          data.pilotShirtSize !== undefined ||
+          data.navigatorShirtSize !== undefined ||
+          data.purchasedProducts !== undefined;
+
+        if (mexeuNaCamiseta && reg.eventId) {
+          const depois = shirtSizesOfRegistration({
+            ...reg,
+            pilotShirtSize: data.pilotShirtSize ?? reg.pilotShirtSize,
+            navigatorShirtSize: data.navigatorShirtSize === undefined
+              ? reg.navigatorShirtSize
+              : data.navigatorShirtSize,
+            purchasedProducts: data.purchasedProducts ?? reg.purchasedProducts,
+          });
+          const antes = reg.status === 'cancelled' ? [] : shirtSizesOfRegistration(reg);
+
+          const conflito = await db.checkShirtSizesAvailable(reg.eventId, depois, antes);
+          if (conflito) {
+            throw new TRPCError({
+              code: 'BAD_REQUEST',
+              message: `Estoque de camiseta esgotado para o tamanho ${conflito.size} (disponível: ${conflito.disponivel}, pedido: ${conflito.pedido}). Escolha outro tamanho disponível.`,
+            });
+          }
         }
 
         // Ajusta estoque pela diferença entre a quantidade antiga e a nova de cada produto

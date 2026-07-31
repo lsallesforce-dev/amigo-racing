@@ -571,6 +571,8 @@ export async function getRegistrationsByUserId(userId: number) {
       categoryName: categories.name,
       parentCategoryName: sql<string | null>`(SELECT name FROM categories AS parent WHERE parent.id = categories."parentId")`,
       eventName: events.name,
+      eventStartDate: events.startDate,
+      eventEditDeadlineDays: sql<number | null>`events."editDeadlineDays"`,
       eventDocuments: sql<string | null>`events.documents`,
       eventNavigationFiles: sql<any | null>`events."navigationFiles"`,
       eventAllowCancellation: sql<boolean | null>`events."allowCancellation"`,
