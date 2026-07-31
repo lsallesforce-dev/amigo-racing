@@ -16,7 +16,8 @@
     "check:emails": "tsx lib/emails.check.ts",
     "check:cobranca": "tsx lib/cobranca-link.check.ts",
     "migrate": "tsx lib/migrate.ts",
-    "check:prazo-edicao": "tsx lib/prazo-edicao.check.ts"
+    "check:prazo-edicao": "tsx lib/prazo-edicao.check.ts",
+    "check:kits": "tsx lib/kits.check.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1078.0",
@@ -56,6 +57,7 @@
     "@trpc/server": "^11.0.0-rc.477",
     "@types/cookie": "^0.6.0",
     "@types/cors": "^2.8.19",
+    "@types/qrcode": "^1.5.6",
     "@types/react-big-calendar": "^1.16.3",
     "axios": "^1.7.7",
     "browser-image-compression": "^2.0.2",
@@ -78,6 +80,7 @@
     "multer": "^2.1.1",
     "nodemailer": "^8.0.2",
     "postgres": "^3.4.8",
+    "qrcode": "^1.5.4",
     "qrcode.react": "^4.2.0",
     "react": "^18.3.1",
     "react-big-calendar": "^1.19.4",

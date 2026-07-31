@@ -6,14 +6,21 @@ import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/componen
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
-import { ArrowLeft, Search, Loader2, Package, CheckCircle2 } from "lucide-react";
+import { ArrowLeft, Search, Loader2, Package, CheckCircle2, FileText, Tags } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { toast } from "sonner";
 import Navbar from "@/components/Navbar";
+import { gerarListaDeKitsPdf, gerarEtiquetasPdf, carregarLogoAmigo, nomeDeArquivo } from "@/lib/kitPdf";
+import { montarDadosDeKits, gradeDeEtiquetas, folhasDeEtiquetas, type FormatoEtiqueta } from "@/shared/kits";
+import { normalizeShirtSize } from "@/shared/shirtSizes";
 
 export default function Secretariat() {
     const params = useParams<any>();
     const eventId = parseInt(params?.id || "0", 10);
     const [searchTerm, setSearchTerm] = useState("");
+    const [etiquetasAberto, setEtiquetasAberto] = useState(false);
+    const [gerando, setGerando] = useState(false);
 
     const { data: event, isLoading: eventLoading } = trpc.events.get.useQuery(
         { id: eventId },
@@ -26,6 +33,12 @@ export default function Secretariat() {
     );
 
     const { data: registrations, isLoading: regsLoading } = trpc.registrations.getEventRegistrationsForSecretariat.useQuery(
+        { eventId: eventId },
+        { enabled: eventId > 0 }
+    );
+
+    // Número e horário de largada vivem na start_order_config, não na inscrição.
+    const { data: startConfigs } = trpc.startOrder.getByEvent.useQuery(
         { eventId: eventId },
         { enabled: eventId > 0 }
     );
@@ -56,6 +69,62 @@ export default function Secretariat() {
         });
     };
 
+    const dadosDeKits = montarDadosDeKits(registrations as any[], categories as any[], startConfigs as any[]);
+
+    /** Logos usadas nos PDFs. A do evento vem do backend em base64 (evita CORS do R2). */
+    const carregarLogos = async () => {
+        const amigo = await carregarLogoAmigo();
+        let evento: string | null = null;
+        try {
+            const r = await utils.events.getLogoDataUrl.fetch({ eventId });
+            evento = r?.dataUrl || null;
+        } catch (e) {
+            console.warn("Não foi possível carregar o logo do evento", e);
+        }
+        return { amigo, evento };
+    };
+
+    const handleGerarLista = async () => {
+        if (!dadosDeKits.totalKits) {
+            toast.error("Não há inscrições para montar kit.");
+            return;
+        }
+        setGerando(true);
+        try {
+            toast.info("Gerando PDF: Lista de Kits...");
+            const logos = await carregarLogos();
+            const doc = gerarListaDeKitsPdf(dadosDeKits, event.name, logos);
+            doc.save(nomeDeArquivo("lista_kits", event.name));
+            toast.success("PDF gerado: Lista de Kits!");
+        } catch (error) {
+            console.error("Erro ao gerar a lista de kits:", error);
+            toast.error("Erro ao gerar a lista de kits");
+        } finally {
+            setGerando(false);
+        }
+    };
+
+    const handleGerarEtiquetas = async (formato: FormatoEtiqueta) => {
+        if (!dadosDeKits.totalKits) {
+            toast.error("Não há inscrições para etiquetar.");
+            return;
+        }
+        setGerando(true);
+        try {
+            toast.info("Gerando etiquetas...");
+            const logos = await carregarLogos();
+            const doc = await gerarEtiquetasPdf(dadosDeKits, event.name, logos.evento, formato);
+            doc.save(nomeDeArquivo(`etiquetas_${formato}`, event.name));
+            toast.success(`Etiquetas geradas: ${folhasDeEtiquetas(dadosDeKits.totalKits, formato)} folha(s)!`);
+            setEtiquetasAberto(false);
+        } catch (error) {
+            console.error("Erro ao gerar as etiquetas:", error);
+            toast.error("Erro ao gerar as etiquetas");
+        } finally {
+            setGerando(false);
+        }
+    };
+
     const getCategoryName = (categoryId: number) => {
         return categories?.find((c: any) => c.id === categoryId)?.name || 'Desconhecida';
     };
@@ -81,10 +150,32 @@ export default function Secretariat() {
                                 <ArrowLeft className="h-5 w-5" />
                             </Button>
                         </Link>
-                        <div className="flex-1">
+                        <div className="flex-1 min-w-0">
                             <h1 className="text-xl font-bold leading-none tracking-tight">Secretaria</h1>
                             <p className="text-sm text-muted-foreground truncate">{event.name}</p>
                         </div>
+                    </div>
+
+                    {/* Montagem de kits: o papel de trabalho e as etiquetas do saco */}
+                    <div className="flex gap-2 mb-3">
+                        <Button
+                            variant="outline"
+                            className="flex-1 h-10"
+                            onClick={handleGerarLista}
+                            disabled={gerando || !dadosDeKits.totalKits}
+                        >
+                            <FileText className="mr-2 h-4 w-4" />
+                            Gerar Lista Kits
+                        </Button>
+                        <Button
+                            variant="outline"
+                            className="flex-1 h-10"
+                            onClick={() => setEtiquetasAberto(true)}
+                            disabled={gerando || !dadosDeKits.totalKits}
+                        >
+                            <Tags className="mr-2 h-4 w-4" />
+                            Gerar Etiquetas
+                        </Button>
                     </div>
 
                     <div className="relative">
@@ -148,7 +239,17 @@ export default function Secretariat() {
                                                             <li key={idx} className="text-muted-foreground flex gap-1">
                                                                 <span>{p.quantity}x</span>
                                                                 <span>{p.name || `Produto ID ${p.productId}`}</span>
-                                                                {p.size && <span className="font-medium text-foreground ml-1">(Tam: {p.size.toUpperCase()})</span>}
+                                                                {/* O sistema grava `sizes` (array); o `size` singular
+                                                                    nunca existiu — por isso o tamanho do extra não
+                                                                    aparecia aqui. */}
+                                                                {(() => {
+                                                                    const tams = (Array.isArray(p.sizes) ? p.sizes : (p.size ? [p.size] : []))
+                                                                        .map(normalizeShirtSize)
+                                                                        .filter(Boolean);
+                                                                    return tams.length
+                                                                        ? <span className="font-medium text-foreground ml-1">(Tam: {tams.join(", ")})</span>
+                                                                        : null;
+                                                                })()}
                                                             </li>
                                                         ))}
                                                     </ul>
@@ -219,6 +320,46 @@ export default function Secretariat() {
                     })
                 )}
             </div>
+
+            <Dialog open={etiquetasAberto} onOpenChange={setEtiquetasAberto}>
+                <DialogContent className="sm:max-w-md">
+                    <DialogHeader>
+                        <DialogTitle>Etiquetas dos kits</DialogTitle>
+                        <DialogDescription>
+                            {dadosDeKits.totalKits} etiqueta(s) — uma por kit, com logo, número de largada,
+                            nomes, camisetas e QR Code. Escolha o tamanho do papel.
+                        </DialogDescription>
+                    </DialogHeader>
+                    <div className="grid gap-3">
+                        {(["10x15", "10x7"] as FormatoEtiqueta[]).map((formato) => {
+                            const grade = gradeDeEtiquetas(formato);
+                            const folhas = folhasDeEtiquetas(dadosDeKits.totalKits, formato);
+                            return (
+                                <button
+                                    key={formato}
+                                    onClick={() => handleGerarEtiquetas(formato)}
+                                    disabled={gerando}
+                                    className="flex items-center justify-between rounded-xl border p-4 text-left transition-colors hover:bg-muted/50 disabled:opacity-50"
+                                >
+                                    <div>
+                                        <p className="font-semibold">
+                                            {formato === "10x15" ? "10 x 15 cm (grande)" : "10 x 7,4 cm (compacto)"}
+                                        </p>
+                                        <p className="text-sm text-muted-foreground">
+                                            {grade.porFolha} por folha A4 · {folhas} folha(s) no total
+                                        </p>
+                                    </div>
+                                    {gerando ? <Loader2 className="h-5 w-5 animate-spin" /> : <Tags className="h-5 w-5 text-muted-foreground" />}
+                                </button>
+                            );
+                        })}
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                        Imprima uma folha de teste antes de rodar todas — a escala do papel muda de impressora
+                        para impressora. As linhas tracejadas são as marcas de corte.
+                    </p>
+                </DialogContent>
+            </Dialog>
         </div>
     );
 }
