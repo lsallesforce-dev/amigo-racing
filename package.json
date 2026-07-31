@@ -17,7 +17,8 @@
     "check:cobranca": "tsx lib/cobranca-link.check.ts",
     "migrate": "tsx lib/migrate.ts",
     "check:prazo-edicao": "tsx lib/prazo-edicao.check.ts",
-    "check:kits": "tsx lib/kits.check.ts"
+    "check:kits": "tsx lib/kits.check.ts",
+    "check:qr": "tsx lib/qr-etiqueta.check.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1078.0",
@@ -107,6 +108,7 @@
     "@vitejs/plugin-react": "^4.3.1",
     "autoprefixer": "^10.4.20",
     "drizzle-kit": "^0.31.9",
+    "jsqr": "^1.4.0",
     "postcss": "^8.4.47",
     "recharts": "^3.8.0",
     "tailwindcss": "^4.0.0",

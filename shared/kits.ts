@@ -216,6 +216,16 @@ export function gradeDeEtiquetas(formato: FormatoEtiqueta): GradeEtiquetas {
   };
 }
 
+/**
+ * O que vai dentro do QR da etiqueta: a URL do passaporte da inscrição.
+ * Com o hash cru (como era antes) a câmera do celular só mostrava um punhado de
+ * letras e não abria nada.
+ */
+export function urlDoPassaporte(baseUrl: string, accessHash: string): string {
+  const raiz = String(baseUrl || "").replace(/\/+$/, "");
+  return `${raiz}/passport/${accessHash}`;
+}
+
 export function folhasDeEtiquetas(totalKits: number, formato: FormatoEtiqueta): number {
   const { porFolha } = gradeDeEtiquetas(formato);
   return Math.ceil(totalKits / porFolha);

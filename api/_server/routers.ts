@@ -2439,6 +2439,13 @@ export const appRouter = router({
 
         const { registrationId, ...updates } = input;
 
+        // Sem isto, qualquer organizador logado dava check-in em inscrição de
+        // evento alheio só chutando o id. Ficou visível quando o leitor de QR
+        // passou a chamar este endpoint com um id vindo de fora da tela.
+        const alvo = await db.getRegistrationById(registrationId) as any;
+        if (!alvo) throw new TRPCError({ code: 'NOT_FOUND', message: 'Inscrição não encontrada' });
+        await assertStartOrderAccess(user, alvo.eventId);
+
         if (Object.keys(updates).length > 0) {
           await dbInstance.update(registrations)
             .set(updates)
@@ -3627,7 +3634,10 @@ export const appRouter = router({
             navigatorName: reg.navigatorName,
             categoryName: category?.name || "Desconhecida",
             vehicle: `${reg.vehicleBrand || ''} ${reg.vehicleModel || ''}`.trim(),
-            startNumber: reg.startNumber
+            startNumber: reg.startNumber,
+            // A secretaria confere a camiseta na hora de entregar o kit.
+            pilotShirtSize: reg.pilotShirtSize,
+            navigatorShirtSize: reg.navigatorShirtSize
           },
           products: reg.purchasedProducts,
           financial: {

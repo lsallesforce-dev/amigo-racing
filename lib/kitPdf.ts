@@ -8,7 +8,7 @@
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
 import QRCode from "qrcode";
-import { gradeDeEtiquetas, type DadosDeKits, type Kit, type FormatoEtiqueta, type GradeEtiquetas } from "@/shared/kits";
+import { gradeDeEtiquetas, urlDoPassaporte, type DadosDeKits, type Kit, type FormatoEtiqueta, type GradeEtiquetas } from "@/shared/kits";
 
 // ---------------------------------------------------------------- PDF (browser)
 
@@ -251,6 +251,7 @@ export async function gerarEtiquetasPdf(
   eventName: string,
   logoEvento: string | null,
   formato: FormatoEtiqueta,
+  baseUrl: string,
 ): Promise<jsPDF> {
   const grade = gradeDeEtiquetas(formato);
   // O A6 é quase a etiqueta grande (105x148,5 contra 100x150), então usa o
@@ -270,15 +271,19 @@ export async function gerarEtiquetasPdf(
     pad: grande ? 7 : 4.5,
   };
 
-  // QR em VETOR, não em PNG: o jsPDF expande PNG para RGBA cru, e 37 QRs viravam
-  // um PDF de 6 MB. Desenhado com rect fica em alguns kB e sai nítido em
-  // qualquer DPI da impressora. Level 'M' basta (o passaporte usa 'H', mais
-  // denso do que precisa pra um hash lido de perto).
+  // O QR carrega a URL COMPLETA do passaporte, não o hash cru. Com o hash
+  // sozinho, a câmera do celular mostrava um punhado de letras e não fazia nada
+  // — só servia pra um leitor que soubesse o que fazer com aquilo. Com a URL,
+  // qualquer celular abre a página da inscrição.
+  //
+  // Em VETOR, não em PNG: o jsPDF expande PNG para RGBA cru, e 37 QRs viravam um
+  // PDF de 6 MB. Desenhado com rect fica em alguns kB e sai nítido em qualquer
+  // DPI da impressora.
   const qrs = new Map<number, MatrizQr>();
   for (const kit of dados.kits) {
     if (!kit.accessHash) continue;
     try {
-      const qr = QRCode.create(kit.accessHash, { errorCorrectionLevel: "M" });
+      const qr = QRCode.create(urlDoPassaporte(baseUrl, kit.accessHash), { errorCorrectionLevel: "M" });
       qrs.set(kit.id, { size: qr.modules.size, data: qr.modules.data });
     } catch (e) {
       console.warn(`Falha ao gerar QR da inscrição ${kit.id}`, e);

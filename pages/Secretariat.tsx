@@ -113,7 +113,7 @@ export default function Secretariat() {
         try {
             toast.info("Gerando etiquetas...");
             const logos = await carregarLogos();
-            const doc = await gerarEtiquetasPdf(dadosDeKits, event.name, logos.evento, formato);
+            const doc = await gerarEtiquetasPdf(dadosDeKits, event.name, logos.evento, formato, window.location.origin);
             doc.save(nomeDeArquivo(`etiquetas_${formato}`, event.name));
             toast.success(`Etiquetas geradas: ${folhasDeEtiquetas(dadosDeKits.totalKits, formato)} folha(s)!`);
             setEtiquetasAberto(false);
