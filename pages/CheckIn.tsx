@@ -10,6 +10,7 @@ import { Html5Qrcode } from "html5-qrcode";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Loader2, CheckCircle2, Package, ScanLine, AlertTriangle } from "lucide-react";
 import { trpc } from "@/lib/trpc";
@@ -28,6 +29,8 @@ export default function CheckIn() {
   const scannerRef = useRef<Html5Qrcode | null>(null);
   const [scanning, setScanning] = useState(false);
   const [hash, setHash] = useState<string | null>(null);
+  const [erroCamera, setErroCamera] = useState<string | null>(null);
+  const [codigoManual, setCodigoManual] = useState("");
 
   const utils = trpc.useUtils();
   const { data, isLoading, error } = trpc.participants.getPassportByHash.useQuery(
@@ -55,30 +58,69 @@ export default function CheckIn() {
     };
   }, [scanning]);
 
+  const aoLer = async (decodedText: string) => {
+    const lido = extrairHash(decodedText);
+    if (!lido) {
+      toast.error("Esse QR não é de uma inscrição.");
+      return;
+    }
+    // Para a câmera antes de mostrar o resultado: senão continua lendo o mesmo
+    // código dezenas de vezes por segundo.
+    await pararCamera();
+    setHash(lido);
+  };
+
+  // A caixa de mira precisa caber no vídeo. Fixa em 250px ela estourava a
+  // largura em tela de celular, e o leitor abria preto.
+  const miraQueCabe = (larguraVideo: number, alturaVideo: number) => {
+    const lado = Math.floor(Math.min(larguraVideo, alturaVideo) * 0.75);
+    return { width: Math.max(120, lado), height: Math.max(120, lado) };
+  };
+
   const startScanner = async () => {
     setHash(null);
+    setErroCamera(null);
+    // O estado sobe ANTES do start: o <video> é injetado dentro do container, e
+    // se o React re-renderizar aquele nó depois (era o caso — tinha um ícone lá
+    // dentro que sumia ao escanear) ele leva o vídeo junto, e a câmera liga com
+    // a tela preta.
+    setScanning(true);
     try {
       if (!scannerRef.current) scannerRef.current = new Html5Qrcode(qrCodeRegionId);
-      await scannerRef.current.start(
-        { facingMode: "environment" },
-        { fps: 10, qrbox: { width: 250, height: 250 } },
-        async (decodedText) => {
-          const lido = extrairHash(decodedText);
-          if (!lido) {
-            toast.error("Esse QR não é de uma inscrição.");
-            return;
-          }
-          // Para a câmera antes de mostrar o resultado: senão continua lendo o
-          // mesmo código dezenas de vezes por segundo.
-          await pararCamera();
-          setHash(lido);
-        },
-        () => { /* frame sem QR, ignora */ }
-      );
-      setScanning(true);
-    } catch (err) {
-      toast.error("Erro ao iniciar câmera. Verifique as permissões.");
+      const config = {
+        fps: 10,
+        qrbox: miraQueCabe,
+        // O leitor nativo do Android é bem mais rápido e estável que o fallback
+        // em JS, quando o navegador tem suporte.
+        experimentalFeatures: { useBarCodeDetectorIfSupported: true },
+      };
+      try {
+        await scannerRef.current.start({ facingMode: "environment" }, config, aoLer, () => { });
+      } catch (semTraseira) {
+        // Aparelho sem câmera traseira (ou que recusa a restrição): tenta a
+        // primeira câmera que existir em vez de morrer aqui.
+        const cameras = await Html5Qrcode.getCameras();
+        if (!cameras?.length) throw semTraseira;
+        await scannerRef.current.start(cameras[0].id, config, aoLer, () => { });
+      }
+    } catch (err: any) {
+      setScanning(false);
+      // A mensagem crua ajuda muito mais que "verifique as permissões": diz se
+      // foi permissão negada, câmera ocupada por outro app ou falta de HTTPS.
+      const detalhe = String(err?.message || err || "erro desconhecido");
+      setErroCamera(detalhe);
+      toast.error(`Não foi possível abrir a câmera: ${detalhe}`);
     }
+  };
+
+  const buscarManual = () => {
+    const lido = extrairHash(codigoManual);
+    if (!lido) {
+      toast.error("Não achei um código de inscrição nesse texto.");
+      return;
+    }
+    setHash(lido);
+    setCodigoManual("");
   };
 
   const reg = data?.registration;
@@ -106,11 +148,17 @@ export default function CheckIn() {
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div
-            id={qrCodeRegionId}
-            className={`w-full bg-muted rounded-md border flex items-center justify-center ${scanning ? "min-h-[300px]" : "min-h-[120px]"}`}
-          >
-            {!scanning && <ScanLine className="h-8 w-8 text-muted-foreground" />}
+          {/* O container do leitor fica FORA do controle do React: a biblioteca
+              injeta o <video> aqui dentro, e qualquer filho que o React
+              adicione ou remova depois leva o vídeo junto. Placeholder e
+              moldura ficam na div de fora. */}
+          <div className={`w-full rounded-md border bg-muted overflow-hidden relative ${scanning ? "min-h-[300px]" : "min-h-[120px]"}`}>
+            {!scanning && (
+              <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                <ScanLine className="h-8 w-8 text-muted-foreground" />
+              </div>
+            )}
+            <div id={qrCodeRegionId} className="w-full" />
           </div>
 
           <div className="flex justify-center gap-4">
@@ -119,6 +167,31 @@ export default function CheckIn() {
             ) : (
               <Button variant="destructive" onClick={pararCamera}>Parar Câmera</Button>
             )}
+          </div>
+
+          {erroCamera && (
+            <p className="text-xs text-destructive text-center break-words">
+              Erro da câmera: {erroCamera}
+            </p>
+          )}
+
+          {/* Sem câmera o balcão não pode parar: dá pra colar o link do QR (ou o
+              código da inscrição) e seguir na mão. */}
+          <div className="pt-2 border-t space-y-2">
+            <p className="text-xs text-muted-foreground">
+              Câmera não abriu? Cole aqui o link do QR ou o código da inscrição.
+            </p>
+            <div className="flex gap-2">
+              <Input
+                value={codigoManual}
+                onChange={(e) => setCodigoManual(e.target.value)}
+                placeholder="amigo-racing.vercel.app/passport/..."
+                onKeyDown={(e) => { if (e.key === "Enter") buscarManual(); }}
+              />
+              <Button variant="outline" onClick={buscarManual} disabled={!codigoManual.trim()}>
+                Buscar
+              </Button>
+            </div>
           </div>
         </CardContent>
       </Card>
