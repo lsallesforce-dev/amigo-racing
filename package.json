@@ -19,7 +19,8 @@
     "check:prazo-edicao": "tsx lib/prazo-edicao.check.ts",
     "check:kits": "tsx lib/kits.check.ts",
     "check:qr": "tsx lib/qr-etiqueta.check.ts",
-    "check:navegador": "tsx lib/vinculo-navegador.check.ts"
+    "check:navegador": "tsx lib/vinculo-navegador.check.ts",
+    "check:ordem": "tsx lib/ordem-largada.check.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1078.0",

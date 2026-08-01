@@ -41,6 +41,7 @@ import {
   eventEmailRecipients,
 } from "./schema.js";
 import { normalizeShirtSize, shirtSizesOfRegistration } from "../../shared/shirtSizes.js";
+import { sanearOrdem } from "../../shared/ordemLargada.js";
 import { ENV } from './env.js';
 import postgres from "postgres";
 
@@ -999,6 +1000,47 @@ export async function createStartOrderConfig(config: InsertStartOrderConfig) {
   return result;
 }
 
+/**
+ * Ordem de largada saneada contra as inscrições de hoje: tira resíduo de quem
+ * mudou de categoria ou foi cancelado e põe no fim quem ainda não tem posição.
+ *
+ * A limpeza vive aqui, na leitura, porque a ordem é lida por muitas telas (sorteio,
+ * lista de largada, PDF, painel do competidor, etiquetas de kit) — cada uma
+ * filtrando por conta própria era como o mesmo competidor aparecia duas vezes.
+ */
+async function sanearOrdensDoEvento<T extends { categoryId: number | null; registrationOrder?: unknown }>(
+  eventId: number,
+  configs: T[],
+): Promise<T[]> {
+  if (!configs.length) return configs;
+  try {
+    const db = await getDb();
+    if (!db) return configs;
+    const regs = await db
+      .select({ id: registrations.id, categoryId: registrations.categoryId, status: registrations.status })
+      .from(registrations)
+      .where(eq(registrations.eventId, eventId));
+
+    const porCategoria = new Map<number, number[]>();
+    for (const r of regs) {
+      if (r.status === 'cancelled') continue;
+      const k = Number(r.categoryId);
+      if (!porCategoria.has(k)) porCategoria.set(k, []);
+      porCategoria.get(k)!.push(Number(r.id));
+    }
+
+    return configs.map(c => ({
+      ...c,
+      registrationOrder: JSON.stringify(
+        sanearOrdem(c.registrationOrder, porCategoria.get(Number(c.categoryId)) || []),
+      ),
+    }));
+  } catch (e) {
+    console.error('[ordem-largada] falha ao sanear, devolvendo o que está salvo', e);
+    return configs;
+  }
+}
+
 export async function getStartOrderConfigsByEventId(eventId: number) {
   const db = await getDb();
   if (!db) return [];
@@ -1033,12 +1075,14 @@ export async function getStartOrderConfigsByEventId(eventId: number) {
   const parentMap = new Map(parentCategories.map(c => [c.id, c.name]));
 
   // Format category names with parent
-  return results.map(r => ({
+  const comNome = results.map(r => ({
     ...r,
     categoryName: r.parentCategoryId && parentMap.has(r.parentCategoryId)
       ? `${parentMap.get(r.parentCategoryId)} - ${r.categoryName}`
       : r.categoryName || '',
   }));
+
+  return await sanearOrdensDoEvento(eventId, comNome);
 }
 
 export async function getStartOrderConfigByCategoryId(eventId: number, categoryId: number) {
@@ -1528,11 +1572,13 @@ export async function getStartOrderConfigByEvent(eventId: number) {
   const db = await getDb();
   if (!db) return [];
 
-  return await db
+  const configs = await db
     .select()
     .from(startOrderConfig)
     .where(eq(startOrderConfig.eventId, eventId))
     .orderBy(startOrderConfig.orderPosition);
+
+  return await sanearOrdensDoEvento(eventId, configs);
 }
 
 /**

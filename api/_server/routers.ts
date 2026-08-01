@@ -17,6 +17,7 @@ import { eq, sql, and, inArray, ne } from "drizzle-orm";
 import { normalizeShirtSize, sortShirtSizes, shirtSizesOfRegistration } from "../../shared/shirtSizes.js";
 import { sanitizeNavigationFiles } from "../../shared/navigationFiles.js";
 import { papelNaInscricao, pode, normalizarEmail, redigirParaNavegador, mensagemSemPermissao } from "../../shared/papelInscricao.js";
+import { moverEntreCategorias, sanearOrdem, parseOrdem } from "../../shared/ordemLargada.js";
 import { formatarBrasilia } from "../../shared/horarioBrasilia.js";
 import { renderEmail, textoParaHtml } from "../../shared/emailLayout.js";
 import { VARIAVEIS_EMAIL, valoresDaInscricao, aplicarVariaveis, aplicarVariaveisTexto, variaveisDesconhecidas } from "../../shared/emailVars.js";
@@ -366,6 +367,37 @@ async function assertEventEmailAccess(user: any, eventId: number) {
     throw new TRPCError({ code: 'FORBIDDEN', message: 'Somente o organizador do evento pode enviar e-mails' });
   }
   return event;
+}
+
+/**
+ * Tira a inscrição do sorteio da categoria antiga e põe no fim da nova.
+ * No fim, e não no meio, pra não empurrar o número de quem já foi avisado.
+ */
+async function sincronizarOrdemAposTrocaDeCategoria(
+  eventId: number,
+  registrationId: number,
+  categoriaAntiga: number | null | undefined,
+  categoriaNova: number | null | undefined,
+) {
+  try {
+    const configs = await db.getStartOrderConfigByEvent(eventId) as any[];
+    for (const config of configs || []) {
+      const ehAntiga = Number(config.categoryId) === Number(categoriaAntiga);
+      const ehNova = Number(config.categoryId) === Number(categoriaNova);
+      if (!ehAntiga && !ehNova) continue;
+
+      const nova = moverEntreCategorias(
+        config.registrationOrder,
+        registrationId,
+        ehNova ? "acrescentar" : "remover",
+      );
+      await db.upsertStartOrderConfig({ ...config, registrationOrder: JSON.stringify(nova) } as any);
+    }
+  } catch (e) {
+    // A troca de categoria em si já foi salva; a ordem é saneada na leitura de
+    // qualquer forma, então isto não pode derrubar a edição.
+    console.error('[ordem-largada] falha ao sincronizar após troca de categoria', e);
+  }
 }
 
 /** Quantos e-mails saem por chamada. SMTP é sequencial e lento; o front chama em laço. */
@@ -2398,10 +2430,19 @@ export const appRouter = router({
           }
         }
 
-        return await db.updateRegistration(registrationId, {
+        const salvo = await db.updateRegistration(registrationId, {
           ...data,
           updatedAt: new Date(),
         } as any);
+
+        // Mudar de categoria tem que mexer na ordem de largada das DUAS: sem
+        // isso o id ficava no sorteio da categoria antiga e o competidor
+        // aparecia duas vezes na lista de largada, com dois números.
+        if (data.categoryId !== undefined && Number(data.categoryId) !== Number(reg.categoryId)) {
+          await sincronizarOrdemAposTrocaDeCategoria(reg.eventId, registrationId, reg.categoryId, data.categoryId);
+        }
+
+        return salvo;
       }),
     getHistory: protectedProcedure
       .input(z.object({ registrationId: z.number() }))
