@@ -16,6 +16,7 @@ import { products, productOrders, organizerMembers, registrations, events, payme
 import { eq, sql, and, inArray, ne } from "drizzle-orm";
 import { normalizeShirtSize, sortShirtSizes, shirtSizesOfRegistration } from "../../shared/shirtSizes.js";
 import { sanitizeNavigationFiles } from "../../shared/navigationFiles.js";
+import { papelNaInscricao, pode, normalizarEmail, redigirParaNavegador, mensagemSemPermissao } from "../../shared/papelInscricao.js";
 import { formatarBrasilia } from "../../shared/horarioBrasilia.js";
 import { renderEmail, textoParaHtml } from "../../shared/emailLayout.js";
 import { VARIAVEIS_EMAIL, valoresDaInscricao, aplicarVariaveis, aplicarVariaveisTexto, variaveisDesconhecidas } from "../../shared/emailVars.js";
@@ -407,7 +408,9 @@ async function assertPodePagarInscricao(
   if (!user?.id) {
     throw new TRPCError({ code: 'UNAUTHORIZED', message: 'Faça login ou use o link de cobrança que o organizador enviou.' });
   }
-  if (user.role === 'admin' || Number(reg.userId) === Number(user.id)) return;
+  // Titular, admin e NAVEGADOR da dupla pagam; o navegador é quem costuma
+  // resolver a inscrição na prática.
+  if (pode(papelNaInscricao({ reg, user }), 'pagar')) return;
 
   const evento = await db.getEventById(reg.eventId) as any;
   const organizer = evento ? await db.getOrganizerById(evento.organizerId) as any : null;
@@ -1753,7 +1756,9 @@ export const appRouter = router({
         pilotShirtSize: z.string(),
         phone: z.string(),
         navigatorName: z.string().nullable().optional(),
-        navigatorEmail: z.string().nullable().optional(),
+        // Normaliza na entrada: o vínculo do navegador casa por e-mail, e
+        // "Foo@X.com " nunca casaria com a conta foo@x.com.
+        navigatorEmail: z.string().nullable().optional().transform(v => normalizarEmail(v)),
         navigatorPhone: z.string().nullable().optional(),
         navigatorCpf: z.string().nullable().optional(),
         navigatorCity: z.string().nullable().optional(),
@@ -1875,7 +1880,11 @@ export const appRouter = router({
       return await db.getRegistrationById(input.id);
     }),
     myRegistrations: protectedProcedure.query(async ({ ctx }) => {
-      const regs = await db.getRegistrationsByUserId(ctx.user.id) || [];
+      // Traz também as inscrições em que o usuário é o NAVEGADOR da dupla.
+      const regs = await db.getRegistrationsByUserId(
+        ctx.user.id,
+        normalizarEmail((ctx.user as any).openId),
+      ) || [];
 
       // Buscar startOrderConfig para calcular número/horário de largada.
       // Os campos registrations.startNumber / startTime podem estar null — o
@@ -1921,8 +1930,12 @@ export const appRouter = router({
           }
         }
 
-        return {
+        const papel = reg.ehTitular ? "titular" : "navegador";
+        const linha = {
           ...reg,
+          papel,
+          podeEditar: pode(papel, "editar"),
+          podeCancelar: pode(papel, "cancelar"),
           startNumber: computedStartNumber,
           startTime: computedStartTime,
           eventNavigationFiles: sanitizeNavigationFiles(reg.eventNavigationFiles, {
@@ -1930,6 +1943,11 @@ export const appRouter = router({
             registrationStatus: reg.status,
           }),
         };
+
+        // O vínculo do navegador é automático por e-mail: um e-mail digitado
+        // errado entrega a inscrição a um estranho. Ele não leva documento nem
+        // contato pessoal do piloto — só o operacional.
+        return papel === "navegador" ? redigirParaNavegador(linha) : linha;
       });
     }),
 
@@ -1959,7 +1977,9 @@ export const appRouter = router({
           bypass = !!organizer && organizer.ownerId === principal?.openId;
         }
 
-        if (!bypass && reg.userId !== user.id) {
+        // O navegador baixa igual ao titular — é ele quem navega com a planilha.
+        const papel = papelNaInscricao({ reg, user, ehOrganizadorDoEvento: bypass });
+        if (!pode(papel, 'planilha')) {
           throw new TRPCError({ code: 'FORBIDDEN', message: 'Esta inscrição não é sua' });
         }
 
@@ -2019,7 +2039,9 @@ export const appRouter = router({
         pilotAge: z.number().optional(),
         pilotShirtSize: z.string().optional(),
         navigatorName: z.string().nullable().optional(),
-        navigatorEmail: z.string().nullable().optional(),
+        // Normaliza na entrada: o vínculo do navegador casa por e-mail, e
+        // "Foo@X.com " nunca casaria com a conta foo@x.com.
+        navigatorEmail: z.string().nullable().optional().transform(v => normalizarEmail(v)),
         navigatorPhone: z.string().nullable().optional(),
         navigatorCpf: z.string().nullable().optional(),
         navigatorShirtSize: z.string().nullable().optional(),
@@ -2045,7 +2067,13 @@ export const appRouter = router({
       .mutation(async ({ ctx, input }) => {
         const { registrationId, ...data } = input;
         const reg = await db.getRegistrationById(registrationId);
-        if (!reg || reg.userId !== ctx.user.id) {
+        // "Não é sua" e "é sua, mas você é o navegador" são coisas diferentes —
+        // com a mesma mensagem, o navegador ficava achando que era bug.
+        const papelEdicao = papelNaInscricao({ reg, user: ctx.user as any });
+        if (papelEdicao === 'navegador') {
+          throw new TRPCError({ code: 'FORBIDDEN', message: mensagemSemPermissao('editar') });
+        }
+        if (!reg || !pode(papelEdicao, 'editar')) {
           throw new TRPCError({ code: 'UNAUTHORIZED', message: 'Inscrição não encontrada ou sem permissão' });
         }
 
@@ -2125,7 +2153,11 @@ export const appRouter = router({
       .input(z.object({ registrationId: z.number(), reason: z.string().optional() }))
       .mutation(async ({ ctx, input }) => {
         const reg = await db.getRegistrationById(input.registrationId) as any;
-        if (!reg || reg.userId !== ctx.user.id) {
+        const papelCancelamento = papelNaInscricao({ reg, user: ctx.user as any });
+        if (papelCancelamento === 'navegador') {
+          throw new TRPCError({ code: 'FORBIDDEN', message: mensagemSemPermissao('cancelar') });
+        }
+        if (!reg || !pode(papelCancelamento, 'cancelar')) {
           throw new TRPCError({ code: 'UNAUTHORIZED', message: 'Inscrição não encontrada ou sem permissão' });
         }
         if (reg.status === 'cancelled') {
@@ -2276,7 +2308,9 @@ export const appRouter = router({
         pilotShirtSize: z.string().optional(),
         phone: z.string().nullable().optional(),
         navigatorName: z.string().nullable().optional(),
-        navigatorEmail: z.string().nullable().optional(),
+        // Normaliza na entrada: o vínculo do navegador casa por e-mail, e
+        // "Foo@X.com " nunca casaria com a conta foo@x.com.
+        navigatorEmail: z.string().nullable().optional().transform(v => normalizarEmail(v)),
         navigatorPhone: z.string().nullable().optional(),
         navigatorCpf: z.string().nullable().optional(),
         navigatorCity: z.string().nullable().optional(),

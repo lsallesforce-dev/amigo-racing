@@ -1,4 +1,5 @@
 import { useAuth } from "@/_core/hooks/useAuth";
+import { normalizarEmail } from "@/shared/papelInscricao";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -433,7 +434,7 @@ export default function EventDetails() {
       pilotShirtSize: (event as any)?.hasShirts !== false ? formData.pilot_shirt : "p", // Enviamo 'p' como fallback pois DB exige não-nulo para piloto
       phone: formData.pilot_phone,
       navigatorName: formData.navigator_name || null,
-      navigatorEmail: formData.navigator_email || null,
+      navigatorEmail: normalizarEmail(formData.navigator_email),
       navigatorPhone: formData.navigator_phone ? formData.navigator_phone.replace(/\D/g, '') : null,
       navigatorCpf: formData.navigator_cpf || null,
       navigatorCity: formData.navigator_city || null,

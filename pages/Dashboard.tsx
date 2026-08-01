@@ -1,4 +1,5 @@
 import { useAuth } from "@/_core/hooks/useAuth";
+import { normalizarEmail } from "@/shared/papelInscricao";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -151,6 +152,9 @@ export default function Dashboard() {
 
   const canEditRegistration = (reg: any) => {
     if (reg.status === 'cancelled') return false;
+    // Navegador acompanha e resolve planilha/pagamento; os dados quem edita é
+    // quem fez a inscrição (o backend nega de qualquer forma).
+    if (reg.podeEditar === false) return false;
     return !prazoEdicaoDe(reg).bloqueado;
   };
 
@@ -291,7 +295,7 @@ export default function Dashboard() {
       vehicleYear: editForm.vehicleYear ? Number(editForm.vehicleYear) : null,
       // Garantir que opcionais vazios vão como null para o backend
       navigatorName: editForm.navigatorName || null,
-      navigatorEmail: editForm.navigatorEmail || null,
+      navigatorEmail: normalizarEmail(editForm.navigatorEmail),
       navigatorPhone: editForm.navigatorPhone ? somenteDigitos(editForm.navigatorPhone) : null,
       vehicleBrand: editForm.vehicleBrand || null,
       vehicleModel: editForm.vehicleModel || null,
@@ -401,6 +405,15 @@ export default function Dashboard() {
                           <CardDescription className="text-xs mt-1">
                             Inscricao #{reg.id} - {format(new Date(reg.createdAt), "dd/MM/yyyy", { locale: ptBR })}
                           </CardDescription>
+                          {reg.papel === 'navegador' && (
+                            <div className="mt-2">
+                              <Badge variant="outline" className="text-xs">Você é o navegador</Badge>
+                              <p className="text-xs text-muted-foreground mt-1">
+                                Inscrição de {reg.pilotName}. Você baixa a planilha e pode pagar;
+                                os dados são editados por quem fez a inscrição.
+                              </p>
+                            </div>
+                          )}
                         </div>
                         <Badge variant={reg.status === 'paid' ? 'default' : reg.status === 'pending' ? 'secondary' : reg.status === 'cancellation_requested' ? 'outline' : 'destructive'}>
                           {reg.status === 'paid' ? 'Pago' : reg.status === 'pending' ? 'Pendente' : reg.status === 'cancellation_requested' ? 'Cancelamento Solicitado' : 'Cancelado'}
@@ -568,7 +581,7 @@ export default function Dashboard() {
                           Ver QR Code
                         </Button>
                       )}
-                      {reg.eventAllowCancellation && reg.status !== 'cancelled' && reg.status !== 'cancellation_requested' && (
+                      {reg.eventAllowCancellation && reg.podeCancelar !== false && reg.status !== 'cancelled' && reg.status !== 'cancellation_requested' && (
                         <Button
                           size="sm"
                           variant="outline"

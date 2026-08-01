@@ -528,9 +528,18 @@ export async function getRegistrationById(id: number) {
   return result.length > 0 ? result[0] : undefined;
 }
 
-export async function getRegistrationsByUserId(userId: number) {
+/**
+ * Inscrições que este usuário enxerga no painel: as que ele criou MAIS aquelas
+ * em que ele é o navegador da dupla (registrations.navigatorEmail == a conta).
+ *
+ * `navigatorOpenId` é opcional de propósito: sem ele o comportamento é o de
+ * sempre, e os call sites antigos seguem iguais.
+ */
+export async function getRegistrationsByUserId(userId: number, navigatorOpenId?: string | null) {
   const db = await getDb();
   if (!db) return [];
+
+  const emailNavegador = String(navigatorOpenId || "").trim().toLowerCase();
 
   const results = await db
     .select({
@@ -584,12 +593,23 @@ export async function getRegistrationsByUserId(userId: number) {
       eventCity: events.city,
       eventState: events.state,
       championshipId: championshipStages.championshipId,
+      // Marca o papel na própria query, sem segundo round-trip.
+      ehTitular: sql<boolean>`(${registrations.userId} = ${userId})`,
     })
     .from(registrations)
     .leftJoin(categories, eq(registrations.categoryId, categories.id))
     .leftJoin(events, eq(registrations.eventId, events.id))
     .leftJoin(championshipStages, eq(events.id, championshipStages.eventId))
-    .where(eq(registrations.userId, userId))
+    .where(
+      emailNavegador
+        // lower(trim(...)) é a tolerância ao dado antigo: o navigatorEmail foi
+        // gravado cru por muito tempo, então casar na leitura evita backfill.
+        ? or(
+          eq(registrations.userId, userId),
+          sql`lower(trim(${registrations.navigatorEmail})) = ${emailNavegador}`,
+        )
+        : eq(registrations.userId, userId)
+    )
     .orderBy(desc(registrations.createdAt));
 
   return results;
