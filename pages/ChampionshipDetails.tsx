@@ -92,10 +92,14 @@ export default function ChampionshipDetails() {
                 // opcionais; o dado em si é `CategoriaClassificacao[]` — o
                 // cálculo é do shared/. Cast só nesta fronteira.
                 categorias: standingsData.standings as unknown as CategoriaClassificacao[],
+                // `provaNumber`/`eventoNome` alimentam o agrupamento por evento no
+                // cabeçalho do PDF — mesma correção da tabela em tela.
                 etapas: standingsData.stages.map((st: any) => ({
                     id: st.id,
                     stageNumber: st.stageNumber,
-                    nome: st.nome || st.event?.name || st.customName || "",
+                    nome: `P${st.provaNumber ?? st.stageNumber}`,
+                    provaNumber: st.provaNumber ?? st.stageNumber,
+                    eventoNome: st.eventoNome ?? st.event?.name ?? st.customName ?? null,
                 })),
             });
         } catch (erro: any) {

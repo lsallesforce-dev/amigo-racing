@@ -1,17 +1,22 @@
-// Aba "Etapas e resultados": a lista de etapas do campeonato e o que dá para
-// fazer com cada uma (ver por categoria, limpar, excluir).
+// Aba "Etapas e resultados": as etapas do campeonato agrupadas por EVENTO, e o
+// que dá para fazer com cada uma (ver por categoria, limpar, excluir).
 //
-// Duas mudanças de comportamento vieram na extração:
+// Mudanças de comportamento vieram na extração:
 //
 //  1. `stages.sort(...)` era chamado direto no array que vem do React Query —
 //     `sort` ordena IN PLACE, então a página estava MUTANDO o cache. Agora é
 //     `[...stages].sort()`, memoizado.
 //  2. O botão "Lançar" por etapa sumiu: a importação passou a ser por PLANILHA
-//     (um arquivo traz várias etapas de várias categorias), então o ponto de
-//     entrada é um só, no topo da lista, e quem decide onde cada ETAPA-N cai é o
-//     ImportWizard.
+//     (um arquivo traz várias provas de várias categorias), então o ponto de
+//     entrada é um só, no topo da lista, e quem decide o evento do arquivo
+//     inteiro é o ImportWizard (um evento por arquivo, não etapa por etapa).
+//  3. A lista deixou de ser plana: cada arquivo importado é um evento com suas
+//     próprias provas (P1, P2...), então agrupar por evento é o que reflete o
+//     dado de verdade — uma lista plana foi o que colapsou a tabela de
+//     classificação em produção (duas "etapa 1" de eventos diferentes,
+//     indistinguíveis na tela).
 
-import { useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -97,6 +102,23 @@ export default function StagesTab({
     [stages],
   );
 
+  // Agrupamento por evento: chave estável é o `eventId` (evento da plataforma)
+  // ou o `customName` (prova externa, que não tem evento cadastrado). Cada
+  // grupo é exibido com o nome do evento em cima e as provas dele embaixo —
+  // `provaNumber` é a numeração DENTRO do evento (P1, P2...), diferente de
+  // `stageNumber`, que segue sendo a ordem global usada para ordenar.
+  const gruposEvento = useMemo(() => {
+    const grupos: { chave: string; nome: string; stages: any[] }[] = [];
+    for (const stage of etapasOrdenadas) {
+      const chave = stage.eventId != null ? `evt:${stage.eventId}` : `ext:${stage.customName}`;
+      const nome = stage.isExternal ? stage.customName : stage.event?.name || stage.customName || "Evento";
+      const ultimo = grupos[grupos.length - 1];
+      if (ultimo && ultimo.chave === chave) ultimo.stages.push(stage);
+      else grupos.push({ chave, nome, stages: [stage] });
+    }
+    return grupos;
+  }, [etapasOrdenadas]);
+
   const invalidarTudo = () => {
     utils.championships.getStages.invalidate({ championshipId });
     utils.championships.getStandings.invalidate({ championshipId });
@@ -176,8 +198,8 @@ export default function StagesTab({
               <Table className="min-w-[720px]">
                 <TableHeader>
                   <TableRow>
-                    <TableHead className="w-[90px] text-center">Etapa</TableHead>
-                    <TableHead>Evento</TableHead>
+                    <TableHead className="w-[90px] text-center">Prova</TableHead>
+                    <TableHead>Categorias</TableHead>
                     <TableHead>Data</TableHead>
                     <TableHead className="text-right">Local</TableHead>
                     <TableHead className="text-center w-[130px]">Resultados</TableHead>
@@ -185,102 +207,127 @@ export default function StagesTab({
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {etapasOrdenadas.map(stage => (
-                    <TableRow key={stage.id}>
-                      <TableCell className="text-center font-bold text-lg bg-muted/30">{stage.stageNumber}ª</TableCell>
-                      <TableCell className="font-medium text-primary">
-                        <div className="flex flex-col gap-1">
-                          <div className="flex items-center gap-2">
-                            {stage.isExternal ? (
-                              <>
-                                {stage.customName}
+                  {gruposEvento.map(grupo => {
+                    const primeira = grupo.stages[0];
+                    return (
+                      <Fragment key={grupo.chave}>
+                        {/* Cabeçalho do evento: um por arquivo importado (ou evento
+                            cadastrado). As provas dele (P1, P2...) vêm logo abaixo —
+                            é a correção do bug real, onde duas provas de arquivos
+                            diferentes apareciam como se fossem a mesma etapa. */}
+                        <TableRow className="bg-muted/40 hover:bg-muted/40">
+                          <TableCell colSpan={6} className="py-2">
+                            <div className="flex items-center gap-2 font-bold text-primary">
+                              <Flag className="h-3.5 w-3.5" />
+                              {grupo.nome}
+                              {primeira?.isExternal && (
                                 <Badge
                                   variant="secondary"
                                   className="text-[10px] uppercase font-bold bg-muted text-muted-foreground border-none"
                                 >
                                   Externa
                                 </Badge>
-                              </>
-                            ) : (
-                              stage.event?.name
-                            )}
-                          </div>
-                          {stage.categories?.length > 0 && (
-                            <div className="flex flex-wrap gap-1 mt-1">
-                              {stage.categories.map((cat: string) => (
-                                <Badge
-                                  key={cat}
-                                  variant="outline"
-                                  className="text-[9px] py-0 px-1 border-primary/20 text-primary uppercase font-bold bg-primary/5"
-                                >
-                                  {cat}
-                                </Badge>
-                              ))}
-                            </div>
-                          )}
-                        </div>
-                      </TableCell>
-                      <TableCell className="text-muted-foreground text-sm">
-                        <div className="flex items-center gap-1.5">
-                          <CalendarDays className="h-3.5 w-3.5" />
-                          {!stage.isExternal && stage.event?.startDate
-                            ? format(new Date(stage.event.startDate), "dd 'de' MMMM", { locale: ptBR })
-                            : "-"}
-                        </div>
-                      </TableCell>
-                      <TableCell className="text-right text-muted-foreground text-sm">
-                        {!stage.isExternal && stage.event?.city ? `${stage.event.city}/${stage.event.state}` : "-"}
-                      </TableCell>
-                      <TableCell className="text-center">
-                        {(isOwner || isStageOwner(stage)) && stage.categories?.length > 0 ? (
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="h-8 gap-1.5 text-primary hover:text-primary hover:bg-primary/10"
-                            onClick={() => setGerenciarStageId(stage.id)}
-                          >
-                            <List className="h-4 w-4" />
-                            Gerenciar
-                          </Button>
-                        ) : (
-                          <span className="text-xs text-muted-foreground">Sem resultados</span>
-                        )}
-                      </TableCell>
-                      <TableCell className="text-center w-[50px]">
-                        {(isOwner || isStageOwner(stage)) && (
-                          <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                              <Button variant="ghost" size="icon" className="h-8 w-8">
-                                <MoreVertical className="h-4 w-4" />
-                              </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end">
-                              <DropdownMenuItem
-                                className="text-amber-600 focus:text-amber-600 cursor-pointer"
-                                onClick={() =>
-                                  setAcao({ tipo: "clear", stageId: stage.id, stageNumber: stage.stageNumber })
-                                }
-                              >
-                                <Eraser className="h-4 w-4 mr-2" />
-                                Limpar resultados
-                              </DropdownMenuItem>
-                              {isOwner && (
-                                <DropdownMenuItem
-                                  className="text-destructive focus:text-destructive cursor-pointer"
-                                  onClick={() =>
-                                    setAcao({ tipo: "delete", stageId: stage.id, stageNumber: stage.stageNumber })
-                                  }
-                                >
-                                  <Trash2 className="h-4 w-4 mr-2" />
-                                  Excluir etapa
-                                </DropdownMenuItem>
                               )}
-                            </DropdownMenuContent>
-                          </DropdownMenu>
-                        )}
-                      </TableCell>
-                    </TableRow>
-                  ))}
+                              {!primeira?.isExternal && primeira?.event?.startDate && (
+                                <span className="text-xs font-normal text-muted-foreground flex items-center gap-1">
+                                  <CalendarDays className="h-3 w-3" />
+                                  {format(new Date(primeira.event.startDate), "dd 'de' MMMM", { locale: ptBR })}
+                                </span>
+                              )}
+                              {!primeira?.isExternal && primeira?.event?.city && (
+                                <span className="text-xs font-normal text-muted-foreground">
+                                  {primeira.event.city}/{primeira.event.state}
+                                </span>
+                              )}
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                        {grupo.stages.map(stage => (
+                          <TableRow key={stage.id}>
+                            <TableCell className="text-center font-bold text-lg bg-muted/30">
+                              P{(stage as any).provaNumber ?? stage.stageNumber}
+                            </TableCell>
+                            <TableCell className="font-medium">
+                              {stage.categories?.length > 0 ? (
+                                <div className="flex flex-wrap gap-1">
+                                  {stage.categories.map((cat: string) => (
+                                    <Badge
+                                      key={cat}
+                                      variant="outline"
+                                      className="text-[9px] py-0 px-1 border-primary/20 text-primary uppercase font-bold bg-primary/5"
+                                    >
+                                      {cat}
+                                    </Badge>
+                                  ))}
+                                </div>
+                              ) : (
+                                <span className="text-xs text-muted-foreground">Sem categorias</span>
+                              )}
+                            </TableCell>
+                            <TableCell className="text-muted-foreground text-sm">
+                              <div className="flex items-center gap-1.5">
+                                <CalendarDays className="h-3.5 w-3.5" />
+                                {!stage.isExternal && stage.event?.startDate
+                                  ? format(new Date(stage.event.startDate), "dd 'de' MMMM", { locale: ptBR })
+                                  : "-"}
+                              </div>
+                            </TableCell>
+                            <TableCell className="text-right text-muted-foreground text-sm">
+                              {!stage.isExternal && stage.event?.city ? `${stage.event.city}/${stage.event.state}` : "-"}
+                            </TableCell>
+                            <TableCell className="text-center">
+                              {(isOwner || isStageOwner(stage)) && stage.categories?.length > 0 ? (
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="h-8 gap-1.5 text-primary hover:text-primary hover:bg-primary/10"
+                                  onClick={() => setGerenciarStageId(stage.id)}
+                                >
+                                  <List className="h-4 w-4" />
+                                  Gerenciar
+                                </Button>
+                              ) : (
+                                <span className="text-xs text-muted-foreground">Sem resultados</span>
+                              )}
+                            </TableCell>
+                            <TableCell className="text-center w-[50px]">
+                              {(isOwner || isStageOwner(stage)) && (
+                                <DropdownMenu>
+                                  <DropdownMenuTrigger asChild>
+                                    <Button variant="ghost" size="icon" className="h-8 w-8">
+                                      <MoreVertical className="h-4 w-4" />
+                                    </Button>
+                                  </DropdownMenuTrigger>
+                                  <DropdownMenuContent align="end">
+                                    <DropdownMenuItem
+                                      className="text-amber-600 focus:text-amber-600 cursor-pointer"
+                                      onClick={() =>
+                                        setAcao({ tipo: "clear", stageId: stage.id, stageNumber: stage.stageNumber })
+                                      }
+                                    >
+                                      <Eraser className="h-4 w-4 mr-2" />
+                                      Limpar resultados
+                                    </DropdownMenuItem>
+                                    {isOwner && (
+                                      <DropdownMenuItem
+                                        className="text-destructive focus:text-destructive cursor-pointer"
+                                        onClick={() =>
+                                          setAcao({ tipo: "delete", stageId: stage.id, stageNumber: stage.stageNumber })
+                                        }
+                                      >
+                                        <Trash2 className="h-4 w-4 mr-2" />
+                                        Excluir etapa
+                                      </DropdownMenuItem>
+                                    )}
+                                  </DropdownMenuContent>
+                                </DropdownMenu>
+                              )}
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </Fragment>
+                    );
+                  })}
                 </TableBody>
               </Table>
             </div>
@@ -368,6 +415,13 @@ export default function StagesTab({
 // Estava no CABEÇALHO da página, longe da lista que ele alimenta. Aqui fica ao
 // lado do "Importar planilha", que é a outra forma de criar etapa — as duas
 // juntas, no lugar onde o organizador procura.
+//
+// ⚠️ MUDANÇA DE MODELO: sumiu o campo "Nº da etapa" — era o organizador
+// numerando prova na mão, resíduo do modelo plano que estamos matando. Pedido
+// real dele, apontando esse campo: "podia ter a opção de importar 1, 2 ou
+// todas". Agora ele diz só QUANTAS provas o evento tem ("Quantas provas?",
+// padrão 1) e o backend cria P1...PN sozinho — a planilha preenche cada uma
+// depois, sem precisar de número escolhido a dedo.
 
 function AddStageDialog({ championshipId }: { championshipId: number }) {
   const utils = trpc.useUtils();
@@ -375,28 +429,33 @@ function AddStageDialog({ championshipId }: { championshipId: number }) {
   const [tipo, setTipo] = useState("internal");
   const [eventId, setEventId] = useState("");
   const [customName, setCustomName] = useState("");
-  const [stageNumber, setStageNumber] = useState("");
+  const [provas, setProvas] = useState("1");
 
   const { data: meusEventos, isLoading: carregandoEventos } = trpc.events.myEvents.useQuery(undefined, {
     enabled: aberto,
   });
 
   const addStageMutation = trpc.championships.addStage.useMutation({
-    onSuccess: () => {
-      toast.success("Etapa adicionada!");
+    onSuccess: (resultado: any) => {
+      const criadas = resultado?.provasCriadas?.length ?? 1;
+      toast.success(
+        resultado?.eventoNome
+          ? `${criadas} prova(s) criada(s) em "${resultado.eventoNome}"!`
+          : "Etapa adicionada!",
+      );
       setAberto(false);
       setEventId("");
       setCustomName("");
-      setStageNumber("");
+      setProvas("1");
       utils.championships.getStages.invalidate({ championshipId });
     },
     onError: erro => toast.error(erro.message || "Erro ao adicionar etapa"),
   });
 
   const salvar = () => {
-    const numero = parseInt(stageNumber, 10);
-    if (isNaN(numero) || numero <= 0) {
-      toast.error("Número da etapa inválido");
+    const quantidade = parseInt(provas, 10);
+    if (isNaN(quantidade) || quantidade <= 0) {
+      toast.error("Número de provas inválido");
       return;
     }
     if (tipo === "internal") {
@@ -404,13 +463,13 @@ function AddStageDialog({ championshipId }: { championshipId: number }) {
         toast.error("Selecione um evento da plataforma");
         return;
       }
-      addStageMutation.mutate({ championshipId, eventId: parseInt(eventId, 10), stageNumber: numero });
+      addStageMutation.mutate({ championshipId, eventId: parseInt(eventId, 10), provas: quantidade });
     } else {
       if (!customName.trim()) {
-        toast.error("Digite o nome da prova externa");
+        toast.error("Digite o nome do evento externo");
         return;
       }
-      addStageMutation.mutate({ championshipId, customName: customName.trim(), stageNumber: numero });
+      addStageMutation.mutate({ championshipId, customName: customName.trim(), provas: quantidade });
     }
   };
 
@@ -426,7 +485,7 @@ function AddStageDialog({ championshipId }: { championshipId: number }) {
         <DialogHeader>
           <DialogTitle>Adicionar etapa ao campeonato</DialogTitle>
           <DialogDescription>
-            Vincule um evento da plataforma ou crie uma prova externa para receber resultados.
+            Vincule um evento da plataforma ou crie um evento externo para receber resultados.
           </DialogDescription>
         </DialogHeader>
         <div className="grid gap-4 py-4">
@@ -459,7 +518,7 @@ function AddStageDialog({ championshipId }: { championshipId: number }) {
             </TabsContent>
             <TabsContent value="external" className="space-y-4 pt-4">
               <div className="space-y-2">
-                <Label htmlFor="customName">Nome da prova externa *</Label>
+                <Label htmlFor="customName">Nome do evento externo *</Label>
                 <Input
                   id="customName"
                   value={customName}
@@ -471,15 +530,19 @@ function AddStageDialog({ championshipId }: { championshipId: number }) {
           </Tabs>
 
           <div className="space-y-2">
-            <Label htmlFor="stageNum">Nº da etapa *</Label>
+            <Label htmlFor="provasNum">Quantas provas? *</Label>
             <Input
-              id="stageNum"
+              id="provasNum"
               type="number"
               min="1"
-              value={stageNumber}
-              onChange={e => setStageNumber(e.target.value)}
-              placeholder="Ex.: 1 (para 1ª etapa)"
+              value={provas}
+              onChange={e => setProvas(e.target.value)}
+              placeholder="Ex.: 2"
             />
+            <p className="text-xs text-muted-foreground">
+              Cria P1…P{Math.max(1, parseInt(provas, 10) || 1)} dentro deste evento — a planilha preenche cada prova
+              depois, sem precisar numerar nada aqui.
+            </p>
           </div>
         </div>
         <DialogFooter>

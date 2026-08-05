@@ -36,15 +36,19 @@ export default function StandingsTab({ championshipId, standingsData, isLoading,
 
   const categorias = standingsData?.standings || [];
 
-  // A etapa chega com nome em `event.name` (evento da plataforma) ou em
-  // `customName` (prova externa) — a tabela e o PDF só querem `nome`.
+  // Cada etapa agora chega com `provaNumber` (a prova dentro do evento, ex.: P1)
+  // e `eventoNome` (o evento a que pertence) — é o que StandingsTable usa pra
+  // agrupar o cabeçalho por evento em vez de repetir "E1, E1, E2, E2" quando dois
+  // arquivos diferentes têm provas de mesmo número.
   const etapas = useMemo(
     () =>
       [...(standingsData?.stages || [])]
         .map(st => ({
           id: st.id,
           stageNumber: st.stageNumber,
-          nome: st.nome || st.event?.name || st.customName || "",
+          nome: `P${st.provaNumber ?? st.stageNumber}`,
+          provaNumber: st.provaNumber ?? st.stageNumber,
+          eventoNome: st.eventoNome ?? st.event?.name ?? st.customName ?? null,
         }))
         .sort((a, b) => a.stageNumber - b.stageNumber || a.id - b.id),
     [standingsData?.stages],

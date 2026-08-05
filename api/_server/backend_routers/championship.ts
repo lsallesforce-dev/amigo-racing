@@ -7,6 +7,7 @@ import {
     championshipResults,
     championshipRequests,
     championshipNameAliases,
+    championshipCompetitorEmails,
     events,
     registrations,
     users
@@ -27,14 +28,18 @@ import {
 import {
     importarPlanilhaCampeonato,
     normalizarCabecalho,
+    planejarProvas,
     type AbaPlanilha,
     type CelulaPlanilha,
+    type ProvaExistente,
 } from "../../../shared/importarPlanilhaCampeonato.js";
 import {
     normalizarNome,
+    normalizarEmail,
     conciliarNomes,
     sugerirUnificacoes,
     type DecisaoAlias,
+    type DicaEmail,
 } from "../../../shared/nomesCampeonato.js";
 
 type Banco = NonNullable<Awaited<ReturnType<typeof getDb>>>;
@@ -95,6 +100,8 @@ async function carregarEtapas(db: Banco, championshipId: number) {
             customName: championshipStages.customName,
             isExternal: championshipStages.isExternal,
             stageNumber: championshipStages.stageNumber,
+            eventoNome: championshipStages.eventoNome,
+            provaNumber: championshipStages.provaNumber,
             event: {
                 name: events.name,
             }
@@ -266,6 +273,119 @@ function nomesDaPlanilha(resultados: { pilotName: string | null; navigatorName: 
         }
     }
     return [...vistos];
+}
+
+// ------------------------------------------------------------------ evento x prova
+//
+// Cada ARQUIVO de planilha é UM EVENTO ("Campeonato - 7º Rally do Cavalo") e as
+// colunas ETAPA-N são as PROVAS dele. Duas planilhas no mesmo campeonato têm
+// ETAPA-1 e ETAPA-2 cada uma, e são quatro provas diferentes — tratar o ETAPA-N
+// como número global fazia o dado de um arquivo cair na prova do outro.
+
+/** "Campeonato - 7º Rally do Cavalo.xlsx" -> "7º Rally do Cavalo". */
+function nomeDoEventoDoArquivo(nomeArquivo: string): string {
+    let nome = String(nomeArquivo || "").replace(/\.[a-z0-9]+$/i, "");
+    nome = nome.replace(/^\s*campeonato\s*(\([^)]*\))?\s*[-–—]\s*/i, "");
+    // "(3)", "(1)" de download repetido do navegador.
+    nome = nome.replace(/\s*\(\d+\)\s*$/, "");
+    return limparNome(nome);
+}
+
+/**
+ * Identidade do EVENTO dentro do campeonato: o id quando é evento da plataforma,
+ * senão o nome normalizado. É metade da chave da prova — a outra é o provaNumber.
+ */
+function chaveDoEvento(eventId: number | null | undefined, eventoNome: string | null | undefined): string {
+    if (eventId) return `evt:${eventId}`;
+    return `nome:${normalizarNome(eventoNome)}`;
+}
+
+/** Chave de identidade de uma PROVA: (evento, provaNumber). */
+function chaveDaProva(eventId: number | null | undefined, eventoNome: string | null | undefined, provaNumber: number): string {
+    return `${chaveDoEvento(eventId, eventoNome)}#${provaNumber}`;
+}
+
+type EtapaComEvento = {
+    id: number;
+    eventId: number | null;
+    customName: string | null;
+    eventoNome: string | null;
+    provaNumber: number;
+    stageNumber: number;
+    event?: { name: string | null } | null;
+};
+
+/**
+ * Nome do evento de uma prova já gravada. Linha antiga (anterior à migração) não
+ * tem `eventoNome`: cai no nome do evento da plataforma e, por último, no
+ * customName — que era exatamente onde o nome da prova morava antes.
+ */
+function eventoDaEtapa(e: EtapaComEvento): string {
+    return limparNome(e.eventoNome) || limparNome(e.event?.name) || limparNome(e.customName) || `Etapa ${e.stageNumber}`;
+}
+
+/** Agrupa as provas do campeonato por evento, na ordem global (stageNumber). */
+function agruparPorEvento(etapas: EtapaComEvento[]) {
+    const grupos = new Map<string, { chave: string; nome: string; eventId: number | null; provas: { stageId: number; provaNumber: number }[] }>();
+    for (const e of [...etapas].sort((a, b) => a.stageNumber - b.stageNumber)) {
+        const nome = eventoDaEtapa(e);
+        const chave = chaveDoEvento(e.eventId, e.eventoNome || nome);
+        if (!grupos.has(chave)) grupos.set(chave, { chave, nome, eventId: e.eventId, provas: [] });
+        grupos.get(chave)!.provas.push({ stageId: e.id, provaNumber: e.provaNumber });
+    }
+    for (const g of grupos.values()) g.provas.sort((a, b) => a.provaNumber - b.provaNumber);
+    return [...grupos.values()];
+}
+
+/**
+ * As dicas de e-mail que a planilha trouxe, escopadas por PAPEL.
+ *
+ * ⚠️ O e-mail da coluna EMAIL é o contato da DUPLA, não da pessoa (o piloto "Zé
+ * do Café" traz o e-mail do navegador "Vado"). Por isso ele nunca casa nome
+ * sozinho — só sugere, e só dentro do mesmo papel.
+ */
+function dicasDaPlanilha(
+    resultados: { pilotName: string | null; navigatorName: string | null; pilotEmail: string | null; navigatorEmail: string | null }[],
+): DicaEmail[] {
+    const vistos = new Set<string>();
+    const dicas: DicaEmail[] = [];
+    const juntar = (nome: string | null, email: string | null, papel: "pilot" | "navigator") => {
+        const limpo = limparNome(nome);
+        if (!limpo || !nomeDeCompetidorValido(limpo)) return;
+        const emailNorm = normalizarEmail(email);
+        if (!emailNorm) return;
+        const chave = `${limpo}|${emailNorm}|${papel}`;
+        if (vistos.has(chave)) return;
+        vistos.add(chave);
+        dicas.push({ nome: limpo, emailNorm, papel });
+    };
+    for (const r of resultados) {
+        juntar(r.pilotName, r.pilotEmail, "pilot");
+        juntar(r.navigatorName, r.navigatorEmail, "navigator");
+    }
+    return dicas;
+}
+
+/**
+ * Dicas de e-mail já conhecidas do campeonato.
+ *
+ * ⚠️ Só é lido dentro de procedure PROTEGIDO. `championship_competitor_emails`
+ * é dado pessoal e não pode sair por rota pública — por isso o e-mail nunca
+ * encosta em `championship_results` (getStageResults é publicProcedure).
+ */
+async function carregarDicasEmail(db: Banco, championshipId: number): Promise<DicaEmail[]> {
+    const linhas = await db
+        .select({
+            emailNorm: championshipCompetitorEmails.emailNorm,
+            papel: championshipCompetitorEmails.papel,
+            canonicalName: championshipCompetitorEmails.canonicalName,
+        })
+        .from(championshipCompetitorEmails)
+        .where(eq(championshipCompetitorEmails.championshipId, championshipId));
+
+    return linhas
+        .filter(l => l.papel === "pilot" || l.papel === "navigator")
+        .map(l => ({ nome: l.canonicalName, emailNorm: l.emailNorm, papel: l.papel as "pilot" | "navigator" }));
 }
 
 /** Insert em lotes: uma planilha inteira passa fácil de mil linhas. */
@@ -445,14 +565,34 @@ export const championshipRouter = router({
                 .orderBy(desc(championships.year));
         }),
 
-    // Adiciona uma etapa (conecta evento existente a um campeonato)
+    /**
+     * Adiciona um EVENTO ao campeonato, com as N provas dele de uma vez.
+     *
+     * Antes isto era "adicionar uma etapa" com o "Nº da etapa" digitado na mão —
+     * resíduo do modelo errado, em que ETAPA-N era numeração global. Agora o
+     * organizador escolhe o evento e quantas provas ele tem; o `stageNumber`
+     * global é atribuído aqui, em sequência.
+     *
+     * Idempotente: prova que já exista para (evento, provaNumber) é reaproveitada,
+     * então chamar de novo não duplica.
+     *
+     * ⚠️ Continua sem checagem de dono DE PROPÓSITO — fechar aqui quebraria o
+     * organizador "participante", que adiciona a própria prova ao campeonato de
+     * outro. Não foi piorado nesta mudança.
+     */
     addStage: protectedProcedure
         .input(
             z.object({
                 championshipId: z.number().int(),
                 eventId: z.number().int().optional(),
                 customName: z.string().optional(),
-                stageNumber: z.number().int(),
+                /** Quantas provas criar neste evento (1..N). */
+                provas: z.number().int().min(1).max(20).default(1),
+                /**
+                 * Compat com o front antigo: quando vem, é o `stageNumber` global da
+                 * 1ª prova em vez do "próximo da fila". Não use em código novo.
+                 */
+                stageNumber: z.number().int().optional(),
             }).refine(data => data.eventId || data.customName, {
                 message: "Forneça o eventId da plataforma OU o customName da prova externa",
                 path: ["eventId"]
@@ -462,18 +602,73 @@ export const championshipRouter = router({
             const db = await conectar();
             await exigirPermissaoDeEventos(ctx.user);
 
-            const [result] = await db
-                .insert(championshipStages)
-                .values({
-                    championshipId: input.championshipId,
-                    eventId: input.customName ? null : (input.eventId || null),
-                    customName: input.customName || null,
-                    isExternal: !!input.customName,
-                    stageNumber: input.stageNumber,
-                })
-                .returning();
+            const eventoId = input.customName ? null : (input.eventId || null);
+            let eventoNome = limparNome(input.customName);
+            if (!eventoNome && eventoId) {
+                const [evento] = await db
+                    .select({ name: events.name })
+                    .from(events)
+                    .where(eq(events.id, eventoId))
+                    .limit(1);
+                eventoNome = limparNome(evento?.name);
+            }
+            if (!eventoNome) eventoNome = `Evento ${eventoId ?? ""}`.trim();
 
-            return result;
+            const provasCriadas: { stageId: number; provaNumber: number }[] = [];
+
+            await db.transaction(async (tx) => {
+                const etapasAtuais = await tx
+                    .select({
+                        id: championshipStages.id,
+                        eventId: championshipStages.eventId,
+                        customName: championshipStages.customName,
+                        eventoNome: championshipStages.eventoNome,
+                        provaNumber: championshipStages.provaNumber,
+                        stageNumber: championshipStages.stageNumber,
+                    })
+                    .from(championshipStages)
+                    .where(eq(championshipStages.championshipId, input.championshipId));
+
+                const existentes: ProvaExistente[] = etapasAtuais.map(e => ({
+                    stageId: e.id,
+                    eventoChave: chaveDoEvento(e.eventId, limparNome(e.eventoNome) || limparNome(e.customName)),
+                    provaNumber: e.provaNumber,
+                    stageNumber: e.stageNumber,
+                }));
+
+                const plano = planejarProvas({
+                    provasDoArquivo: Array.from({ length: input.provas }, (_, i) => i + 1),
+                    eventoChave: chaveDoEvento(eventoId, eventoNome),
+                    existentes,
+                });
+
+                // Compat: `stageNumber` explícito manda na 1ª prova nova; as
+                // seguintes continuam a partir dele.
+                let forcado = input.stageNumber;
+
+                for (const p of plano.provas) {
+                    if (!p.criada) {
+                        provasCriadas.push({ stageId: p.stageId!, provaNumber: p.provaNumber });
+                        continue;
+                    }
+                    const stageNumber = forcado !== undefined ? forcado++ : p.stageNumber;
+                    const [criada] = await tx
+                        .insert(championshipStages)
+                        .values({
+                            championshipId: input.championshipId,
+                            eventId: eventoId,
+                            customName: input.provas > 1 ? `${eventoNome} — Prova ${p.provaNumber}` : (input.customName || null),
+                            isExternal: !eventoId,
+                            stageNumber,
+                            eventoNome,
+                            provaNumber: p.provaNumber,
+                        })
+                        .returning({ id: championshipStages.id });
+                    provasCriadas.push({ stageId: criada.id, provaNumber: p.provaNumber });
+                }
+            });
+
+            return { eventoNome, provasCriadas };
         }),
 
     // Obtém a etapa vinculada a um evento específico (para edição de evento)
@@ -505,6 +700,8 @@ export const championshipRouter = router({
                     customName: championshipStages.customName,
                     isExternal: championshipStages.isExternal,
                     stageNumber: championshipStages.stageNumber,
+                    eventoNome: championshipStages.eventoNome,
+                    provaNumber: championshipStages.provaNumber,
                     createdAt: championshipStages.createdAt,
                     event: {
                         name: events.name,
@@ -1076,8 +1273,12 @@ export const championshipRouter = router({
     // --- IMPORTAÇÃO / EXPORTAÇÃO DE PLANILHA ---
 
     /**
-     * Lê a planilha e devolve o que ACONTECERIA se ela fosse importada: etapas,
-     * avisos, categorias e as dúvidas de nome. Não escreve nada.
+     * Lê a planilha e devolve o que ACONTECERIA se ela fosse importada: o evento
+     * sugerido, as PROVAS do arquivo, avisos, categorias e as dúvidas de nome.
+     * Não escreve nada.
+     *
+     * O arquivo inteiro é UM EVENTO — o wizard pergunta o evento UMA vez, e não
+     * uma etapa por coluna ETAPA-N (era isso que criava "E1, E1, E2, E2").
      *
      * É `mutation` (e não `query`) por causa do transporte: query do tRPC vai por
      * GET com o input na URL, e um .xlsx em base64 não cabe numa query string.
@@ -1090,7 +1291,7 @@ export const championshipRouter = router({
         }))
         .mutation(async ({ input, ctx }) => {
             const db = await conectar();
-            await exigirDonoDoCampeonato(db, ctx.user, input.championshipId);
+            const { organizerCtx } = await exigirDonoDoCampeonato(db, ctx.user, input.championshipId);
 
             const etapasBanco = await carregarEtapas(db, input.championshipId);
             const jaGravados = await carregarResultados(db, etapasBanco.map(s => s.id));
@@ -1105,60 +1306,119 @@ export const championshipRouter = router({
                 novos: nomesDaPlanilha(parse.resultados),
                 existentes: nomesExistentes,
                 decisoes: await carregarDecisoes(db, input.championshipId),
+                dicasNovos: dicasDaPlanilha(parse.resultados),
+                dicasExistentes: await carregarDicasEmail(db, input.championshipId),
             });
 
-            // Quantas duplas por categoria em cada etapa — é o número que o
-            // organizador confere antes de mandar gravar.
-            const contagem = new Map<string, { categoria: string; stageNumber: number; duplas: number }>();
+            // Eventos do organizador, para o wizard oferecer o vínculo.
+            const eventosDaPlataforma = await db
+                .select({ id: events.id, name: events.name })
+                .from(events)
+                .where(eq(events.organizerId, organizerCtx.principalUserId))
+                .orderBy(desc(events.startDate));
+
+            // Evento sugerido: sai do nome do arquivo e, se bater com um evento da
+            // plataforma, já vem vinculado.
+            const nomeSugerido = nomeDoEventoDoArquivo(input.nomeArquivo) || limparNome(abas[0]?.nome) || "Evento";
+            const normSugerido = normalizarNome(nomeSugerido);
+            const daPlataforma = eventosDaPlataforma.find(e => normalizarNome(e.name) === normSugerido);
+            const eventoSugerido = { nome: daPlataforma?.name || nomeSugerido, eventId: daPlataforma?.id ?? null };
+
+            // Quantas duplas e quais categorias em cada PROVA do arquivo — é o
+            // número que o organizador confere antes de mandar gravar.
+            const porProva = new Map<number, { provaNumber: number; duplas: number; categorias: Set<string> }>();
             for (const r of parse.resultados) {
-                const categoria = limparNome(r.categoria) || "Geral";
-                const chave = `${categoria}|${r.stageNumber}`;
-                const atual = contagem.get(chave) || { categoria, stageNumber: r.stageNumber, duplas: 0 };
+                if (!porProva.has(r.provaNumber)) {
+                    porProva.set(r.provaNumber, { provaNumber: r.provaNumber, duplas: 0, categorias: new Set() });
+                }
+                const atual = porProva.get(r.provaNumber)!;
                 atual.duplas++;
-                contagem.set(chave, atual);
+                atual.categorias.add(limparNome(r.categoria) || "Geral");
             }
-            const resumo = [...contagem.values()].sort(
-                (a, b) => a.categoria.localeCompare(b.categoria, "pt-BR") || a.stageNumber - b.stageNumber,
-            );
+            const provas = [...porProva.values()]
+                .sort((a, b) => a.provaNumber - b.provaNumber)
+                .map(p => ({
+                    provaNumber: p.provaNumber,
+                    duplas: p.duplas,
+                    categorias: [...p.categorias].sort((a, b) => a.localeCompare(b, "pt-BR")),
+                }));
 
             return {
-                etapas: parse.etapas,
+                eventoSugerido,
+                provas,
                 abas: parse.abas,
                 avisos: parse.avisos,
-                resumo,
                 conciliacao,
-                etapasExistentes: etapasBanco.map(s => ({ id: s.id, stageNumber: s.stageNumber, nome: nomeDaEtapa(s) })),
+                eventosDoCampeonato: agruparPorEvento(etapasBanco),
+                eventosDaPlataforma,
                 categoriasExistentes,
             };
         }),
 
     /**
-     * Grava a planilha inteira numa transação: cria as etapas que faltam, aplica os
-     * apelidos (os já gravados + as decisões desta importação) e insere os
-     * resultados. Repetir a mesma planilha não duplica nada — cada etapa apaga só
-     * as categorias que o arquivo traz, igual ao saveStageResults.
+     * Grava a planilha inteira numa transação.
+     *
+     * O arquivo é UM EVENTO e cada ETAPA-N é uma PROVA dele: o evento vem UMA vez
+     * no input (id da plataforma OU nome), e cada prova é achada por
+     * (evento, provaNumber) ou criada com um `stageNumber` global novo. Os
+     * resultados são gravados PROVA A PROVA — importar duas planilhas no mesmo
+     * campeonato misturava o dado exatamente aqui.
+     *
+     * Repetir o MESMO arquivo é idempotente: mesmo evento, mesmas provas, mesma
+     * contagem de linhas (cada prova apaga só as categorias que o arquivo traz,
+     * igual ao saveStageResults).
      */
     importWorkbook: protectedProcedure
         .input(z.object({
             championshipId: z.number().int(),
             arquivoBase64: z.string(),
             nomeArquivo: z.string(),
+            /** O evento do arquivo: um evento da plataforma OU um nome digitado. */
+            evento: z.object({
+                eventId: z.number().int().optional(),
+                nome: z.string().optional(),
+            }),
             decisoes: z.array(z.object({
                 novo: z.string(),
                 /** string = "é a mesma pessoa, use este nome"; null = "é outra pessoa". */
                 canonico: z.string().nullable(),
             })).default([]),
-            mapaEtapas: z.array(z.object({
-                stageNumber: z.number().int(),
-                /** Etapa da plataforma já existente. */
-                stageId: z.number().int().optional(),
-                /** Prova externa a criar com este nome. */
-                customName: z.string().optional(),
-            })).default([]),
+            /**
+             * Quais provaNumber do arquivo entram. Ausente ou vazio = TODAS.
+             * Serve para o caso "a P2 ainda não rodou, mas a coluna já está lá":
+             * importa a P1 agora e a P2 depois, sem duplicar nada (a chave
+             * (evento, provaNumber) reaproveita a prova já criada).
+             */
+            provas: z.array(z.number().int()).optional(),
         }))
         .mutation(async ({ input, ctx }) => {
             const db = await conectar();
-            const { champ } = await exigirDonoDoCampeonato(db, ctx.user, input.championshipId);
+            const { champ, organizerCtx } = await exigirDonoDoCampeonato(db, ctx.user, input.championshipId);
+
+            // ---- 1) de que EVENTO é este arquivo
+            let eventoId: number | null = null;
+            let eventoNome = limparNome(input.evento.nome);
+
+            if (input.evento.eventId) {
+                const [evento] = await db
+                    .select({ id: events.id, name: events.name, organizerId: events.organizerId })
+                    .from(events)
+                    .where(eq(events.id, input.evento.eventId))
+                    .limit(1);
+                if (!evento) throw new TRPCError({ code: "NOT_FOUND", message: "Evento não encontrado" });
+                if (evento.organizerId !== organizerCtx.principalUserId) {
+                    throw new TRPCError({ code: "FORBIDDEN", message: "Este evento é de outro organizador" });
+                }
+                eventoId = evento.id;
+                eventoNome = eventoNome || limparNome(evento.name);
+            }
+            if (!eventoNome) eventoNome = nomeDoEventoDoArquivo(input.nomeArquivo);
+            if (!eventoNome) {
+                throw new TRPCError({
+                    code: "BAD_REQUEST",
+                    message: "Diga de que evento é esta planilha (eventId da plataforma ou nome)",
+                });
+            }
 
             const etapasBanco = await carregarEtapas(db, input.championshipId);
             const jaGravados = await carregarResultados(db, etapasBanco.map(s => s.id));
@@ -1167,9 +1427,26 @@ export const championshipRouter = router({
 
             const abas = await lerAbasDaPlanilha(input.arquivoBase64);
             const parse = importarPlanilhaCampeonato(abas, { categoriasConhecidas: categoriasExistentes });
-            const novos = nomesDaPlanilha(parse.resultados);
+
+            // ---- 2) QUAIS provas do arquivo entram (ausente/vazio = todas).
+            // O filtro vem ANTES de tudo: prova não selecionada não é criada, não
+            // grava resultado e nem entra na conciliação de nomes.
+            const pedidas = [...new Set(input.provas || [])];
+            const desconhecidas = pedidas.filter(p => !parse.provas.includes(p)).sort((a, b) => a - b);
+            if (desconhecidas.length > 0) {
+                throw new TRPCError({
+                    code: "BAD_REQUEST",
+                    message: `Esta planilha não tem a prova ${desconhecidas.join(", ")}. Provas do arquivo: ${parse.provas.join(", ") || "nenhuma"}.`,
+                });
+            }
+            const provasImportadas = pedidas.length > 0 ? parse.provas.filter(p => pedidas.includes(p)) : [...parse.provas];
+            const resultadosSelecionados = parse.resultados.filter(r => provasImportadas.includes(r.provaNumber));
+
+            const novos = nomesDaPlanilha(resultadosSelecionados);
 
             const decisoesGravadas = await carregarDecisoes(db, input.championshipId);
+            const dicasNovos = dicasDaPlanilha(resultadosSelecionados);
+            const dicasExistentes = await carregarDicasEmail(db, input.championshipId);
 
             // As decisões desta importação viram registro permanente. O "é outra
             // pessoa" não diz contra QUEM foi a pergunta, então refazemos a
@@ -1179,6 +1456,8 @@ export const championshipRouter = router({
                 novos,
                 existentes: nomesExistentes,
                 decisoes: decisoesGravadas,
+                dicasNovos,
+                dicasExistentes,
             }).duvidas;
 
             const novasDecisoes: DecisaoAlias[] = [];
@@ -1202,6 +1481,8 @@ export const championshipRouter = router({
                 novos,
                 existentes: nomesExistentes,
                 decisoes: [...decisoesGravadas, ...novasDecisoes],
+                dicasNovos,
+                dicasExistentes,
             });
             // "exato"/"normalizado"/"alias": tudo que resolve sozinho vira tradução.
             const traducao = new Map(conciliacao.automaticos.map(a => [a.novo, a.canonico]));
@@ -1213,88 +1494,104 @@ export const championshipRouter = router({
             const nomesConciliados = [...traducao.entries()].filter(([novo, canonico]) => novo !== canonico).length;
 
             const tabela = resolverTabela(champ.pointsPreset, champ.pointsTable);
-            const mapaPedido = new Map(input.mapaEtapas.map(m => [m.stageNumber, m]));
 
-            let etapasCriadas = 0;
+            let provasCriadas = 0;
+            let provasReaproveitadas = 0;
             let resultadosGravados = 0;
             const categoriasGravadas = new Set<string>();
 
             await db.transaction(async (tx) => {
                 const etapasAtuais = await tx
-                    .select({ id: championshipStages.id, stageNumber: championshipStages.stageNumber })
+                    .select({
+                        id: championshipStages.id,
+                        eventId: championshipStages.eventId,
+                        customName: championshipStages.customName,
+                        eventoNome: championshipStages.eventoNome,
+                        provaNumber: championshipStages.provaNumber,
+                        stageNumber: championshipStages.stageNumber,
+                    })
                     .from(championshipStages)
                     .where(eq(championshipStages.championshipId, input.championshipId));
 
-                const idPorNumero = new Map<number, number>();
+                // Identidade da prova: (evento, provaNumber). Linha antiga sem
+                // `eventoNome` cai no customName, que era onde o nome morava antes.
+                const existentes: ProvaExistente[] = etapasAtuais.map(e => ({
+                    stageId: e.id,
+                    eventoChave: chaveDoEvento(e.eventId, limparNome(e.eventoNome) || limparNome(e.customName)),
+                    provaNumber: e.provaNumber,
+                    stageNumber: e.stageNumber,
+                }));
 
-                for (const stageNumber of parse.etapas) {
-                    const pedido = mapaPedido.get(stageNumber);
+                const plano = planejarProvas({
+                    provasDoArquivo: parse.provas,
+                    eventoChave: chaveDoEvento(eventoId, eventoNome),
+                    existentes,
+                    selecionadas: provasImportadas,
+                });
 
-                    // 1) Etapa da plataforma escolhida a dedo — tem que ser DESTE campeonato.
-                    if (pedido?.stageId) {
-                        const daCasa = etapasAtuais.find(e => e.id === pedido.stageId);
-                        if (!daCasa) {
-                            throw new TRPCError({
-                                code: "BAD_REQUEST",
-                                message: `A etapa ${pedido.stageId} não pertence a este campeonato`,
-                            });
-                        }
-                        idPorNumero.set(stageNumber, daCasa.id);
+                const idPorProva = new Map<number, number>();
+                for (const p of plano.provas) {
+                    if (!p.criada) {
+                        idPorProva.set(p.provaNumber, p.stageId!);
+                        provasReaproveitadas++;
                         continue;
                     }
-
-                    // 2) Já existe etapa com esse número: reaproveita (reimportar não duplica).
-                    const existente = etapasAtuais.find(e => e.stageNumber === stageNumber);
-                    if (existente) {
-                        idPorNumero.set(stageNumber, existente.id);
-                        continue;
-                    }
-
-                    // 3) Não existe: cria como prova externa.
-                    const customName = limparNome(pedido?.customName) || `Etapa ${stageNumber}`;
                     const [criada] = await tx
                         .insert(championshipStages)
                         .values({
                             championshipId: input.championshipId,
-                            eventId: null,
-                            customName,
-                            isExternal: true,
-                            stageNumber,
+                            eventId: eventoId,
+                            customName: `${eventoNome} — Prova ${p.provaNumber}`,
+                            isExternal: !eventoId,
+                            stageNumber: p.stageNumber,
+                            eventoNome,
+                            provaNumber: p.provaNumber,
                         })
-                        .returning({ id: championshipStages.id, stageNumber: championshipStages.stageNumber });
+                        .returning({ id: championshipStages.id });
 
-                    etapasAtuais.push(criada);
-                    idPorNumero.set(stageNumber, criada.id);
-                    etapasCriadas++;
+                    idPorProva.set(p.provaNumber, criada.id);
+                    provasCriadas++;
                 }
 
-                const linhas = parse.resultados.map(r => {
-                    const stageId = idPorNumero.get(r.stageNumber);
-                    if (!stageId) return null;
-                    const category = limparNome(r.categoria) || "Geral";
-                    categoriasGravadas.add(category);
-                    return {
-                        stageId,
-                        category,
-                        pilotName: traduzir(r.pilotName),
-                        navigatorName: traduzir(r.navigatorName),
-                        position: r.position,
-                        isDisqualified: r.isDisqualified,
-                        isDns: r.isDns,
-                        // Cache legado (coluna NOT NULL); a classificação recalcula na leitura.
-                        points: calcularPontos(r.position, r.isDisqualified, r.isDns, tabela),
-                        isDiscarded: false,
-                    };
-                }).filter((l): l is NonNullable<typeof l> => l !== null);
+                // Resultados PROVA A PROVA: cada linha vai só para a sua prova.
+                // Era aqui que o dado de um arquivo caía na etapa do outro.
+                type LinhaResultado = {
+                    stageId: number; category: string;
+                    pilotName: string | null; navigatorName: string | null;
+                    position: number; isDisqualified: boolean; isDns: boolean;
+                    points: number; isDiscarded: boolean;
+                };
+                const linhas: LinhaResultado[] = [];
+                for (const provaNumber of provasImportadas) {
+                    const stageId = idPorProva.get(provaNumber);
+                    if (!stageId) continue;
+                    for (const r of resultadosSelecionados) {
+                        if (r.provaNumber !== provaNumber) continue;
+                        const category = limparNome(r.categoria) || "Geral";
+                        categoriasGravadas.add(category);
+                        linhas.push({
+                            stageId,
+                            category,
+                            pilotName: traduzir(r.pilotName),
+                            navigatorName: traduzir(r.navigatorName),
+                            position: r.position,
+                            isDisqualified: r.isDisqualified,
+                            isDns: r.isDns,
+                            // Cache legado (coluna NOT NULL); a classificação recalcula na leitura.
+                            points: calcularPontos(r.position, r.isDisqualified, r.isDns, tabela),
+                            isDiscarded: false,
+                        });
+                    }
+                }
 
-                // Mesma semântica do saveStageResults: por etapa, limpa só as
+                // Mesma semântica do saveStageResults: por PROVA, limpa só as
                 // categorias que o arquivo traz — categoria que não veio fica intacta.
-                const porEtapa = new Map<number, Set<string>>();
+                const porProva = new Map<number, Set<string>>();
                 for (const l of linhas) {
-                    if (!porEtapa.has(l.stageId)) porEtapa.set(l.stageId, new Set());
-                    porEtapa.get(l.stageId)!.add(l.category);
+                    if (!porProva.has(l.stageId)) porProva.set(l.stageId, new Set());
+                    porProva.get(l.stageId)!.add(l.category);
                 }
-                for (const [stageId, categorias] of porEtapa) {
+                for (const [stageId, categorias] of porProva) {
                     await tx.delete(championshipResults).where(
                         and(
                             eq(championshipResults.stageId, stageId),
@@ -1305,6 +1602,36 @@ export const championshipRouter = router({
 
                 await inserirResultadosEmLotes(tx, linhas);
                 resultadosGravados = linhas.length;
+
+                // Dicas de e-mail, já com o nome CONCILIADO. É upsert por
+                // (championshipId, emailNorm, papel): o e-mail identifica dupla +
+                // posição, e o último nome visto naquela posição é o que vale.
+                const dicasParaGravar = dicasDaPlanilha(
+                    resultadosSelecionados.map(r => ({
+                        pilotName: traduzir(r.pilotName),
+                        navigatorName: traduzir(r.navigatorName),
+                        pilotEmail: r.pilotEmail,
+                        navigatorEmail: r.navigatorEmail,
+                    })),
+                );
+                for (const d of dicasParaGravar) {
+                    await tx
+                        .insert(championshipCompetitorEmails)
+                        .values({
+                            championshipId: input.championshipId,
+                            emailNorm: d.emailNorm,
+                            papel: d.papel,
+                            canonicalName: d.nome,
+                        })
+                        .onConflictDoUpdate({
+                            target: [
+                                championshipCompetitorEmails.championshipId,
+                                championshipCompetitorEmails.emailNorm,
+                                championshipCompetitorEmails.papel,
+                            ],
+                            set: { canonicalName: d.nome },
+                        });
+                }
 
                 for (const d of novasDecisoes) {
                     await tx
@@ -1323,7 +1650,10 @@ export const championshipRouter = router({
             });
 
             return {
-                etapasCriadas,
+                eventoNome,
+                provasImportadas,
+                provasCriadas,
+                provasReaproveitadas,
                 resultadosGravados,
                 categorias: [...categoriasGravadas].sort((a, b) => a.localeCompare(b, "pt-BR")),
                 nomesConciliados,
@@ -1334,20 +1664,50 @@ export const championshipRouter = router({
      * Exporta no MESMO formato que a importação lê (uma aba por categoria, layout
      * longo NOME + FUNÇÃO), para o round-trip fechar: exportar, corrigir no Excel,
      * importar de volta. A aba CLASSIFICAÇÃO é relatório e é ignorada na releitura.
+     *
+     * ⚠️ UM EVENTO POR ARQUIVO. As colunas ETAPA-N do arquivo são as PROVAS de um
+     * evento, e a importação pergunta o evento uma vez por arquivo — juntar dois
+     * eventos num arquivo só quebraria a releitura (o ETAPA-1 de um viraria o
+     * ETAPA-1 do outro, que é exatamente o bug que estamos consertando). Sem
+     * `evento` no input sai o primeiro evento do campeonato; `eventosDisponiveis`
+     * volta na resposta para a tela oferecer os outros.
      */
     exportWorkbook: protectedProcedure
-        .input(z.object({ championshipId: z.number().int() }))
+        .input(z.object({
+            championshipId: z.number().int(),
+            /** Qual evento exportar. Omitido = o primeiro (menor stageNumber). */
+            evento: z.object({
+                eventId: z.number().int().optional(),
+                nome: z.string().optional(),
+            }).optional(),
+        }))
         .mutation(async ({ input, ctx }) => {
             const db = await conectar();
             const { champ } = await exigirDonoDoCampeonato(db, ctx.user, input.championshipId);
             const XLSX = await import("xlsx");
 
             const { standings, stages } = await calculateChampionshipStandings(input.championshipId);
-            const stageIds = stages.map(s => s.id);
+
+            const eventos = agruparPorEvento(stages);
+            if (eventos.length === 0) {
+                throw new TRPCError({ code: "BAD_REQUEST", message: "Este campeonato ainda não tem nenhuma prova" });
+            }
+            const chavePedida = input.evento
+                ? chaveDoEvento(input.evento.eventId ?? null, input.evento.nome ?? null)
+                : null;
+            const evento = (chavePedida && eventos.find(e => e.chave === chavePedida)) || eventos[0];
+            if (chavePedida && !eventos.some(e => e.chave === chavePedida)) {
+                throw new TRPCError({ code: "NOT_FOUND", message: "Evento não encontrado neste campeonato" });
+            }
+
+            // Só as provas DESTE evento saem no arquivo, e a coluna vira
+            // "ETAPA-<provaNumber>" — é assim que a releitura reencontra a prova.
+            const doEvento = stages.filter(s => evento.provas.some(p => p.stageId === s.id));
+            const stageIds = doEvento.map(s => s.id);
             const brutos = await carregarResultados(db, stageIds);
 
-            const numeroDaEtapa = new Map(stages.map(s => [s.id, s.stageNumber]));
-            const numerosDeEtapa = stages.map(s => s.stageNumber);
+            const numeroDaEtapa = new Map(doEvento.map(s => [s.id, s.provaNumber]));
+            const numerosDeEtapa = [...new Set(doEvento.map(s => s.provaNumber))].sort((a, b) => a - b);
 
             // Os campos de ficha (email, CPF, veículo...) não moram no resultado —
             // vêm da inscrição do evento, casada pelo nome normalizado. Etapa externa
@@ -1478,16 +1838,25 @@ export const championshipRouter = router({
                 XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(linhas), nomeDeAba(categoria));
             }
 
-            const linhasClassificacao = montarLinhasClassificacao(standings, numerosDeEtapa);
+            // A aba de relatório continua sendo do CAMPEONATO inteiro (é onde o
+            // organizador vê a temporada), então ela usa o stageNumber GLOBAL — não
+            // os provaNumber do evento exportado. Ela é ignorada na releitura.
+            const linhasClassificacao = montarLinhasClassificacao(standings, stages.map(s => s.stageNumber));
             XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(linhasClassificacao), nomeDeAba(ABA_CLASSIFICACAO));
 
             const buffer = XLSX.write(wb, { type: "buffer", bookType: "xlsx" });
-            const nomeLimpo = (champ.name || "campeonato").replace(/[\\/:*?"<>|]/g, "").replace(/\s+/g, "-");
+            const limpar = (s: string) => s.replace(/[\\/:*?"<>|]/g, "").replace(/\s+/g, "-");
 
             return {
                 success: true as const,
                 data: Buffer.from(buffer).toString("base64"),
-                filename: `campeonato-${nomeLimpo}-${champ.year}.xlsx`,
+                // O nome do arquivo é o do EVENTO, no mesmo padrão que a importação
+                // lê de volta ("Campeonato - <evento>.xlsx").
+                filename: `Campeonato - ${evento.nome}.xlsx`,
+                eventoNome: evento.nome,
+                eventoChave: evento.chave,
+                eventosDisponiveis: eventos.map(e => ({ chave: e.chave, nome: e.nome, eventId: e.eventId })),
+                campeonato: `${limpar(champ.name || "campeonato")}-${champ.year}`,
             };
         }),
 

@@ -434,8 +434,16 @@ export type Championship = typeof championships.$inferSelect;
 export type InsertChampionship = typeof championships.$inferInsert;
 
 /**
- * Championship Stages
- * Links a championship to an existing event
+ * Championship Stages — uma linha aqui é UMA PROVA.
+ *
+ * Cada arquivo "Campeonato - <rally>.xlsx" é um EVENTO e as colunas ETAPA-1,
+ * ETAPA-2 são as PROVAS daquele evento. O ETAPA-1 do "7º Rally do Cavalo" e o
+ * ETAPA-1 do "Rally do Amigo Ida 2026" são provas diferentes, de eventos
+ * diferentes — modelar o ETAPA-N como numeração global do campeonato misturava
+ * o dado de um arquivo nas provas do outro.
+ *
+ * Identidade da prova (para reimportar não duplicar):
+ *   (championshipId, evento, provaNumber), evento = eventId ou eventoNome normalizado.
  */
 export const championshipStages = pgTable("championship_stages", {
   id: serial("id").primaryKey(),
@@ -443,7 +451,12 @@ export const championshipStages = pgTable("championship_stages", {
   eventId: integer("eventId"), // Null for external events
   customName: text("customName"),
   isExternal: boolean("isExternal").default(false).notNull(),
+  /** Ordem GLOBAL da prova dentro do campeonato: ordena as colunas e resolve o desempate "última etapa". */
   stageNumber: integer("stageNumber").notNull(),
+  /** Nome do evento (rally) a que esta prova pertence — usado quando não é evento da plataforma. */
+  eventoNome: varchar("eventoNome", { length: 200 }),
+  /** O N do "ETAPA-N" dentro do arquivo/evento. */
+  provaNumber: integer("provaNumber").default(1).notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 });
 
@@ -491,6 +504,33 @@ export const championshipNameAliases = pgTable("championship_name_aliases", {
 
 export type ChampionshipNameAlias = typeof championshipNameAliases.$inferSelect;
 export type InsertChampionshipNameAlias = typeof championshipNameAliases.$inferInsert;
+
+/**
+ * Championship Competitor Emails
+ *
+ * DICA de conciliação, nunca casamento automático. Na coluna EMAIL das planilhas
+ * o endereço fica na linha do PILOTO e costuma ser o contato da DUPLA, não da
+ * pessoa: no Ida, "Zé do Café" (piloto) tem o e-mail do "Vado" (navegador dele).
+ * Ou seja, o e-mail identifica dupla + posição — por isso ele só vale escopado
+ * por PAPEL ('pilot' casa com 'pilot') e como sugestão que o humano confirma.
+ *
+ * ⚠️ Dado pessoal: NENHUM procedure público pode devolver esta tabela
+ * (getStageResults é publicProcedure — por isso e-mail não encosta em
+ * championship_results).
+ */
+export const championshipCompetitorEmails = pgTable("championship_competitor_emails", {
+  id: serial("id").primaryKey(),
+  championshipId: integer("championshipId").notNull(),
+  /** E-mail já normalizado (trim + lowercase); é a chave de busca. */
+  emailNorm: varchar("emailNorm", { length: 200 }).notNull(),
+  /** 'pilot' | 'navigator' — o e-mail só casa dentro do mesmo papel. */
+  papel: varchar("papel", { length: 20 }).notNull(),
+  canonicalName: varchar("canonicalName", { length: 200 }).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type ChampionshipCompetitorEmail = typeof championshipCompetitorEmails.$inferSelect;
+export type InsertChampionshipCompetitorEmail = typeof championshipCompetitorEmails.$inferInsert;
 
 /**
  * Championship Requests

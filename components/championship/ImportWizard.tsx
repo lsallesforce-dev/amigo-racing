@@ -9,10 +9,29 @@
 // PRÉVIA — o `xlsx` não entra no bundle do cliente de propósito: a página já
 // carrega 2.18 MB. Nada é gravado até o último passo.
 //
+// ⚠️ MUDANÇA DE MODELO (correção do incidente real): cada arquivo
+// `Campeonato - <rally>.xlsx` é UM EVENTO, e as colunas ETAPA-1/ETAPA-2 da
+// planilha são as PROVAS daquele evento (não etapas de eventos diferentes). O
+// wizard antigo perguntava, ETAPA por ETAPA, "isso é etapa de qual evento?" —
+// isso deixava o organizador espalhar as duas provas do MESMO arquivo em
+// eventos diferentes, e foi exatamente isso que colapsou a tabela em produção
+// (duas colunas "E1", duas "E2", dado de um arquivo caindo nas provas do
+// outro). Agora se pergunta o EVENTO uma vez só, para o arquivo inteiro, e as
+// provas (P1, P2, ...) entram como provas DESSE evento — não existe mais
+// mapear prova a prova.
+//
 // O passo 4 é o pedido explícito do usuário: "carrego o primeiro rally, aquele
 // pega o nome dos competidores; quando eu enviar outra planilha aparece um popup
 // perguntando se aquele nome é o mesmo desse". Na 2ª planilha real dele são 12
-// dúvidas de uma vez — por isso existem os botões de resposta em LOTE.
+// dúvidas de uma vez — por isso existem os botões de resposta em LOTE. E agora,
+// quando o candidato tem o MESMO E-MAIL do competidor já cadastrado, ele vem
+// destacado e em primeiro — é o que liga apelido a nome completo (o texto puro
+// nunca pega "Benê" -> "Benedito Lopes").
+//
+// O passo 3 (Evento) também deixa escolher QUAIS provas do arquivo entram —
+// pedido real: a planilha já tem a coluna ETAPA-2, mas a prova 2 ainda não
+// rodou, e ele quer importar só a P1 agora. Padrão é todas marcadas; a chave
+// evento+prova no backend garante que importar a P2 depois não duplica nada.
 
 import { useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -27,6 +46,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { trpc } from "@/lib/trpc";
@@ -42,6 +62,7 @@ import {
   FileSpreadsheet,
   Info,
   Loader2,
+  Mail,
   Upload,
   UserPlus,
   Users,
@@ -52,24 +73,55 @@ import type { Aviso, ResumoAba, TipoAviso } from "@/shared/importarPlanilhaCampe
 // ------------------------------------------------------------------ contratos
 //
 // Tipados aqui (e não inferidos do tRPC) porque o wizard guarda a prévia em
-// estado por vários passos — o estado precisa de um nome próprio.
+// estado por vários passos — o estado precisa de um nome próprio. Espelham o
+// contrato novo do backend (mapaEtapas morreu, entra `evento` — um por
+// arquivo).
+
+export interface CandidatoConciliacao {
+  nome: string;
+  similaridade: number;
+  /** Mesmo e-mail do cadastro — a dica mais forte que existe, mas NÃO decide sozinha:
+   *  nestas planilhas o e-mail é da DUPLA, não da pessoa (piloto e navegador dividem
+   *  o mesmo contato). Continua exigindo confirmação humana. */
+  mesmoEmail: boolean;
+}
 
 export interface DuvidaConciliacao {
   novo: string;
-  candidatos: { nome: string; similaridade: number }[];
+  papel: "pilot" | "navigator" | null;
+  candidatos: CandidatoConciliacao[];
+}
+
+export interface ProvaPrevia {
+  provaNumber: number;
+  duplas: number;
+  categorias: string[];
+}
+
+export interface EventoDoCampeonato {
+  chave: string;
+  nome: string;
+  eventId: number | null;
+  provas: { stageId: number; provaNumber: number }[];
+}
+
+export interface EventoDaPlataforma {
+  id: number;
+  name: string;
 }
 
 export interface PreviaImportacao {
-  etapas: number[];
+  eventoSugerido: { nome: string; eventId: number | null };
+  provas: ProvaPrevia[];
   abas: ResumoAba[];
   avisos: Aviso[];
-  resumo: { categoria: string; stageNumber: number; duplas: number }[];
   conciliacao: {
     automaticos: { novo: string; canonico: string; motivo: string }[];
     duvidas: DuvidaConciliacao[];
     ineditos: string[];
   };
-  etapasExistentes: { id: number; stageNumber: number; nome: string }[];
+  eventosDoCampeonato: EventoDoCampeonato[];
+  eventosDaPlataforma: EventoDaPlataforma[];
   categoriasExistentes: string[];
 }
 
@@ -81,13 +133,16 @@ export interface ImportWizardProps {
   onImportado?: () => void;
 }
 
-type ModoEtapa = "existente" | "evento" | "nova";
+type ModoEvento = "plataforma" | "existente" | "novo";
 
-interface DestinoEtapa {
-  modo: ModoEtapa;
-  stageId?: number;
+interface EscolhaEvento {
+  modo: ModoEvento;
+  /** modo "plataforma": id do evento da plataforma a vincular. */
   eventId?: number;
-  customName: string;
+  /** modo "existente": chave do evento já presente no campeonato (ver eventosDoCampeonato). */
+  chaveExistente?: string;
+  /** modo "novo": nome livre do evento a criar. */
+  nome: string;
 }
 
 /** `null` = "é outra pessoa". String = nome canônico escolhido. Ausente = sem resposta. */
@@ -117,19 +172,29 @@ const ESTILO_AVISO = {
   info: "border-border bg-muted/30 text-muted-foreground",
 } as const;
 
+const ROTULO_PAPEL: Record<"pilot" | "navigator", string> = {
+  pilot: "Piloto",
+  navigator: "Navegador",
+};
+
 // ------------------------------------------------------------------ passos
 
 const TITULOS_PASSO: Record<number, string> = {
   1: "Arquivo",
   2: "Conferência",
-  3: "Etapas",
-  4: "Nomes",
+  3: "Evento",
+  4: "Conciliação",
   5: "Confirmar",
 };
 
 export default function ImportWizard({ championshipId, open, onOpenChange, onImportado }: ImportWizardProps) {
   const utils = trpc.useUtils();
   const inputArquivo = useRef<HTMLInputElement>(null);
+  // Trava de duplo-submit: a duplicação em produção veio de o botão "Importar"
+  // aceitar dois cliques antes do primeiro re-render marcar a mutation como
+  // pendente. Um ref é síncrono — o segundo clique é barrado na hora, sem
+  // esperar o React processar o `isPending`.
+  const enviandoRef = useRef(false);
 
   const [passo, setPasso] = useState(1);
   const [nomeArquivo, setNomeArquivo] = useState("");
@@ -137,22 +202,22 @@ export default function ImportWizard({ championshipId, open, onOpenChange, onImp
   const [lendoArquivo, setLendoArquivo] = useState(false);
   const [arrastando, setArrastando] = useState(false);
   const [previa, setPrevia] = useState<PreviaImportacao | null>(null);
-  const [destinos, setDestinos] = useState<Record<number, DestinoEtapa>>({});
+  const [escolhaEvento, setEscolhaEvento] = useState<EscolhaEvento>({ modo: "novo", nome: "" });
+  // Quais provas do arquivo entram nesta importação. Padrão = todas — o
+  // organizador só desmarca quando quer importar parcial (ex.: a prova 2 ainda
+  // não rodou).
+  const [provasSelecionadas, setProvasSelecionadas] = useState<Set<number>>(new Set());
   const [respostas, setRespostas] = useState<Respostas>({});
   const [automaticosAbertos, setAutomaticosAbertos] = useState(false);
-  const [criandoEtapas, setCriandoEtapas] = useState(false);
-
-  const { data: meusEventos } = trpc.events.myEvents.useQuery(undefined, { enabled: open });
 
   const previewMutation = trpc.championships.previewImport.useMutation();
   const importMutation = trpc.championships.importWorkbook.useMutation();
-  const addStageMutation = trpc.championships.addStage.useMutation();
 
   const duvidas = previa?.conciliacao?.duvidas || [];
   const temDuvidas = duvidas.length > 0;
 
-  // Sem dúvida nenhuma o passo 4 não existe — não faz sentido mostrar uma tela
-  // vazia só para o usuário clicar "Avançar".
+  // Sem dúvida nenhuma o passo de conciliação não existe — não faz sentido
+  // mostrar uma tela vazia só para o usuário clicar "Avançar".
   const passosVisiveis = useMemo(() => (temDuvidas ? [1, 2, 3, 4, 5] : [1, 2, 3, 5]), [temDuvidas]);
 
   const respondidas = duvidas.filter(d => d.novo in respostas).length;
@@ -163,9 +228,11 @@ export default function ImportWizard({ championshipId, open, onOpenChange, onImp
     setNomeArquivo("");
     setArquivoBase64("");
     setPrevia(null);
-    setDestinos({});
+    setEscolhaEvento({ modo: "novo", nome: "" });
+    setProvasSelecionadas(new Set());
     setRespostas({});
     setAutomaticosAbertos(false);
+    enviandoRef.current = false;
     if (inputArquivo.current) inputArquivo.current.value = "";
   };
 
@@ -208,17 +275,18 @@ export default function ImportWizard({ championshipId, open, onOpenChange, onImp
       setNomeArquivo(arquivo.name);
       setPrevia(prev);
       setRespostas({});
+      // Padrão: todas as provas do arquivo marcadas para importar.
+      setProvasSelecionadas(new Set((prev.provas || []).map(p => p.provaNumber)));
 
-      // Pré-seleção do passo 3: ETAPA-N cai na etapa de mesmo número que já
-      // existe no campeonato. É o caso normal — a planilha acumula as etapas.
-      const iniciais: Record<number, DestinoEtapa> = {};
-      for (const numero of prev.etapas || []) {
-        const existente = (prev.etapasExistentes || []).find(e => e.stageNumber === numero);
-        iniciais[numero] = existente
-          ? { modo: "existente", stageId: existente.id, customName: existente.nome }
-          : { modo: "nova", customName: `${numero}ª Etapa` };
+      // Pré-seleção do passo 3 (Evento): se o backend já sugeriu um evento da
+      // plataforma (nome bate com um evento existente), pré-marca "plataforma"
+      // com ele; senão cai em "novo" com o nome sugerido — que é o normal para
+      // planilha de rally externo.
+      if (prev.eventoSugerido.eventId) {
+        setEscolhaEvento({ modo: "plataforma", eventId: prev.eventoSugerido.eventId, nome: prev.eventoSugerido.nome });
+      } else {
+        setEscolhaEvento({ modo: "novo", nome: prev.eventoSugerido.nome });
       }
-      setDestinos(iniciais);
       setPasso(2);
     } catch (erro: any) {
       toast.error(erro?.message || "Não consegui ler a planilha.");
@@ -229,59 +297,72 @@ export default function ImportWizard({ championshipId, open, onOpenChange, onImp
 
   // ---------------------------------------------------------------- passo 3
 
-  const atualizarDestino = (numero: number, mudanca: Partial<DestinoEtapa>) => {
-    setDestinos(prev => ({ ...prev, [numero]: { ...prev[numero], ...mudanca } }));
+  const eventoCompleto = useMemo(() => {
+    if (escolhaEvento.modo === "plataforma") return !!escolhaEvento.eventId;
+    if (escolhaEvento.modo === "existente") return !!escolhaEvento.chaveExistente;
+    return !!escolhaEvento.nome.trim();
+  }, [escolhaEvento]);
+
+  const eventoExistenteEscolhido = useMemo(
+    () => previa?.eventosDoCampeonato.find(e => e.chave === escolhaEvento.chaveExistente),
+    [previa, escolhaEvento.chaveExistente],
+  );
+
+  const alternarProva = (provaNumber: number) => {
+    setProvasSelecionadas(prev => {
+      const copia = new Set(prev);
+      if (copia.has(provaNumber)) copia.delete(provaNumber);
+      else copia.add(provaNumber);
+      return copia;
+    });
   };
 
-  const etapasIncompletas = (previa?.etapas || []).filter(numero => {
-    const destino = destinos[numero];
-    if (!destino) return true;
-    if (destino.modo === "existente") return !destino.stageId;
-    if (destino.modo === "evento") return !destino.eventId;
-    return !destino.customName.trim();
-  });
+  const marcarTodasAsProvas = () => setProvasSelecionadas(new Set((previa?.provas || []).map(p => p.provaNumber)));
+  const desmarcarTodasAsProvas = () => setProvasSelecionadas(new Set());
 
   // ---------------------------------------------------------------- passo 5
 
   const confirmar = async () => {
-    if (!previa) return;
+    if (!previa || enviandoRef.current) return;
+    enviandoRef.current = true;
 
     try {
-      // Etapa "vinculada a um evento da plataforma" não existe no contrato do
-      // importWorkbook (que só aceita stageId ou customName). Então a etapa é
-      // criada ANTES, com o addStage de sempre, e entra na importação já como id.
-      setCriandoEtapas(true);
-      const mapaEtapas: { stageNumber: number; stageId?: number; customName?: string }[] = [];
-      for (const numero of previa.etapas) {
-        const destino = destinos[numero];
-        if (destino?.modo === "existente" && destino.stageId) {
-          mapaEtapas.push({ stageNumber: numero, stageId: destino.stageId });
-        } else if (destino?.modo === "evento" && destino.eventId) {
-          const criada = await addStageMutation.mutateAsync({
-            championshipId,
-            eventId: destino.eventId,
-            stageNumber: numero,
-          });
-          mapaEtapas.push({ stageNumber: numero, stageId: criada.id });
-        } else {
-          mapaEtapas.push({ stageNumber: numero, customName: destino?.customName?.trim() || `${numero}ª Etapa` });
-        }
-      }
-      setCriandoEtapas(false);
+      // Monta o `evento` do jeito que o novo contrato espera: OU um eventId
+      // (evento da plataforma, seja ele novo vínculo ou já usado no campeonato),
+      // OU um nome livre (evento externo, sem cadastro na plataforma).
+      const evento =
+        escolhaEvento.modo === "plataforma"
+          ? { eventId: escolhaEvento.eventId }
+          : escolhaEvento.modo === "existente"
+            ? eventoExistenteEscolhido?.eventId
+              ? { eventId: eventoExistenteEscolhido.eventId }
+              : { nome: eventoExistenteEscolhido?.nome }
+            : { nome: escolhaEvento.nome.trim() };
 
       const decisoes = Object.entries(respostas).map(([novo, canonico]) => ({ novo, canonico }));
+
+      // Só as provas marcadas no passo 3 entram na importação. Se o organizador
+      // deixou tudo marcado (o padrão), isso equivale a "todas" — mandar a lista
+      // completa em vez de omitir o campo não muda o resultado, e evita um `if`
+      // a mais aqui.
+      const provas = [...provasSelecionadas].sort((a, b) => a - b);
 
       const resultado = await importMutation.mutateAsync({
         championshipId,
         arquivoBase64,
         nomeArquivo,
+        evento,
         decisoes,
-        mapaEtapas,
+        provas,
       });
 
+      const provasImportadas = resultado.provasImportadas?.length
+        ? resultado.provasImportadas.map((n: number) => `P${n}`).join(", ")
+        : provas.map(n => `P${n}`).join(", ");
+
       toast.success(
-        `${resultado.resultadosGravados} resultado(s) gravado(s) em ${resultado.categorias.length} categoria(s).` +
-          (resultado.etapasCriadas ? ` ${resultado.etapasCriadas} etapa(s) criada(s).` : ""),
+        `${resultado.resultadosGravados} resultado(s) gravado(s) em ${resultado.categorias.length} categoria(s) — ` +
+          `evento "${resultado.eventoNome}" (${provasImportadas}). ${resultado.provasCriadas} prova(s) nova(s), ${resultado.provasReaproveitadas} reaproveitada(s).`,
       );
 
       utils.championships.getStages.invalidate({ championshipId });
@@ -289,8 +370,9 @@ export default function ImportWizard({ championshipId, open, onOpenChange, onImp
       onImportado?.();
       fechar(false);
     } catch (erro: any) {
-      setCriandoEtapas(false);
       toast.error(erro?.message || "Erro ao importar a planilha.");
+    } finally {
+      enviandoRef.current = false;
     }
   };
 
@@ -303,13 +385,16 @@ export default function ImportWizard({ championshipId, open, onOpenChange, onImp
   };
 
   const podeAvancar = () => {
-    if (passo === 2) return !!previa && previa.etapas.length > 0;
-    if (passo === 3) return etapasIncompletas.length === 0;
+    if (passo === 2) return !!previa && previa.provas.length > 0;
+    if (passo === 3) return eventoCompleto && provasSelecionadas.size > 0;
     if (passo === 4) return faltamRespostas === 0;
     return true;
   };
 
-  const gravando = importMutation.isPending || criandoEtapas;
+  // `enviandoRef` cobre o intervalo síncrono antes do primeiro re-render;
+  // `isPending` cobre o resto da requisição. Os dois juntos é que travam o
+  // duplo-submit de ponta a ponta.
+  const gravando = importMutation.isPending || enviandoRef.current;
 
   return (
     <Dialog open={open} onOpenChange={fechar}>
@@ -400,8 +485,8 @@ export default function ImportWizard({ championshipId, open, onOpenChange, onImp
               <div className="rounded-lg border bg-muted/20 p-4 text-xs text-muted-foreground space-y-1.5">
                 <p className="font-medium text-foreground">O que a planilha precisa ter</p>
                 <p>
-                  Uma coluna por etapa, com o cabeçalho <strong>ETAPA-1</strong>, <strong>ETAPA-2</strong>… (ou "POS
-                  ETAPA 1").
+                  Cada arquivo é <strong>um evento</strong>. Uma coluna por prova daquele evento, com o cabeçalho{" "}
+                  <strong>ETAPA-1</strong>, <strong>ETAPA-2</strong>… (ou "POS ETAPA 1").
                 </p>
                 <p>
                   Os competidores em <strong>NOME</strong> + <strong>FUNÇÃO</strong> (Piloto/Navegador), ou em{" "}
@@ -417,7 +502,7 @@ export default function ImportWizard({ championshipId, open, onOpenChange, onImp
             <div className="space-y-5">
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                 <Painel titulo="Abas" valor={previa.abas.length} />
-                <Painel titulo="Etapas" valor={previa.etapas.length} />
+                <Painel titulo="Provas" valor={previa.provas.length} />
                 <Painel
                   titulo="Categorias"
                   valor={new Set(previa.abas.map(a => a.categoria)).size}
@@ -435,7 +520,7 @@ export default function ImportWizard({ championshipId, open, onOpenChange, onImp
                         <TableHead className="text-xs">Categoria</TableHead>
                         <TableHead className="text-xs">Formato</TableHead>
                         <TableHead className="text-xs text-center">Duplas</TableHead>
-                        <TableHead className="text-xs">Etapas</TableHead>
+                        <TableHead className="text-xs">Provas</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -453,7 +538,7 @@ export default function ImportWizard({ championshipId, open, onOpenChange, onImp
                           </TableCell>
                           <TableCell className="text-center text-sm">{aba.duplas}</TableCell>
                           <TableCell className="text-xs text-muted-foreground">
-                            {aba.etapas.length ? aba.etapas.map(n => `E${n}`).join(", ") : "—"}
+                            {aba.etapas.length ? aba.etapas.map(n => `P${n}`).join(", ") : "—"}
                           </TableCell>
                         </TableRow>
                       ))}
@@ -462,13 +547,14 @@ export default function ImportWizard({ championshipId, open, onOpenChange, onImp
                 </div>
               </div>
 
-              {previa.resumo.length > 0 && (
+              {previa.provas.length > 0 && (
                 <div>
                   <Label className="text-sm font-bold">O que será gravado</Label>
                   <div className="flex flex-wrap gap-2 mt-2">
-                    {previa.resumo.map(item => (
-                      <Badge key={`${item.categoria}-${item.stageNumber}`} variant="outline" className="text-[11px]">
-                        E{item.stageNumber} · {item.categoria} · {item.duplas} dupla(s)
+                    {previa.provas.map(prova => (
+                      <Badge key={prova.provaNumber} variant="outline" className="text-[11px]">
+                        P{prova.provaNumber} · {prova.duplas} dupla(s)
+                        {prova.categorias.length > 0 ? ` · ${prova.categorias.join(", ")}` : ""}
                       </Badge>
                     ))}
                   </div>
@@ -513,99 +599,139 @@ export default function ImportWizard({ championshipId, open, onOpenChange, onImp
             </div>
           )}
 
-          {/* ------------------------------------------------- passo 3: etapas */}
+          {/* ------------------------------------------------- passo 3: evento */}
           {passo === 3 && previa && (
-            <div className="space-y-4">
-              <p className="text-sm text-muted-foreground">
-                Cada coluna <strong>ETAPA-N</strong> da planilha precisa saber onde vai cair no campeonato.
-              </p>
-              {previa.etapas.map(numero => {
-                const destino = destinos[numero] || { modo: "nova" as ModoEtapa, customName: `${numero}ª Etapa` };
-                return (
-                  <div key={numero} className="rounded-lg border p-4 space-y-3">
-                    <div className="flex items-center gap-2">
-                      <Badge className="text-xs">ETAPA-{numero}</Badge>
-                      <span className="text-xs text-muted-foreground">
-                        {previa.resumo
-                          .filter(r => r.stageNumber === numero)
-                          .reduce((soma, r) => soma + r.duplas, 0)}{" "}
-                        dupla(s) na planilha
-                      </span>
-                    </div>
+            <div className="space-y-5">
+              <div className="rounded-lg border bg-muted/20 p-4 text-sm">
+                <p>
+                  O arquivo <strong>{nomeArquivo}</strong> é <strong>um evento</strong>. As{" "}
+                  <strong>{previa.provas.length}</strong> prova(s) dele entram como provas DESSE evento — não como
+                  etapas de eventos diferentes.
+                </p>
+                <div className="flex flex-wrap gap-2 mt-3">
+                  {previa.provas.map(prova => (
+                    <Badge key={prova.provaNumber} variant="secondary" className="text-[11px]">
+                      P{prova.provaNumber} — {prova.duplas} dupla(s)
+                    </Badge>
+                  ))}
+                </div>
+              </div>
 
-                    <div className="flex flex-wrap gap-2">
-                      <BotaoModo
-                        ativo={destino.modo === "existente"}
-                        onClick={() => atualizarDestino(numero, { modo: "existente" })}
-                        disabled={previa.etapasExistentes.length === 0}
-                      >
-                        Etapa existente
-                      </BotaoModo>
-                      <BotaoModo
-                        ativo={destino.modo === "evento"}
-                        onClick={() => atualizarDestino(numero, { modo: "evento" })}
-                      >
-                        Evento da plataforma
-                      </BotaoModo>
-                      <BotaoModo
-                        ativo={destino.modo === "nova"}
-                        onClick={() => atualizarDestino(numero, { modo: "nova" })}
-                      >
-                        Prova externa
-                      </BotaoModo>
-                    </div>
+              <div className="space-y-3">
+                <Label className="text-sm font-bold">Este arquivo é...</Label>
+                <div className="flex flex-wrap gap-2">
+                  <BotaoModo
+                    ativo={escolhaEvento.modo === "plataforma"}
+                    onClick={() => setEscolhaEvento(prev => ({ ...prev, modo: "plataforma" }))}
+                    disabled={previa.eventosDaPlataforma.length === 0}
+                  >
+                    Evento da plataforma
+                  </BotaoModo>
+                  <BotaoModo
+                    ativo={escolhaEvento.modo === "existente"}
+                    onClick={() => setEscolhaEvento(prev => ({ ...prev, modo: "existente" }))}
+                    disabled={previa.eventosDoCampeonato.length === 0}
+                  >
+                    Evento já no campeonato
+                  </BotaoModo>
+                  <BotaoModo
+                    ativo={escolhaEvento.modo === "novo"}
+                    onClick={() => setEscolhaEvento(prev => ({ ...prev, modo: "novo" }))}
+                  >
+                    Evento novo
+                  </BotaoModo>
+                </div>
 
-                    {destino.modo === "existente" && (
-                      <Select
-                        value={destino.stageId ? String(destino.stageId) : ""}
-                        onValueChange={v => atualizarDestino(numero, { stageId: Number(v) })}
-                      >
-                        <SelectTrigger>
-                          <SelectValue placeholder="Escolha a etapa já cadastrada" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {previa.etapasExistentes.map(etapa => (
-                            <SelectItem key={etapa.id} value={String(etapa.id)}>
-                              {etapa.stageNumber}ª — {etapa.nome}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    )}
+                {escolhaEvento.modo === "plataforma" && (
+                  <Select
+                    value={escolhaEvento.eventId ? String(escolhaEvento.eventId) : ""}
+                    onValueChange={v => setEscolhaEvento(prev => ({ ...prev, eventId: Number(v) }))}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Escolha o evento da plataforma" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {previa.eventosDaPlataforma.map(evento => (
+                        <SelectItem key={evento.id} value={String(evento.id)}>
+                          {evento.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
 
-                    {destino.modo === "evento" && (
-                      <Select
-                        value={destino.eventId ? String(destino.eventId) : ""}
-                        onValueChange={v => atualizarDestino(numero, { eventId: Number(v) })}
-                      >
-                        <SelectTrigger>
-                          <SelectValue placeholder="Escolha o evento da plataforma" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {(meusEventos || []).map((evento: any) => (
-                            <SelectItem key={evento.id} value={String(evento.id)}>
-                              {evento.name} ({new Date(evento.startDate).toLocaleDateString("pt-BR")})
-                            </SelectItem>
-                          ))}
-                          {(!meusEventos || meusEventos.length === 0) && (
-                            <SelectItem value="none" disabled>
-                              Nenhum evento encontrado
-                            </SelectItem>
-                          )}
-                        </SelectContent>
-                      </Select>
-                    )}
-
-                    {destino.modo === "nova" && (
-                      <Input
-                        value={destino.customName}
-                        onChange={e => atualizarDestino(numero, { customName: e.target.value })}
-                        placeholder="Ex.: 7º Rally do Cavalo"
-                      />
-                    )}
+                {escolhaEvento.modo === "existente" && (
+                  <div className="space-y-2">
+                    <Select
+                      value={escolhaEvento.chaveExistente || ""}
+                      onValueChange={v => setEscolhaEvento(prev => ({ ...prev, chaveExistente: v }))}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Escolha o evento já no campeonato" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {previa.eventosDoCampeonato.map(evento => (
+                          <SelectItem key={evento.chave} value={evento.chave}>
+                            {evento.nome} ({evento.provas.length} prova(s) já gravada(s))
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <p className="text-xs text-amber-700 dark:text-amber-400 flex items-start gap-1.5">
+                      <AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-0.5" />
+                      Isso <strong>substitui</strong> as provas de mesmo número que esse evento já tiver — não soma
+                      linhas duplicadas.
+                    </p>
                   </div>
-                );
-              })}
+                )}
+
+                {escolhaEvento.modo === "novo" && (
+                  <Input
+                    value={escolhaEvento.nome}
+                    onChange={e => setEscolhaEvento(prev => ({ ...prev, nome: e.target.value }))}
+                    placeholder="Ex.: 7º Rally do Cavalo"
+                  />
+                )}
+              </div>
+
+              {/* Quais provas do arquivo entram nesta importação — pedido real do
+                  organizador: a planilha já tem a coluna ETAPA-2, mas a prova 2
+                  ainda não rodou, e ele quer importar só a P1 agora. Reimportar
+                  depois com a P2 marcada não duplica nada (chave evento+prova). */}
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <Label className="text-sm font-bold">Quais provas importar</Label>
+                  <div className="flex items-center gap-1">
+                    <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={marcarTodasAsProvas}>
+                      Todas
+                    </Button>
+                    <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={desmarcarTodasAsProvas}>
+                      Nenhuma
+                    </Button>
+                  </div>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Prova que ainda não rodou pode ficar de fora agora e entrar numa importação futura — sem duplicar.
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  {previa.provas.map(prova => {
+                    const marcada = provasSelecionadas.has(prova.provaNumber);
+                    return (
+                      <label
+                        key={prova.provaNumber}
+                        className={cn(
+                          "flex items-center gap-2 rounded-md border px-3 py-2 text-sm cursor-pointer transition-colors",
+                          marcada ? "border-primary bg-primary/5" : "border-border hover:bg-muted/60",
+                        )}
+                      >
+                        <Checkbox checked={marcada} onCheckedChange={() => alternarProva(prova.provaNumber)} />
+                        <span className="font-medium">P{prova.provaNumber}</span>
+                        <span className="text-xs text-muted-foreground">— {prova.duplas} dupla(s)</span>
+                      </label>
+                    );
+                  })}
+                </div>
+              </div>
             </div>
           )}
 
@@ -618,7 +744,8 @@ export default function ImportWizard({ championshipId, open, onOpenChange, onImp
                   pessoa, os pontos vão para o mesmo competidor.
                 </p>
                 <p className="text-xs text-muted-foreground mt-1">
-                  A resposta fica guardada — na próxima planilha o sistema não pergunta de novo.
+                  Mesmo quando o e-mail bate, a confirmação é sua: nestas planilhas o e-mail é da DUPLA, não da
+                  pessoa — pode estar em nome do parceiro.
                 </p>
                 <div className="flex flex-wrap items-center gap-2 mt-3">
                   <span className="text-xs font-medium">
@@ -637,7 +764,7 @@ export default function ImportWizard({ championshipId, open, onOpenChange, onImp
                       })
                     }
                   >
-                    Aceitar o mais parecido nos que faltam
+                    Aceitar o mais provável nos que faltam
                   </Button>
                   <Button
                     variant="outline"
@@ -661,6 +788,13 @@ export default function ImportWizard({ championshipId, open, onOpenChange, onImp
 
               {duvidas.map(duvida => {
                 const resposta = duvida.novo in respostas ? respostas[duvida.novo] : undefined;
+                // Candidato com mesmo e-mail primeiro — é a dica mais forte, a
+                // semelhança de texto sozinha nunca liga "Victinho" a "Victor Hugo
+                // Pizoni Neto".
+                const candidatosOrdenados = [...duvida.candidatos].sort((a, b) => {
+                  if (a.mesmoEmail !== b.mesmoEmail) return a.mesmoEmail ? -1 : 1;
+                  return b.similaridade - a.similaridade;
+                });
                 return (
                   <div
                     key={duvida.novo}
@@ -673,10 +807,15 @@ export default function ImportWizard({ championshipId, open, onOpenChange, onImp
                       <UserPlus className="h-4 w-4 text-primary shrink-0" />
                       <span className="font-semibold">{duvida.novo}</span>
                       <span className="text-xs text-muted-foreground">(nome da planilha nova)</span>
+                      {duvida.papel && (
+                        <Badge variant="outline" className="text-[9px] uppercase">
+                          {ROTULO_PAPEL[duvida.papel]}
+                        </Badge>
+                      )}
                     </div>
 
                     <div className="flex flex-wrap gap-2">
-                      {duvida.candidatos.map(candidato => {
+                      {candidatosOrdenados.map(candidato => {
                         const escolhido = resposta === candidato.nome;
                         return (
                           <button
@@ -692,6 +831,16 @@ export default function ImportWizard({ championshipId, open, onOpenChange, onImp
                           >
                             {escolhido ? <CheckCircle2 className="h-4 w-4" /> : <Check className="h-4 w-4 opacity-30" />}
                             <span className="font-medium">É o mesmo: {candidato.nome}</span>
+                            {candidato.mesmoEmail && (
+                              <Badge
+                                variant={escolhido ? "secondary" : "outline"}
+                                className="text-[10px] gap-1 border-green-500/40 text-green-700 dark:text-green-400"
+                                title="O cadastro deste candidato usa o mesmo e-mail da linha nova"
+                              >
+                                <Mail className="h-2.5 w-2.5" />
+                                mesmo e-mail
+                              </Badge>
+                            )}
                             <Badge
                               variant={escolhido ? "secondary" : "outline"}
                               className="text-[10px] tabular-nums"
@@ -764,45 +913,61 @@ export default function ImportWizard({ championshipId, open, onOpenChange, onImp
           {/* --------------------------------------------- passo 5: confirmar */}
           {passo === 5 && previa && (
             <div className="space-y-4">
-              <div className="rounded-lg border p-4 space-y-3">
-                <p className="text-sm font-bold">Etapas</p>
-                {previa.etapas.map(numero => {
-                  const destino = destinos[numero];
-                  const rotulo =
-                    destino?.modo === "existente"
-                      ? previa.etapasExistentes.find(e => e.id === destino.stageId)?.nome || "etapa existente"
-                      : destino?.modo === "evento"
-                        ? (meusEventos || []).find((e: any) => e.id === destino.eventId)?.name || "evento da plataforma"
-                        : destino?.customName;
-                  return (
-                    <div key={numero} className="flex items-center gap-2 text-sm">
-                      <Badge variant="outline" className="text-[10px]">
-                        ETAPA-{numero}
+              <div className="rounded-lg border p-4 space-y-2">
+                <p className="text-sm font-bold">Evento</p>
+                <div className="flex items-center gap-2 text-sm">
+                  <ArrowRight className="h-3.5 w-3.5 text-muted-foreground" />
+                  <span className="font-medium">
+                    {escolhaEvento.modo === "plataforma"
+                      ? previa.eventosDaPlataforma.find(e => e.id === escolhaEvento.eventId)?.name || "evento da plataforma"
+                      : escolhaEvento.modo === "existente"
+                        ? eventoExistenteEscolhido?.nome || "evento existente"
+                        : escolhaEvento.nome}
+                  </span>
+                  <Badge variant="secondary" className="text-[9px] uppercase">
+                    {escolhaEvento.modo === "novo" ? "novo" : escolhaEvento.modo === "plataforma" ? "plataforma" : "já no campeonato"}
+                  </Badge>
+                </div>
+                <div className="flex flex-wrap gap-2 pt-1">
+                  {previa.provas
+                    .filter(p => provasSelecionadas.has(p.provaNumber))
+                    .map(prova => (
+                      <Badge key={prova.provaNumber} variant="outline" className="text-[11px]">
+                        P{prova.provaNumber} · {prova.duplas} dupla(s)
                       </Badge>
-                      <ArrowRight className="h-3.5 w-3.5 text-muted-foreground" />
-                      <span className="font-medium">{rotulo}</span>
-                      {destino?.modo !== "existente" && (
-                        <Badge variant="secondary" className="text-[9px] uppercase">
-                          nova
-                        </Badge>
-                      )}
-                    </div>
-                  );
-                })}
+                    ))}
+                </div>
+                {provasSelecionadas.size < previa.provas.length && (
+                  <p className="text-xs text-muted-foreground">
+                    {previa.provas.length - provasSelecionadas.size} prova(s) do arquivo ficam de fora desta
+                    importação — dá pra trazer depois, sem duplicar.
+                  </p>
+                )}
               </div>
 
               <div className="rounded-lg border p-4 space-y-2">
                 <p className="text-sm font-bold">Resultados</p>
                 <div className="flex flex-wrap gap-2">
-                  {previa.resumo.map(item => (
-                    <Badge key={`${item.categoria}-${item.stageNumber}`} variant="outline" className="text-[11px]">
-                      E{item.stageNumber} · {item.categoria} · {item.duplas}
-                    </Badge>
-                  ))}
+                  {previa.provas
+                    .filter(p => provasSelecionadas.has(p.provaNumber))
+                    .map(prova => (
+                      <Badge key={prova.provaNumber} variant="outline" className="text-[11px]">
+                        P{prova.provaNumber} · {prova.categorias.join(", ") || "Geral"} · {prova.duplas}
+                      </Badge>
+                    ))}
                 </div>
                 <p className="text-xs text-muted-foreground">
-                  Total: {previa.resumo.reduce((soma, r) => soma + r.duplas, 0)} dupla(s) em{" "}
-                  {new Set(previa.resumo.map(r => r.categoria)).size} categoria(s).
+                  Total:{" "}
+                  {previa.provas
+                    .filter(p => provasSelecionadas.has(p.provaNumber))
+                    .reduce((soma, p) => soma + p.duplas, 0)}{" "}
+                  dupla(s) em{" "}
+                  {
+                    new Set(
+                      previa.provas.filter(p => provasSelecionadas.has(p.provaNumber)).flatMap(p => p.categorias),
+                    ).size
+                  }{" "}
+                  categoria(s).
                 </p>
               </div>
 
@@ -816,9 +981,9 @@ export default function ImportWizard({ championshipId, open, onOpenChange, onImp
               </div>
 
               <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 px-4 py-3 text-xs text-amber-700 dark:text-amber-400">
-                Os resultados das etapas acima serão <strong>substituídos</strong> pelo conteúdo da planilha e a
-                classificação é recalculada na hora. Reimportar o mesmo arquivo é seguro: a etapa de mesmo número é
-                reaproveitada, não duplicada.
+                As provas acima serão <strong>substituídas</strong> pelo conteúdo da planilha e a classificação é
+                recalculada na hora. Reimportar o mesmo arquivo é seguro: a prova de mesmo número é reaproveitada,
+                não duplicada.
               </div>
             </div>
           )}
@@ -849,10 +1014,11 @@ export default function ImportWizard({ championshipId, open, onOpenChange, onImp
           </div>
         </DialogFooter>
 
-        {passo === 3 && etapasIncompletas.length > 0 && (
-          <p className="text-xs text-destructive -mt-2">
-            Falta escolher o destino da(s) etapa(s) {etapasIncompletas.map(n => `ETAPA-${n}`).join(", ")}.
-          </p>
+        {passo === 3 && !eventoCompleto && (
+          <p className="text-xs text-destructive -mt-2">Falta escolher o evento deste arquivo.</p>
+        )}
+        {passo === 3 && eventoCompleto && provasSelecionadas.size === 0 && (
+          <p className="text-xs text-destructive -mt-2">Marque ao menos uma prova para importar.</p>
         )}
         {passo === 4 && faltamRespostas > 0 && (
           <p className="text-xs text-destructive -mt-2">

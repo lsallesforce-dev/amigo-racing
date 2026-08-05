@@ -28,10 +28,25 @@ export type LayoutAba = "longo" | "largo" | "desconhecido";
 // ------------------------------------------------------------------ saída
 
 export interface ResultadoImportado {
-  stageNumber: number;
+  /**
+   * O N do "ETAPA-N" DENTRO deste arquivo. O arquivo inteiro é UM EVENTO
+   * ("Campeonato - 7º Rally do Cavalo"), e cada ETAPA-N é uma PROVA dele — não a
+   * numeração global do campeonato. Quem transforma prova em `stageNumber`
+   * global é o importWorkbook, e só depois de saber de que evento é o arquivo.
+   */
+  provaNumber: number;
   categoria: string;
   pilotName: string | null;
   navigatorName: string | null;
+  /**
+   * E-mail da coluna EMAIL na linha do piloto. ATENÇÃO: é o contato da DUPLA,
+   * não da pessoa (no Ida, "Zé do Café" traz o e-mail do navegador "Vado").
+   * Serve só como DICA de conciliação escopada por papel — nunca para casar
+   * pessoa automaticamente.
+   */
+  pilotEmail: string | null;
+  /** Idem, na linha do navegador. */
+  navigatorEmail: string | null;
   /** 0 quando DSQ ou DNS. */
   position: number;
   isDisqualified: boolean;
@@ -74,12 +89,16 @@ export interface ResumoAba {
   /** Categoria predominante da aba (coluna CATEGORIA ou o nome da aba). */
   categoria: string;
   duplas: number;
+  /** Provas (o N de cada "ETAPA-N") achadas no cabeçalho DESTA aba. */
   etapas: number[];
 }
 
 export interface ResultadoImportacao {
-  /** Números de etapa achados no cabeçalho, em ordem. */
-  etapas: number[];
+  /**
+   * Números de PROVA achados no cabeçalho (o N de cada "ETAPA-N"), em ordem.
+   * São as provas DESTE evento/arquivo, não etapas globais do campeonato.
+   */
+  provas: number[];
   resultados: ResultadoImportado[];
   avisos: Aviso[];
   abas: ResumoAba[];
@@ -91,6 +110,90 @@ export interface OpcoesImportacao {
    * escreve o mesmo nome de outro jeito ("CARRO MASTER" x "Carros Master").
    */
   categoriasConhecidas?: string[];
+}
+
+// ------------------------------------------------- prova do arquivo -> etapa global
+//
+// O parser devolve PROVAS (o N do ETAPA-N deste arquivo/evento). Quem grava
+// precisa transformar isso em linhas de `championship_stages`, e é aí que mora o
+// bug que estamos consertando: a prova só é identificada junto com o EVENTO.
+//
+// Esta parte é pura de propósito — o check roda ela com fixture em memória, sem
+// encostar no banco.
+
+/** Uma prova que já existe no campeonato. `eventoChave` = eventId ou nome normalizado. */
+export interface ProvaExistente {
+  stageId: number;
+  eventoChave: string;
+  provaNumber: number;
+  /** Ordem GLOBAL dentro do campeonato. */
+  stageNumber: number;
+}
+
+export interface ProvaPlanejada {
+  provaNumber: number;
+  /** null = ainda não existe, vai ser criada com o `stageNumber` calculado aqui. */
+  stageId: number | null;
+  stageNumber: number;
+  criada: boolean;
+}
+
+export interface PlanoDeProvas {
+  provas: ProvaPlanejada[];
+  criadas: number;
+  reaproveitadas: number;
+  /** Provas pedidas que o arquivo não tem — quem chama transforma em erro. */
+  desconhecidas: number[];
+  /** Maior `stageNumber` do campeonato depois do plano. */
+  maiorStageNumber: number;
+}
+
+/**
+ * Decide, para cada prova do arquivo, se ela REAPROVEITA uma prova já gravada ou
+ * se é nova.
+ *
+ * - identidade da prova = (evento, provaNumber). Reimportar o mesmo arquivo cai
+ *   todo em "reaproveitada" — é o que garante a idempotência;
+ * - prova reaproveitada PRESERVA o `stageNumber` global que já tinha;
+ * - prova nova entra no fim da ordem global (`max + 1`), então dois eventos com
+ *   ETAPA-1/ETAPA-2 viram 4 provas com stageNumber 1..4, sem colisão;
+ * - `selecionadas` vazio/ausente = todas as provas do arquivo. Prova não
+ *   selecionada não é criada nem recebe resultado.
+ */
+export function planejarProvas(opcoes: {
+  provasDoArquivo: number[];
+  eventoChave: string;
+  existentes: ProvaExistente[];
+  selecionadas?: number[] | null;
+}): PlanoDeProvas {
+  const doArquivo = [...new Set(opcoes.provasDoArquivo || [])].sort((a, b) => a - b);
+  const pedidas = [...new Set(opcoes.selecionadas || [])];
+
+  const desconhecidas = pedidas.filter(p => !doArquivo.includes(p)).sort((a, b) => a - b);
+  const alvo = pedidas.length > 0 ? doArquivo.filter(p => pedidas.includes(p)) : doArquivo;
+
+  const existentes = opcoes.existentes || [];
+  const porChave = new Map<string, ProvaExistente>();
+  for (const e of existentes) porChave.set(`${e.eventoChave}#${e.provaNumber}`, e);
+  let maiorStageNumber = existentes.reduce((m, e) => Math.max(m, e.stageNumber), 0);
+
+  const provas: ProvaPlanejada[] = [];
+  let criadas = 0;
+  let reaproveitadas = 0;
+
+  for (const provaNumber of alvo) {
+    const jaExiste = porChave.get(`${opcoes.eventoChave}#${provaNumber}`);
+    if (jaExiste) {
+      provas.push({ provaNumber, stageId: jaExiste.stageId, stageNumber: jaExiste.stageNumber, criada: false });
+      reaproveitadas++;
+      continue;
+    }
+    maiorStageNumber++;
+    provas.push({ provaNumber, stageId: null, stageNumber: maiorStageNumber, criada: true });
+    criadas++;
+  }
+
+  return { provas, criadas, reaproveitadas, desconhecidas, maiorStageNumber };
 }
 
 // ------------------------------------------------------------------ texto
@@ -193,7 +296,13 @@ interface Mapa {
   idxCategoria: number;
   idxPiloto: number;
   idxNavegador: number;
-  colunasEtapa: { coluna: number; stageNumber: number }[];
+  /** Layout longo: a única coluna EMAIL, que vale para a pessoa daquela linha. */
+  idxEmail: number;
+  /** Layout largo: uma coluna de e-mail por papel. */
+  idxEmailPiloto: number;
+  idxEmailNavegador: number;
+  /** `provaNumber` = o N do "ETAPA-N" deste arquivo. */
+  colunasProva: { coluna: number; provaNumber: number }[];
 }
 
 function mapearCabecalho(linhas: CelulaPlanilha[][]): Mapa | null {
@@ -209,10 +318,16 @@ function mapearCabecalho(linhas: CelulaPlanilha[][]): Mapa | null {
     // "CATEGORIA - SUBCATEGORIA" (Kraken) também vale como categoria.
     const idxCategoria = cabecalho.findIndex(c => c === "CATEGORIA" || c.startsWith("CATEGORIA "));
 
-    const colunasEtapa: { coluna: number; stageNumber: number }[] = [];
+    // Layout longo: uma coluna EMAIL na linha da pessoa.
+    // Layout largo: EMAIL PILOTO / EMAIL NAVEGADOR (uma linha = uma dupla).
+    const idxEmail = acha("EMAIL", "E-MAIL");
+    const idxEmailPiloto = acha("EMAIL PILOTO", "E-MAIL PILOTO", "EMAIL DO PILOTO");
+    const idxEmailNavegador = acha("EMAIL NAVEGADOR", "E-MAIL NAVEGADOR", "EMAIL DO NAVEGADOR");
+
+    const colunasProva: { coluna: number; provaNumber: number }[] = [];
     cabecalho.forEach((c, col) => {
       const m = RE_ETAPA.exec(c);
-      if (m) colunasEtapa.push({ coluna: col, stageNumber: Number(m[2]) });
+      if (m) colunasProva.push({ coluna: col, provaNumber: Number(m[2]) });
     });
 
     let layout: LayoutAba = "desconhecido";
@@ -230,7 +345,10 @@ function mapearCabecalho(linhas: CelulaPlanilha[][]): Mapa | null {
       idxCategoria,
       idxPiloto: idxPiloto >= 0 ? idxPiloto : layout === "largo" ? idxNome : -1,
       idxNavegador,
-      colunasEtapa: colunasEtapa.sort((a, b) => a.stageNumber - b.stageNumber),
+      idxEmail,
+      idxEmailPiloto,
+      idxEmailNavegador,
+      colunasProva: colunasProva.sort((a, b) => a.provaNumber - b.provaNumber),
     };
   }
   return null;
@@ -241,9 +359,11 @@ function mapearCabecalho(linhas: CelulaPlanilha[][]): Mapa | null {
 interface Dupla {
   pilotName: string | null;
   navigatorName: string | null;
+  pilotEmail: string | null;
+  navigatorEmail: string | null;
   categoria: string;
   linha: number;
-  /** stageNumber -> célula já interpretada */
+  /** provaNumber -> célula já interpretada */
   celulas: Map<number, CelulaEtapa>;
   /**
    * Dupla criada a partir de outra (2º navegador do mesmo carro). Repete a
@@ -261,26 +381,37 @@ function lerCelulas(
   avisos: Aviso[],
 ): Map<number, CelulaEtapa> {
   const celulas = new Map<number, CelulaEtapa>();
-  for (const col of mapa.colunasEtapa) {
+  for (const col of mapa.colunasProva) {
     const celula = interpretarCelulaEtapa(linha[col.coluna]);
     if (celula.tipo === "desconhecido") {
       avisos.push({
         tipo: "valor_nao_reconhecido",
         aba,
         linha: numeroLinha,
-        stageNumber: col.stageNumber,
-        mensagem: `Etapa ${col.stageNumber}: valor "${celula.texto}" não foi reconhecido — tratado como não largou (DNS).`,
+        stageNumber: col.provaNumber,
+        mensagem: `Etapa ${col.provaNumber}: valor "${celula.texto}" não foi reconhecido — tratado como não largou (DNS).`,
       });
     }
-    celulas.set(col.stageNumber, celula);
+    celulas.set(col.provaNumber, celula);
   }
   return celulas;
+}
+
+/** E-mail da célula, limpo. Vazio vira null — string vazia nunca é identidade. */
+function lerEmail(valor: CelulaPlanilha): string | null {
+  const bruto = texto(valor).trim();
+  return bruto ? bruto : null;
 }
 
 // ------------------------------------------------------------------ importação
 
 /**
- * Lê as abas já extraídas da planilha e devolve os resultados por etapa.
+ * Lê as abas já extraídas da planilha e devolve os resultados por PROVA.
+ *
+ * O arquivo inteiro é UM EVENTO; as colunas ETAPA-N são as provas dele. Este
+ * parser não sabe (nem precisa saber) de que evento o arquivo é — quem amarra
+ * prova a evento e calcula o `stageNumber` global do campeonato é o importWorkbook.
+ *
  * Nunca joga exceção por causa de dado sujo — o que estiver torto sai em `avisos`.
  */
 export function importarPlanilhaCampeonato(
@@ -290,7 +421,7 @@ export function importarPlanilhaCampeonato(
   const avisos: Aviso[] = [];
   const resultados: ResultadoImportado[] = [];
   const resumoAbas: ResumoAba[] = [];
-  const etapasVistas = new Set<number>();
+  const provasVistas = new Set<number>();
   const categoriasVistas: string[] = [];
 
   for (const aba of abas || []) {
@@ -307,7 +438,7 @@ export function importarPlanilhaCampeonato(
       continue;
     }
 
-    if (mapa.colunasEtapa.length === 0) {
+    if (mapa.colunasProva.length === 0) {
       avisos.push({
         tipo: "sem_coluna_etapa",
         aba: aba.nome,
@@ -349,6 +480,9 @@ export function importarPlanilhaCampeonato(
           });
         }
 
+        // Layout longo: o e-mail está na linha da PESSOA.
+        const emailDaLinha = mapa.idxEmail >= 0 ? lerEmail(linha[mapa.idxEmail]) : null;
+
         if (funcao === "navegador") {
           const celulas = lerCelulas(linha, mapa, aba.nome, numeroLinha, avisos);
           if (!aberta) {
@@ -359,9 +493,14 @@ export function importarPlanilhaCampeonato(
               linha: numeroLinha,
               mensagem: `Aba "${aba.nome}", linha ${numeroLinha}: navegador "${nome}" apareceu antes de qualquer piloto — importado sem dupla.`,
             });
-            duplas.push({ pilotName: null, navigatorName: nome, categoria, linha: numeroLinha, celulas });
+            duplas.push({
+              pilotName: null, navigatorName: nome,
+              pilotEmail: null, navigatorEmail: emailDaLinha,
+              categoria, linha: numeroLinha, celulas,
+            });
           } else if (!aberta.navigatorName) {
             aberta.navigatorName = nome;
+            aberta.navigatorEmail = emailDaLinha;
             // A linha do navegador repete a posição da dupla; divergência é erro de digitação.
             for (const [stageNumber, celula] of celulas) {
               const daDupla = aberta.celulas.get(stageNumber);
@@ -383,7 +522,11 @@ export function importarPlanilhaCampeonato(
               linha: numeroLinha,
               mensagem: `Aba "${aba.nome}", linha ${numeroLinha}: "${nome}" é o 2º navegador de "${aberta.pilotName}" — importado como competidor separado.`,
             });
-            duplas.push({ pilotName: null, navigatorName: nome, categoria, linha: numeroLinha, celulas: aberta.celulas, derivada: true });
+            duplas.push({
+              pilotName: null, navigatorName: nome,
+              pilotEmail: null, navigatorEmail: emailDaLinha,
+              categoria, linha: numeroLinha, celulas: aberta.celulas, derivada: true,
+            });
           }
           continue;
         }
@@ -391,6 +534,8 @@ export function importarPlanilhaCampeonato(
         aberta = {
           pilotName: nome,
           navigatorName: null,
+          pilotEmail: emailDaLinha,
+          navigatorEmail: null,
           categoria,
           linha: numeroLinha,
           celulas: lerCelulas(linha, mapa, aba.nome, numeroLinha, avisos),
@@ -411,9 +556,18 @@ export function importarPlanilhaCampeonato(
         });
         continue;
       }
+      // Layout largo: uma coluna de e-mail por papel. Sem coluna por papel, a
+      // coluna EMAIL genérica é o contato da dupla — vale como e-mail do piloto.
+      const emailPiloto = mapa.idxEmailPiloto >= 0
+        ? lerEmail(linha[mapa.idxEmailPiloto])
+        : (mapa.idxEmail >= 0 ? lerEmail(linha[mapa.idxEmail]) : null);
+      const emailNavegador = mapa.idxEmailNavegador >= 0 ? lerEmail(linha[mapa.idxEmailNavegador]) : null;
+
       duplas.push({
         pilotName: piloto || null,
         navigatorName: navegador || null,
+        pilotEmail: piloto ? emailPiloto : null,
+        navigatorEmail: navegador ? emailNavegador : null,
         categoria,
         linha: numeroLinha,
         celulas: lerCelulas(linha, mapa, aba.nome, numeroLinha, avisos),
@@ -431,21 +585,23 @@ export function importarPlanilhaCampeonato(
     for (const d of duplas) if (!categoriasVistas.includes(d.categoria)) categoriasVistas.push(d.categoria);
 
     // Emite os resultados e, de quebra, junta o material da conferência.
-    const porEtapaCategoria = new Map<string, { stageNumber: number; categoria: string; posicoes: Map<number, string[]> }>();
+    const porEtapaCategoria = new Map<string, { provaNumber: number; categoria: string; posicoes: Map<number, string[]> }>();
 
-    for (const col of mapa.colunasEtapa) {
-      etapasVistas.add(col.stageNumber);
+    for (const col of mapa.colunasProva) {
+      provasVistas.add(col.provaNumber);
       for (const d of duplas) {
-        const celula = d.celulas.get(col.stageNumber) || { tipo: "dns" as const };
+        const celula = d.celulas.get(col.provaNumber) || { tipo: "dns" as const };
         const position = celula.tipo === "posicao" ? celula.position : 0;
         const isDisqualified = celula.tipo === "dsq";
         const isDns = !isDisqualified && position === 0;
 
         resultados.push({
-          stageNumber: col.stageNumber,
+          provaNumber: col.provaNumber,
           categoria: d.categoria,
           pilotName: d.pilotName,
           navigatorName: d.navigatorName,
+          pilotEmail: d.pilotEmail,
+          navigatorEmail: d.navigatorEmail,
           position,
           isDisqualified,
           isDns,
@@ -454,9 +610,9 @@ export function importarPlanilhaCampeonato(
         });
 
         if (position > 0 && !d.derivada) {
-          const chave = `${col.stageNumber}|${d.categoria}`;
+          const chave = `${col.provaNumber}|${d.categoria}`;
           if (!porEtapaCategoria.has(chave)) {
-            porEtapaCategoria.set(chave, { stageNumber: col.stageNumber, categoria: d.categoria, posicoes: new Map() });
+            porEtapaCategoria.set(chave, { provaNumber: col.provaNumber, categoria: d.categoria, posicoes: new Map() });
           }
           const grupo = porEtapaCategoria.get(chave)!;
           if (!grupo.posicoes.has(position)) grupo.posicoes.set(position, []);
@@ -472,8 +628,8 @@ export function importarPlanilhaCampeonato(
             tipo: "posicao_duplicada",
             aba: aba.nome,
             categoria: grupo.categoria,
-            stageNumber: grupo.stageNumber,
-            mensagem: `Etapa ${grupo.stageNumber}, ${grupo.categoria}: ${posicao}º lugar aparece ${nomes.length} vezes (${nomes.join(", ")}).`,
+            stageNumber: grupo.provaNumber,
+            mensagem: `Etapa ${grupo.provaNumber}, ${grupo.categoria}: ${posicao}º lugar aparece ${nomes.length} vezes (${nomes.join(", ")}).`,
           });
         }
       }
@@ -486,8 +642,8 @@ export function importarPlanilhaCampeonato(
           tipo: "buraco_na_sequencia",
           aba: aba.nome,
           categoria: grupo.categoria,
-          stageNumber: grupo.stageNumber,
-          mensagem: `Etapa ${grupo.stageNumber}, ${grupo.categoria}: falta o(s) ${buracos.join("º, ")}º lugar (a sequência vai até ${maior}º).`,
+          stageNumber: grupo.provaNumber,
+          mensagem: `Etapa ${grupo.provaNumber}, ${grupo.categoria}: falta o(s) ${buracos.join("º, ")}º lugar (a sequência vai até ${maior}º).`,
         });
       }
     }
@@ -497,7 +653,7 @@ export function importarPlanilhaCampeonato(
       layout: mapa.layout,
       categoria: duplas[0]?.categoria || aba.nome,
       duplas: duplas.length,
-      etapas: mapa.colunasEtapa.map(c => c.stageNumber),
+      etapas: mapa.colunasProva.map(c => c.provaNumber),
     });
   }
 
@@ -532,7 +688,7 @@ export function importarPlanilhaCampeonato(
   }
 
   return {
-    etapas: [...etapasVistas].sort((a, b) => a - b),
+    provas: [...provasVistas].sort((a, b) => a - b),
     resultados,
     avisos,
     abas: resumoAbas,

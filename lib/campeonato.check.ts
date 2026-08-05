@@ -33,17 +33,22 @@ import {
   interpretarCelulaEtapa,
   normalizarCabecalho,
   chaveCategoria,
+  planejarProvas,
   type AbaPlanilha,
   type ResultadoImportacao,
+  type ResultadoImportado,
+  type ProvaExistente,
 } from "../shared/importarPlanilhaCampeonato.js";
 import {
   normalizarNome,
+  normalizarEmail,
   distanciaEdicao,
   semelhancaNomes,
   sugerirUnificacoes,
   conciliarNomes,
   similaridadeConciliacao,
   type DecisaoAlias,
+  type DicaEmail,
 } from "../shared/nomesCampeonato.js";
 
 let falhas = 0;
@@ -109,9 +114,9 @@ const resultadoEtapa = (over: Partial<ResultadoEtapa>): ResultadoEtapa => ({
 /** Converte o que o parser devolveu em linhas de resultado, como a Onda 2 vai gravar. */
 function paraResultados(imp: ResultadoImportacao, idPorEtapa: Map<number, number>): ResultadoBruto[] {
   return imp.resultados
-    .filter(r => idPorEtapa.has(r.stageNumber))
+    .filter(r => idPorEtapa.has(r.provaNumber))
     .map(r => ({
-      stageId: idPorEtapa.get(r.stageNumber)!,
+      stageId: idPorEtapa.get(r.provaNumber)!,
       category: r.categoria,
       pilotName: r.pilotName,
       navigatorName: r.navigatorName,
@@ -119,6 +124,127 @@ function paraResultados(imp: ResultadoImportacao, idPorEtapa: Map<number, number
       isDisqualified: r.isDisqualified,
       isDns: r.isDns,
     }));
+}
+
+// ------------------------------------------ campeonato em memória (evento x prova)
+//
+// Espelho do que o `importWorkbook` faz no banco, sem banco: resolve o evento,
+// acha/cria cada prova por (evento, provaNumber), grava PROVA A PROVA e limpa só
+// as categorias que o arquivo traz. Serve para provar que duas planilhas no mesmo
+// campeonato não se misturam e que reimportar é idempotente.
+
+interface CampeonatoMemoria {
+  provas: (ProvaExistente & { customName: string })[];
+  resultados: { stageId: number; category: string; pilotName: string | null; navigatorName: string | null; provaNumber: number }[];
+  proximoId: number;
+}
+
+const novoCampeonato = (): CampeonatoMemoria => ({ provas: [], resultados: [], proximoId: 1 });
+
+function simularImport(
+  campeonato: CampeonatoMemoria,
+  opcoes: { abas: AbaPlanilha[]; eventoNome: string; provas?: number[] },
+) {
+  const parse = importarPlanilhaCampeonato(opcoes.abas);
+
+  // Igual ao router: valida a seleção ANTES de resolver/criar qualquer prova.
+  const pedidas = [...new Set(opcoes.provas || [])];
+  const desconhecidas = pedidas.filter(p => !parse.provas.includes(p)).sort((a, b) => a - b);
+  if (desconhecidas.length > 0) {
+    throw new Error(
+      `Esta planilha não tem a prova ${desconhecidas.join(", ")}. Provas do arquivo: ${parse.provas.join(", ") || "nenhuma"}.`,
+    );
+  }
+  const provasImportadas = pedidas.length > 0 ? parse.provas.filter(p => pedidas.includes(p)) : [...parse.provas];
+
+  const eventoChave = `nome:${normalizarNome(opcoes.eventoNome)}`;
+  const plano = planejarProvas({
+    provasDoArquivo: parse.provas,
+    eventoChave,
+    existentes: campeonato.provas,
+    selecionadas: provasImportadas,
+  });
+
+  const idPorProva = new Map<number, number>();
+  for (const p of plano.provas) {
+    if (!p.criada) {
+      idPorProva.set(p.provaNumber, p.stageId!);
+      continue;
+    }
+    const stageId = campeonato.proximoId++;
+    campeonato.provas.push({
+      stageId,
+      eventoChave,
+      provaNumber: p.provaNumber,
+      stageNumber: p.stageNumber,
+      customName: `${opcoes.eventoNome} — Prova ${p.provaNumber}`,
+    });
+    idPorProva.set(p.provaNumber, stageId);
+  }
+
+  const linhas: CampeonatoMemoria["resultados"] = [];
+  for (const provaNumber of provasImportadas) {
+    const stageId = idPorProva.get(provaNumber);
+    if (!stageId) continue;
+    for (const r of parse.resultados) {
+      if (r.provaNumber !== provaNumber) continue;
+      linhas.push({
+        stageId,
+        category: r.categoria || "Geral",
+        pilotName: r.pilotName,
+        navigatorName: r.navigatorName,
+        provaNumber,
+      });
+    }
+  }
+
+  // Por PROVA, limpa só as categorias que o arquivo traz (igual ao saveStageResults).
+  const porProva = new Map<number, Set<string>>();
+  for (const l of linhas) {
+    if (!porProva.has(l.stageId)) porProva.set(l.stageId, new Set());
+    porProva.get(l.stageId)!.add(l.category);
+  }
+  campeonato.resultados = campeonato.resultados.filter(r => !porProva.get(r.stageId)?.has(r.category));
+  campeonato.resultados.push(...linhas);
+
+  return {
+    campeonato,
+    provasImportadas,
+    provasCriadas: plano.criadas,
+    provasReaproveitadas: plano.reaproveitadas,
+    resultadosGravados: linhas.length,
+  };
+}
+
+/** Nenhuma (prova, categoria, piloto, navegador) pode aparecer duas vezes. */
+function semDuplicata(campeonato: CampeonatoMemoria): boolean {
+  const vistos = new Set<string>();
+  for (const r of campeonato.resultados) {
+    const chave = `${r.stageId}|${r.category}|${r.pilotName || ""}|${r.navigatorName || ""}`;
+    if (vistos.has(chave)) return false;
+    vistos.add(chave);
+  }
+  return true;
+}
+
+/** As dicas de e-mail que a planilha traz, escopadas por papel (o que o router grava). */
+function dicasDe(resultados: ResultadoImportado[]): DicaEmail[] {
+  const vistos = new Set<string>();
+  const dicas: DicaEmail[] = [];
+  const juntar = (nome: string | null, email: string | null, papel: "pilot" | "navigator") => {
+    const limpo = String(nome ?? "").replace(/\s+/g, " ").trim();
+    const emailNorm = normalizarEmail(email);
+    if (!limpo || !emailNorm) return;
+    const chave = `${limpo}|${emailNorm}|${papel}`;
+    if (vistos.has(chave)) return;
+    vistos.add(chave);
+    dicas.push({ nome: limpo, emailNorm, papel });
+  };
+  for (const r of resultados) {
+    juntar(r.pilotName, r.pilotEmail, "pilot");
+    juntar(r.navigatorName, r.navigatorEmail, "navigator");
+  }
+  return dicas;
 }
 
 async function main() {
@@ -449,11 +575,11 @@ async function main() {
         ["Carros Light", "Duda", "Edu", "-", 2],
       ],
     }]);
-    const ana2 = largo.resultados.find(r => r.pilotName === "Ana" && r.stageNumber === 2)!;
-    const duda1 = largo.resultados.find(r => r.pilotName === "Duda" && r.stageNumber === 1)!;
-    check("layout LARGO (Kraken): dupla por linha, etapas pelo cabeçalho",
-      largo.abas[0].layout === "largo" && JSON.stringify(largo.etapas) === "[1,2]" && largo.resultados.length === 6,
-      `${largo.abas[0].layout}, etapas ${largo.etapas.join("/")}, ${largo.resultados.length} resultados`);
+    const ana2 = largo.resultados.find(r => r.pilotName === "Ana" && r.provaNumber === 2)!;
+    const duda1 = largo.resultados.find(r => r.pilotName === "Duda" && r.provaNumber === 1)!;
+    check("layout LARGO (Kraken): dupla por linha, provas pelo cabeçalho",
+      largo.abas[0].layout === "largo" && JSON.stringify(largo.provas) === "[1,2]" && largo.resultados.length === 6,
+      `${largo.abas[0].layout}, provas ${largo.provas.join("/")}, ${largo.resultados.length} resultados`);
     check("layout LARGO: NC vira desclassificado e '-' vira DNS",
       ana2.isDisqualified && ana2.position === 0 && duda1.isDns,
       `Ana etapa2 dsq=${ana2.isDisqualified}, Duda etapa1 dns=${duda1.isDns}`);
@@ -522,7 +648,7 @@ async function main() {
     check("Ida 2026: 6 abas, todas no formato LONGO",
       ida.abas.length === 6 && ida.abas.every(a => a.layout === "longo"),
       ida.abas.map(a => `${a.nome}(${a.duplas})`).join(", "));
-    check("Ida 2026: achou as duas etapas", JSON.stringify(ida.etapas) === "[1,2]", `etapas ${ida.etapas.join(", ")}`);
+    check("Ida 2026: achou as duas provas do evento", JSON.stringify(ida.provas) === "[1,2]", `provas ${ida.provas.join(", ")}`);
     check("Ida 2026: importa sem nenhum aviso", ida.avisos.length === 0,
       ida.avisos.length ? ida.avisos.map(a => a.mensagem).join(" | ") : "planilha limpa");
 
@@ -531,7 +657,7 @@ async function main() {
       moto.length === 10 && moto.every(r => r.navigatorName === null && r.pilotName !== null),
       `${moto.length} resultados (5 pilotos x 2 etapas), nenhum navegador`);
 
-    const master = ida.resultados.filter(r => r.categoria === "CARRO MASTER" && r.stageNumber === 1);
+    const master = ida.resultados.filter(r => r.categoria === "CARRO MASTER" && r.provaNumber === 1);
     check("Ida 2026: dupla piloto+navegador na mesma linha de resultado",
       master.length === 3 && master.every(r => r.pilotName && r.navigatorName),
       master.map(r => `${r.pilotName}/${r.navigatorName}`).join(", "));
@@ -607,8 +733,8 @@ async function main() {
     console.log(`PULADO | planilha do Rally do Cavalo não está em ${PLANILHA_CAVALO}`);
   } else {
     const cavalo = importarPlanilhaCampeonato(abasCavalo);
-    check("Rally do Cavalo: 6 abas no formato LONGO, 2 etapas",
-      cavalo.abas.length === 6 && cavalo.abas.every(a => a.layout === "longo") && JSON.stringify(cavalo.etapas) === "[1,2]",
+    check("Rally do Cavalo: 6 abas no formato LONGO, 2 provas",
+      cavalo.abas.length === 6 && cavalo.abas.every(a => a.layout === "longo") && JSON.stringify(cavalo.provas) === "[1,2]",
       cavalo.abas.map(a => `${a.nome}(${a.duplas})`).join(", "));
     check("Rally do Cavalo: sem posição duplicada nem buraco de sequência",
       !cavalo.avisos.some(a => a.tipo === "posicao_duplicada" || a.tipo === "buraco_na_sequencia"),
@@ -661,6 +787,110 @@ async function main() {
     check(`${caminho}: sem coluna de etapa, avisa em vez de importar nada`,
       imp.avisos.some(a => a.tipo === "sem_coluna_etapa") && imp.resultados.length === 0,
       imp.avisos.map(a => a.tipo).join(", ") || "(sem avisos)");
+  }
+
+  // ============================================ 5b. arquivo = EVENTO, ETAPA-N = PROVA
+  //
+  // O bug de produção: modelamos ETAPA-N como numeração GLOBAL do campeonato.
+  // Importar as duas planilhas no mesmo campeonato criava 4 etapas com
+  // stageNumber 1,1,2,2 ("E1, E1, E2, E2") e o dado de um arquivo caía nas
+  // etapas do outro. Cada arquivo é UM EVENTO; ETAPA-1 do Cavalo e ETAPA-1 do
+  // Ida são provas diferentes.
+  console.log("\n--- evento x prova");
+
+  if (abasIda && abasCavalo) {
+    const A = simularImport(novoCampeonato(), { abas: abasCavalo, eventoNome: "7º Rally do Cavalo" });
+    check("evento A (Cavalo) sozinho: 2 provas, 48 linhas",
+      A.campeonato.provas.length === 2 && A.resultadosGravados === 48,
+      `${A.campeonato.provas.length} provas, ${A.resultadosGravados} resultados`);
+
+    // As DUAS planilhas no MESMO campeonato — o caso que quebrou.
+    const camp = novoCampeonato();
+    const impCavalo = simularImport(camp, { abas: abasCavalo, eventoNome: "7º Rally do Cavalo" });
+    const impIda = simularImport(camp, { abas: abasIda, eventoNome: "Rally do Amigo Ida 2026" });
+
+    const stageNumbers = camp.provas.map(p => p.stageNumber).sort((a, b) => a - b);
+    const eventos = new Set(camp.provas.map(p => p.eventoChave));
+    check("Cavalo + Ida no mesmo campeonato: 4 provas em 2 eventos, sem colisão de stageNumber",
+      camp.provas.length === 4 && eventos.size === 2 && JSON.stringify(stageNumbers) === "[1,2,3,4]",
+      `${camp.provas.length} provas, ${eventos.size} eventos, stageNumber ${stageNumbers.join(",")}`);
+
+    const contagem = camp.provas
+      .sort((a, b) => a.stageNumber - b.stageNumber)
+      .map(p => camp.resultados.filter(r => r.stageId === p.stageId).length);
+    check("cada prova fica com a SUA contagem (Cavalo 24+24, Ida 19+19)",
+      JSON.stringify(contagem) === "[24,24,19,19]", `por prova: ${contagem.join(", ")}`);
+
+    check("nenhuma linha duplicada (piloto+navegador+prova aparece uma vez só)",
+      semDuplicata(camp), `${camp.resultados.length} linhas no total`);
+
+    check("importar dois eventos não repete o mesmo stageNumber",
+      new Set(stageNumbers).size === stageNumbers.length && impCavalo.provasCriadas === 2 && impIda.provasCriadas === 2,
+      `Cavalo criou ${impCavalo.provasCriadas}, Ida criou ${impIda.provasCriadas}`);
+
+    // ---- reimportar o MESMO arquivo é idempotente
+    const antes = camp.resultados.length;
+    const reimport = simularImport(camp, { abas: abasIda, eventoNome: "Rally do Amigo Ida 2026" });
+    check("reimportar o Ida por cima: 0 provas criadas e contagem idêntica",
+      reimport.provasCriadas === 0 && reimport.provasReaproveitadas === 2 &&
+      camp.provas.length === 4 && camp.resultados.length === antes,
+      `criadas=${reimport.provasCriadas} reaproveitadas=${reimport.provasReaproveitadas}, ${camp.resultados.length} linhas (antes ${antes})`);
+    check("reimportar não duplica nenhuma linha", semDuplicata(camp),
+      `${camp.resultados.length} linhas depois da reimportação`);
+
+    // ---- "importar 1, 2 ou todas": o organizador escolhe as provas
+    const soP1 = novoCampeonato();
+    const p1 = simularImport(soP1, { abas: abasIda, eventoNome: "Rally do Amigo Ida 2026", provas: [1] });
+    check("provas:[1] importa só a P1 — 1 prova, 19 linhas, e a P2 nem existe",
+      p1.provasCriadas === 1 && soP1.provas.length === 1 &&
+      soP1.provas[0].provaNumber === 1 && p1.resultadosGravados === 19 &&
+      !soP1.provas.some(p => p.provaNumber === 2),
+      `${soP1.provas.length} prova(s), ${p1.resultadosGravados} linhas`);
+
+    const p2 = simularImport(soP1, { abas: abasIda, eventoNome: "Rally do Amigo Ida 2026", provas: [2] });
+    const daP1 = soP1.resultados.filter(r => r.stageId === soP1.provas.find(p => p.provaNumber === 1)!.stageId).length;
+    check("depois provas:[2]: cria 1 prova nova, a P1 segue intacta, total 38",
+      p2.provasCriadas === 1 && soP1.provas.length === 2 && daP1 === 19 &&
+      soP1.resultados.length === 38 && semDuplicata(soP1),
+      `${soP1.provas.length} provas, P1 com ${daP1}, total ${soP1.resultados.length}`);
+
+    check("provas:[3] (não existe no arquivo) dá erro claro dizendo quais existem",
+      (() => {
+        try {
+          simularImport(novoCampeonato(), { abas: abasIda, eventoNome: "X", provas: [3] });
+          return false;
+        } catch (e: any) {
+          return String(e?.message).includes("prova 3") && String(e?.message).includes("1, 2");
+        }
+      })(), "BAD_REQUEST listando as provas do arquivo");
+  }
+
+  {
+    // O planejador puro, sem planilha: é ele que garante a chave (evento, prova).
+    const existentes: ProvaExistente[] = [
+      { stageId: 10, eventoChave: "nome:cavalo", provaNumber: 1, stageNumber: 1 },
+      { stageId: 11, eventoChave: "nome:cavalo", provaNumber: 2, stageNumber: 2 },
+    ];
+    const outro = planejarProvas({ provasDoArquivo: [1, 2], eventoChave: "nome:ida", existentes });
+    check("planejarProvas: outro evento com ETAPA-1/2 vira stageNumber 3 e 4",
+      outro.criadas === 2 && JSON.stringify(outro.provas.map(p => p.stageNumber)) === "[3,4]",
+      `stageNumber ${outro.provas.map(p => p.stageNumber).join(",")}`);
+
+    const mesmo = planejarProvas({ provasDoArquivo: [1, 2], eventoChave: "nome:cavalo", existentes });
+    check("planejarProvas: mesmo evento reaproveita e PRESERVA o stageNumber",
+      mesmo.criadas === 0 && mesmo.reaproveitadas === 2 &&
+      JSON.stringify(mesmo.provas.map(p => p.stageNumber)) === "[1,2]",
+      `reaproveitadas=${mesmo.reaproveitadas}, stageNumber ${mesmo.provas.map(p => p.stageNumber).join(",")}`);
+
+    const parcial = planejarProvas({ provasDoArquivo: [1, 2], eventoChave: "nome:ida", existentes, selecionadas: [2] });
+    check("planejarProvas: seleção não cria a prova que ficou de fora",
+      parcial.provas.length === 1 && parcial.provas[0].provaNumber === 2 && parcial.criadas === 1,
+      `plano com ${parcial.provas.length} prova (P${parcial.provas[0]?.provaNumber})`);
+
+    const errada = planejarProvas({ provasDoArquivo: [1, 2], eventoChave: "nome:ida", existentes, selecionadas: [3] });
+    check("planejarProvas: prova pedida que o arquivo não tem sai em `desconhecidas`",
+      JSON.stringify(errada.desconhecidas) === "[3]" && errada.provas.length === 0,
+      `desconhecidas ${errada.desconhecidas.join(",")}`);
   }
 
   // ================================================ 6. conciliação na importação
@@ -727,14 +957,69 @@ async function main() {
         !!mateus && mateus.candidatos.some(c => c.nome === "Mateus"),
         mateus ? mateus.candidatos.map(c => c.nome).join(", ") : "não perguntou");
 
-      // Apelido não é variação ortográfica: a heurística NÃO pega, e está certo
-      // que não pegue — chutar "Benê = Benedito Lopes" sozinho seria pior.
-      // É exatamente para isto que existe o popup manual.
-      check("apelido ('Benê' x 'Benedito Lopes') cai como inédito — resolve no popup",
+      // Apelido não é variação ortográfica: a heurística de TEXTO não pega, e está
+      // certo que não pegue — chutar "Benê = Benedito Lopes" sozinho seria pior.
+      check("sem dica de e-mail, apelido ('Benê' x 'Benedito Lopes') cai como inédito",
         s.ineditos.includes("Benedito Lopes") && !s.duvidas.some(d => d.novo === "Benedito Lopes"),
         "comportamento esperado: heurística não chuta apelido");
-      check("apelido ('Victinho' x 'Victor Hugo Pizoni Neto') também cai como inédito",
+      check("sem dica de e-mail, 'Victinho' x 'Victor Hugo Pizoni Neto' também cai como inédito",
         s.ineditos.includes("Victor Hugo Pizoni Neto"), "idem — decisão manual, gravada em championship_name_aliases");
+
+      // ---- a DICA de e-mail: é ela que finalmente liga o apelido ao nome completo
+      const comEmail = conciliarNomes({
+        novos, existentes,
+        dicasNovos: dicasDe(importarPlanilhaCampeonato(abasCavalo).resultados),
+        dicasExistentes: dicasDe(importarPlanilhaCampeonato(abasIda).resultados),
+      });
+
+      const bene = comEmail.duvidas.find(d => d.novo === "Benedito Lopes");
+      const candidatoBene = bene?.candidatos.find(c => c.nome === "Benê");
+      check("dica de e-mail: 'Benê' vira candidato de 'Benedito Lopes' com mesmoEmail",
+        !!candidatoBene && candidatoBene.mesmoEmail === true && bene!.candidatos[0].nome === "Benê" && bene!.papel === "pilot",
+        bene ? `papel=${bene.papel} candidatos: ${bene.candidatos.map(c => `${c.nome}(email=${c.mesmoEmail})`).join(", ")}` : "não virou dúvida");
+
+      const victor = comEmail.duvidas.find(d => d.novo === "Victor Hugo Pizoni Neto");
+      const candidatoVictor = victor?.candidatos.find(c => c.nome === "Victinho");
+      check("dica de e-mail: 'Victinho' vira candidato de 'Victor Hugo Pizoni Neto' com mesmoEmail",
+        !!candidatoVictor && candidatoVictor.mesmoEmail === true && victor!.candidatos[0].nome === "Victinho",
+        victor ? victor.candidatos.map(c => `${c.nome}(email=${c.mesmoEmail})`).join(", ") : "não virou dúvida");
+
+      check("e-mail NUNCA promove para automático — a decisão continua sendo humana",
+        !comEmail.automaticos.some(a => a.novo === "Benedito Lopes" || a.novo === "Victor Hugo Pizoni Neto"),
+        "apelido segue exigindo o popup");
+
+      // A pegadinha do dado real: o e-mail da coluna EMAIL é o contato da DUPLA.
+      // "Zé do Café" (piloto) traz o e-mail do "Vado" (navegador). Se o e-mail
+      // casasse entre papéis, isso ligaria duas pessoas DIFERENTES.
+      const cruzado = conciliarNomes({
+        novos: ["Fulano de Tal"],
+        existentes: ["Beltrano da Silva"],
+        dicasNovos: [{ nome: "Fulano de Tal", emailNorm: "dupla@exemplo.com", papel: "navigator" }],
+        dicasExistentes: [{ nome: "Beltrano da Silva", emailNorm: "dupla@exemplo.com", papel: "pilot" }],
+      });
+      check("mesmo e-mail em PAPÉIS diferentes não vira dica (é o contato da dupla)",
+        cruzado.duvidas.length === 0 && cruzado.ineditos.includes("Fulano de Tal"),
+        cruzado.duvidas.length ? "gerou dica (ERRADO)" : "nenhuma dica, entra como inédito");
+
+      const mesmoPapel = conciliarNomes({
+        novos: ["Fulano de Tal"],
+        existentes: ["Beltrano da Silva"],
+        dicasNovos: [{ nome: "Fulano de Tal", emailNorm: " Dupla@Exemplo.COM ", papel: "pilot" }],
+        dicasExistentes: [{ nome: "Beltrano da Silva", emailNorm: "dupla@exemplo.com", papel: "pilot" }],
+      });
+      check("normalizarEmail: trim + lowercase casam o mesmo endereço",
+        mesmoPapel.duvidas[0]?.candidatos[0]?.mesmoEmail === true,
+        `"${normalizarEmail(" Dupla@Exemplo.COM ")}"`);
+
+      const vazio = conciliarNomes({
+        novos: ["Fulano de Tal"],
+        existentes: ["Beltrano da Silva"],
+        dicasNovos: [{ nome: "Fulano de Tal", emailNorm: "   ", papel: "pilot" }],
+        dicasExistentes: [{ nome: "Beltrano da Silva", emailNorm: "", papel: "pilot" }],
+      });
+      check("e-mail vazio nunca casa com e-mail vazio",
+        vazio.duvidas.length === 0 && vazio.ineditos.includes("Fulano de Tal"),
+        "sem e-mail, sem dica");
 
       // "Davi Vera" é Navegador no Ida e Piloto no Cavalo: a conciliação é por
       // NOME, não por papel — quem chama decide se separa as listas.

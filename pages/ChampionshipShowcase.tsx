@@ -25,18 +25,32 @@ function base64ParaBlob(base64: string, mimeType: string): Blob {
 }
 
 /**
- * Etapas com nome já resolvido (StandingsTable e o PDF esperam essa forma pronta,
- * não o dado cru com `event`/`customName` separados). A ordem de prioridade
- * espelha `nomeDaEtapa()` do backend (api/_server/backend_routers/championship.ts):
- * nome customizado da prova externa primeiro, depois o nome do evento cadastrado.
+ * Etapas com nome/prova/evento já resolvidos (StandingsTable e o PDF esperam essa
+ * forma pronta, não o dado cru com `event`/`customName` separados).
+ *
+ * ⚠️ `provaNumber` e `eventoNome` são o que corrige o bug de produção: cada
+ * arquivo importado é UM evento, e as colunas viram P1/P2 DENTRO dele — sem
+ * isso a tabela voltava a rotular tudo como "E1, E1, E2, E2" quando dois
+ * arquivos diferentes tinham provas de mesmo número.
  */
-function montarEtapasComNome(stages: { id: number; stageNumber: number; customName?: string | null; event?: { name: string | null } | null }[]) {
+function montarEtapasComNome(
+    stages: {
+        id: number;
+        stageNumber: number;
+        customName?: string | null;
+        event?: { name: string | null } | null;
+        provaNumber?: number | null;
+        eventoNome?: string | null;
+    }[],
+) {
     return [...stages]
         .sort((a, b) => a.stageNumber - b.stageNumber)
         .map(st => ({
             id: st.id,
             stageNumber: st.stageNumber,
-            nome: st.customName || st.event?.name || `Etapa ${st.stageNumber}`,
+            nome: `P${st.provaNumber ?? st.stageNumber}`,
+            provaNumber: st.provaNumber ?? st.stageNumber,
+            eventoNome: st.eventoNome ?? st.customName ?? st.event?.name ?? null,
         }));
 }
 

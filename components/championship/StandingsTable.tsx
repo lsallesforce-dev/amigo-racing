@@ -14,19 +14,53 @@
 //    como o organizador confere se a regra N-x fez o que ele esperava;
 //  - com 15 etapas a tabela não estoura a página: rola na horizontal DENTRO do
 //    card, com Pos + Competidor congelados à esquerda.
+//
+// ⚠️ MUDANÇA DE MODELO: o cabeçalho passou a agrupar por EVENTO. Cada arquivo
+// importado é um evento com suas próprias provas (P1, P2, ...) — modelar
+// ETAPA-N da planilha como numeração global do campeonato produziu, em
+// produção, duas colunas "E1" e duas "E2" (uma por arquivo), com dado de um
+// evento caindo nas provas do outro. Agora a linha de cima do cabeçalho é o
+// NOME DO EVENTO (colspan sobre as provas dele) e a de baixo é P1, P2... —
+// ordenado por `stageNumber` global, que continua sendo a chave estável de
+// coluna (o número da prova por si só se repete entre eventos).
 
 import { useMemo } from "react";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { cn } from "@/lib/utils";
 import type { CategoriaClassificacao, CompetidorClassificado } from "@/shared/classificacaoCampeonato";
 
+/** A etapa como a tabela (e o PDF) precisam dela. */
+export interface EtapaStandings {
+  id: number;
+  stageNumber: number;
+  /** Nome de exibição da PROVA (ex.: "P1"), já resolvido pelo chamador. */
+  nome: string;
+  /** Número da prova dentro do evento (P1, P2...). */
+  provaNumber: number;
+  /** Nome do evento a que a prova pertence — `null` = prova sem evento (dado legado). */
+  eventoNome: string | null;
+}
+
 export interface StandingsTableProps {
   categoria: CategoriaClassificacao | undefined;
-  etapas: { id: number; stageNumber: number; nome: string }[];
+  etapas: EtapaStandings[];
   papel: "pilot" | "navigator";
   /** "vitrine" enxuga a tabela para o público (sem a coluna de bruto). */
   variante?: "admin" | "vitrine";
   onSelecionarCompetidor?: (nome: string) => void;
+}
+
+/** Agrupa etapas (já ordenadas) por evento, preservando a ordem de chegada — é o
+ *  que dá o colspan da linha de cima do cabeçalho. */
+function agruparPorEvento(etapas: EtapaStandings[]): { eventoNome: string; etapas: EtapaStandings[] }[] {
+  const grupos: { eventoNome: string; etapas: EtapaStandings[] }[] = [];
+  for (const etapa of etapas) {
+    const nome = etapa.eventoNome || "Sem evento";
+    const ultimo = grupos[grupos.length - 1];
+    if (ultimo && ultimo.eventoNome === nome) ultimo.etapas.push(etapa);
+    else grupos.push({ eventoNome: nome, etapas: [etapa] });
+  }
+  return grupos;
 }
 
 const MEDALHAS: Record<number, string> = { 1: "🥇", 2: "🥈", 3: "🥉" };
@@ -91,6 +125,10 @@ export default function StandingsTable({
     [etapas],
   );
 
+  // Grupos de evento, na mesma ordem da linha de baixo — o colspan de cada
+  // grupo é `etapas.length` dele.
+  const gruposEvento = useMemo(() => agruparPorEvento(etapasOrdenadas), [etapasOrdenadas]);
+
   const lista = useMemo<CompetidorClassificado[]>(() => {
     if (!categoria) return [];
     return (papel === "pilot" ? categoria.pilots : categoria.navigators) || [];
@@ -123,30 +161,63 @@ export default function StandingsTable({
       <div className="rounded-md border overflow-x-auto w-full max-w-full">
         <Table className="min-w-max">
           <TableHeader className="bg-muted/50">
+            {/* Linha 1: nome do EVENTO, um colspan por grupo. As duas colunas
+                congeladas (Pos/Competidor) e Bruto/Pontos ganham rowSpan 2 para
+                não duplicar célula vazia embaixo. */}
             <TableRow>
-              <TableHead className="w-[64px] text-center font-bold sticky left-0 z-20 bg-muted">Pos</TableHead>
-              <TableHead className="font-bold sticky left-[64px] z-20 bg-muted min-w-[180px] border-r">
+              <TableHead
+                rowSpan={2}
+                className="w-[64px] text-center font-bold sticky left-0 z-20 bg-muted align-middle"
+              >
+                Pos
+              </TableHead>
+              <TableHead
+                rowSpan={2}
+                className="font-bold sticky left-[64px] z-20 bg-muted min-w-[180px] border-r align-middle"
+              >
                 Competidor
               </TableHead>
-              {etapasOrdenadas.map(etapa => (
-                <TableHead key={etapa.id} className="text-center w-[76px] text-[10px] leading-tight px-1">
-                  E{etapa.stageNumber}
-                  {etapa.nome && (
-                    <div
-                      className="text-[9px] font-normal text-muted-foreground truncate max-w-[70px] mx-auto"
-                      title={etapa.nome}
-                    >
-                      {etapa.nome}
-                    </div>
-                  )}
+              {gruposEvento.map((grupo, idx) => (
+                <TableHead
+                  key={`${grupo.eventoNome}-${idx}`}
+                  colSpan={grupo.etapas.length}
+                  className="text-center text-[10px] font-bold uppercase tracking-wide border-l truncate max-w-0"
+                  title={grupo.eventoNome}
+                >
+                  {grupo.eventoNome}
                 </TableHead>
               ))}
               {mostrarBruto && (
-                <TableHead className="w-[70px] text-center text-[10px] text-muted-foreground" title="Soma sem descarte">
+                <TableHead
+                  rowSpan={2}
+                  className="w-[70px] text-center text-[10px] text-muted-foreground align-middle"
+                  title="Soma sem descarte"
+                >
                   Bruto
                 </TableHead>
               )}
-              <TableHead className="w-[90px] text-center font-bold text-primary">Pontos</TableHead>
+              <TableHead rowSpan={2} className="w-[90px] text-center font-bold text-primary align-middle">
+                Pontos
+              </TableHead>
+            </TableRow>
+            {/* Linha 2: a prova dentro do evento (P1, P2...). */}
+            <TableRow>
+              {etapasOrdenadas.map((etapa, idx) => {
+                // Borda esquerda marca o início de um novo grupo de evento —
+                // reforça visualmente onde um evento termina e o outro começa.
+                const inicioDeGrupo = idx === 0 || etapasOrdenadas[idx - 1].eventoNome !== etapa.eventoNome;
+                return (
+                  <TableHead
+                    key={etapa.id}
+                    className={cn(
+                      "text-center w-[76px] text-[10px] leading-tight px-1",
+                      inicioDeGrupo && "border-l",
+                    )}
+                  >
+                    P{etapa.provaNumber}
+                  </TableHead>
+                );
+              })}
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -179,11 +250,14 @@ export default function StandingsTable({
                       {comp.etapasCorridas} de {etapasOrdenadas.length} etapa(s)
                     </span>
                   </TableCell>
-                  {etapasOrdenadas.map(etapa => (
-                    <TableCell key={etapa.id} className="text-center p-2">
-                      <CelulaEtapa competidor={comp} stageId={etapa.id} />
-                    </TableCell>
-                  ))}
+                  {etapasOrdenadas.map((etapa, idx) => {
+                    const inicioDeGrupo = idx === 0 || etapasOrdenadas[idx - 1].eventoNome !== etapa.eventoNome;
+                    return (
+                      <TableCell key={etapa.id} className={cn("text-center p-2", inicioDeGrupo && "border-l")}>
+                        <CelulaEtapa competidor={comp} stageId={etapa.id} />
+                      </TableCell>
+                    );
+                  })}
                   {mostrarBruto && (
                     <TableCell className="text-center text-sm text-muted-foreground">{comp.grossPoints}</TableCell>
                   )}

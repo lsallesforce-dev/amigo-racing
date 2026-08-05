@@ -201,6 +201,25 @@ export type DecisaoAlias = { aliasNorm: string; canonicalName: string; isDistinc
 
 export type MotivoAutomatico = "exato" | "normalizado" | "alias";
 
+export type PapelCompetidor = "pilot" | "navigator";
+
+/**
+ * O e-mail de um nome NUM PAPEL.
+ *
+ * ⚠️ Na coluna EMAIL das planilhas o endereço fica na linha do PILOTO e é o
+ * contato da DUPLA, não da pessoa: no Ida, "Zé do Café" (piloto) traz
+ * `vadoferrari@icloud.com`, que é do "Vado" (navegador dele). Logo o e-mail
+ * identifica dupla + posição — só vale escopado por papel (piloto casa com
+ * piloto) e SEMPRE como sugestão que o humano confirma. Casar automático por
+ * e-mail ligaria pessoas erradas.
+ */
+export type DicaEmail = { nome: string; emailNorm: string; papel: PapelCompetidor };
+
+/** trim + lowercase. E-mail vazio nunca casa com e-mail vazio. */
+export function normalizarEmail(email: string | null | undefined): string {
+  return String(email ?? "").trim().toLowerCase();
+}
+
 export interface EntradaConciliacao {
   /** Nomes vindos da planilha sendo importada. */
   novos: string[];
@@ -208,6 +227,10 @@ export interface EntradaConciliacao {
   existentes: string[];
   /** Decisões de importações anteriores. */
   decisoes?: DecisaoAlias[];
+  /** E-mails vindos da planilha sendo importada (opcional, retrocompatível). */
+  dicasNovos?: DicaEmail[];
+  /** E-mails já conhecidos do campeonato (opcional, retrocompatível). */
+  dicasExistentes?: DicaEmail[];
   /** Semelhança mínima para virar dúvida. Padrão 0.82. */
   limiar?: number;
 }
@@ -215,8 +238,16 @@ export interface EntradaConciliacao {
 export interface SaidaConciliacao {
   /** Resolvidos sozinhos — nem chegam a virar popup. */
   automaticos: { novo: string; canonico: string; motivo: MotivoAutomatico }[];
-  /** O popup: "esse nome é o mesmo que esse?" — candidatos do mais parecido para o menos. */
-  duvidas: { novo: string; candidatos: { nome: string; similaridade: number }[] }[];
+  /**
+   * O popup: "esse nome é o mesmo que esse?" — candidatos do mais parecido para
+   * o menos, com os do MESMO E-MAIL sempre na frente.
+   */
+  duvidas: {
+    novo: string;
+    /** Papel do nome novo, quando a planilha deixou claro; null se veio nos dois papéis (ou em nenhum). */
+    papel: PapelCompetidor | null;
+    candidatos: { nome: string; similaridade: number; mesmoEmail: boolean }[];
+  }[];
   /** Ninguém parecido: entra como competidor novo. */
   ineditos: string[];
 }
@@ -256,8 +287,16 @@ export function similaridadeConciliacao(a: string, b: string): number {
 
 /**
  * Conciliação dos nomes de UMA planilha contra o que o campeonato já tem.
- * Não sabe nada de papel (piloto/navegador): quem chama passa as listas já
- * separadas quando isso importar.
+ *
+ * A comparação de TEXTO não sabe de papel — quem chama passa as listas já
+ * separadas quando isso importar. Já a dica de E-MAIL é obrigatoriamente
+ * escopada por papel: o mesmo endereço num piloto e num navegador é o contato
+ * da dupla, não a mesma pessoa, e casar isso ligaria gente errada.
+ *
+ * O e-mail NUNCA promove para `automaticos` — ele só coloca o candidato na
+ * frente da fila da pergunta (`mesmoEmail: true`). É o que finalmente liga
+ * "Benê" -> "Benedito Lopes" e "Victinho" -> "Victor Hugo Pizoni Neto", que a
+ * heurística de texto jamais pegaria.
  */
 export function conciliarNomes(entrada: EntradaConciliacao): SaidaConciliacao {
   const limiar = entrada.limiar ?? 0.82;
@@ -284,6 +323,43 @@ export function conciliarNomes(entrada: EntradaConciliacao): SaidaConciliacao {
     const norm = normalizarNome(e);
     if (!existentePorNorm.has(norm)) existentePorNorm.set(norm, e);
   }
+
+  // ---- índices de e-mail, sempre por (emailNorm | papel)
+  const chaveEmail = (emailNorm: string, papel: PapelCompetidor) => `${emailNorm}|${papel}`;
+
+  /** (email|papel) -> nomes EXISTENTES com esse e-mail nesse papel. */
+  const existentesPorEmail = new Map<string, string[]>();
+  for (const d of entrada.dicasExistentes || []) {
+    const email = normalizarEmail(d?.emailNorm);
+    const nome = String(d?.nome ?? "").replace(/\s+/g, " ").trim();
+    if (!email || !nome || (d.papel !== "pilot" && d.papel !== "navigator")) continue;
+    const k = chaveEmail(email, d.papel);
+    if (!existentesPorEmail.has(k)) existentesPorEmail.set(k, []);
+    if (!existentesPorEmail.get(k)!.includes(nome)) existentesPorEmail.get(k)!.push(nome);
+  }
+
+  /** nome NOVO -> os (email, papel) que a planilha trouxe para ele. */
+  const emailsDoNovo = new Map<string, { emailNorm: string; papel: PapelCompetidor }[]>();
+  /** nome NOVO -> papéis em que ele apareceu (para o campo `papel` da dúvida). */
+  const papeisDoNovo = new Map<string, Set<PapelCompetidor>>();
+  for (const d of entrada.dicasNovos || []) {
+    const nome = String(d?.nome ?? "").replace(/\s+/g, " ").trim();
+    if (!nome || (d.papel !== "pilot" && d.papel !== "navigator")) continue;
+    if (!papeisDoNovo.has(nome)) papeisDoNovo.set(nome, new Set());
+    papeisDoNovo.get(nome)!.add(d.papel);
+
+    const email = normalizarEmail(d?.emailNorm);
+    if (!email) continue; // e-mail vazio nunca casa com e-mail vazio
+    if (!emailsDoNovo.has(nome)) emailsDoNovo.set(nome, []);
+    const lista = emailsDoNovo.get(nome)!;
+    if (!lista.some(x => x.emailNorm === email && x.papel === d.papel)) lista.push({ emailNorm: email, papel: d.papel });
+  }
+
+  const papelDoNovo = (nome: string): PapelCompetidor | null => {
+    const papeis = papeisDoNovo.get(nome);
+    if (!papeis || papeis.size !== 1) return null;
+    return [...papeis][0];
+  };
 
   const automaticos: SaidaConciliacao["automaticos"] = [];
   const duvidas: SaidaConciliacao["duvidas"] = [];
@@ -317,18 +393,37 @@ export function conciliarNomes(entrada: EntradaConciliacao): SaidaConciliacao {
     // 4) Parecidos viram pergunta — menos os pares que o organizador já disse
     //    que são pessoas DIFERENTES.
     const recusados = new Set(minhasDecisoes.filter(d => d.isDistinct).map(d => d.canonicalName));
-    if (norm.length >= MIN_CARACTERES_PARA_DUVIDA) {
-      const candidatos = existentes
-        .filter(e => !recusados.has(e))
+
+    // 4a) Mesmo e-mail no MESMO papel: entra na frente, mesmo com semelhança de
+    //     texto baixa, e mesmo que o nome seja curto demais para a heurística.
+    //     Papéis diferentes NÃO geram dica: lá o e-mail é da dupla, não da pessoa.
+    const porEmail: string[] = [];
+    for (const { emailNorm, papel } of emailsDoNovo.get(novo) || []) {
+      for (const candidato of existentesPorEmail.get(chaveEmail(emailNorm, papel)) || []) {
+        if (candidato === novo || recusados.has(candidato) || porEmail.includes(candidato)) continue;
+        if (!existentePorNome.has(candidato)) continue; // só sugere quem de fato existe
+        porEmail.push(candidato);
+      }
+    }
+    const daDica = new Set(porEmail);
+
+    // 4b) Os parecidos de texto de sempre, atrás dos do e-mail.
+    const porTexto = norm.length >= MIN_CARACTERES_PARA_DUVIDA
+      ? existentes
+        .filter(e => !recusados.has(e) && !daDica.has(e))
         .map(nome => ({ nome, similaridade: similaridadeConciliacao(novo, nome) }))
         .filter(c => c.similaridade >= limiar)
         .sort((a, b) => b.similaridade - a.similaridade || a.nome.localeCompare(b.nome, "pt-BR"))
-        .slice(0, MAX_CANDIDATOS);
+      : [];
 
-      if (candidatos.length > 0) {
-        duvidas.push({ novo, candidatos });
-        continue;
-      }
+    const candidatos = [
+      ...porEmail.map(nome => ({ nome, similaridade: similaridadeConciliacao(novo, nome), mesmoEmail: true })),
+      ...porTexto.map(c => ({ ...c, mesmoEmail: false })),
+    ].slice(0, MAX_CANDIDATOS);
+
+    if (candidatos.length > 0) {
+      duvidas.push({ novo, papel: papelDoNovo(novo), candidatos });
+      continue;
     }
 
     ineditos.push(novo);

@@ -20,11 +20,21 @@ import { jsPDF } from "jspdf";
 import autoTable, { type CellDef, type RowInput } from "jspdf-autotable";
 import type { CategoriaClassificacao, CompetidorClassificado, ResultadoEtapa } from "@/shared/classificacaoCampeonato";
 
-/** A etapa como o PDF precisa dela: número para o cabeçalho e nome para o rótulo. */
+/**
+ * A etapa como o PDF precisa dela: número global para ordenar, prova para o
+ * rótulo (P1, P2...) e evento para o agrupamento do cabeçalho.
+ *
+ * ⚠️ Mesma correção da tabela em tela: cada arquivo importado é um evento, e a
+ * coluna do PDF é a PROVA dentro dele — sem separar por evento, dois arquivos
+ * com "ETAPA-1" cada um viravam duas colunas idênticas "E1" no mesmo cabeçalho.
+ */
 export interface EtapaPdf {
   id: number;
   stageNumber: number;
+  /** Mantido por compatibilidade com quem já monta `nome` pronto (ex.: "P1"). */
   nome: string;
+  provaNumber: number;
+  eventoNome: string | null;
 }
 
 export interface DadosPdfCampeonato {
@@ -78,6 +88,19 @@ function abreviar(nome: string, limite: number): string {
   return limpo.slice(0, Math.max(1, limite - 2)) + "..";
 }
 
+/** Agrupa etapas (já ordenadas) por evento, preservando a ordem — mesma lógica
+ *  de `StandingsTable`, para o cabeçalho do PDF bater com o da tela. */
+function agruparPorEvento(etapas: EtapaPdf[]): { eventoNome: string; etapas: EtapaPdf[] }[] {
+  const grupos: { eventoNome: string; etapas: EtapaPdf[] }[] = [];
+  for (const etapa of etapas) {
+    const nome = etapa.eventoNome || "Sem evento";
+    const ultimo = grupos[grupos.length - 1];
+    if (ultimo && ultimo.eventoNome === nome) ultimo.etapas.push(etapa);
+    else grupos.push({ eventoNome: nome, etapas: [etapa] });
+  }
+  return grupos;
+}
+
 /**
  * Uma célula de etapa. É aqui que DNS deixa de parecer com DSQ e o descartado
  * deixa de parecer com o que conta: descartado sai entre parênteses, em
@@ -104,6 +127,8 @@ export async function gerarPdfClassificacao(dados: DadosPdfCampeonato): Promise<
   const etapas = [...(dados.etapas || [])].sort(
     (a, b) => a.stageNumber - b.stageNumber || a.id - b.id,
   );
+  // Colspan da linha de evento no cabeçalho — a mesma agregação da tela.
+  const gruposEvento = agruparPorEvento(etapas);
 
   // Muita etapa = paisagem. Sem isto o formato de 15 provas do regulamento
   // estoura a largura e o PDF sai ilegível.
@@ -253,14 +278,25 @@ export async function gerarPdfClassificacao(dados: DadosPdfCampeonato): Promise<
       doc.text(papel.rotulo, MARGEM, y);
       y += 5;
 
+      // Duas linhas de cabeçalho: EVENTO em cima (um colspan por grupo) e PROVA
+      // embaixo (P1, P2...). Pos/Competidor/Bruto/Total usam rowSpan 2 — mesma
+      // correção da tabela em tela, pra não repetir "E1"/"E2" de arquivos
+      // diferentes como se fossem a mesma etapa.
       const cabecalho: RowInput[] = [
         [
-          "Pos",
-          "Competidor",
-          ...etapas.map(e => `E${e.stageNumber}\n(${abreviar(e.nome, limiteAbreviacao)})`),
-          "Bruto",
-          "Total",
+          { content: "Pos", rowSpan: 2 } as CellDef,
+          { content: "Competidor", rowSpan: 2 } as CellDef,
+          ...gruposEvento.map(
+            grupo =>
+              ({
+                content: abreviar(grupo.eventoNome, limiteAbreviacao * grupo.etapas.length),
+                colSpan: grupo.etapas.length,
+              }) as CellDef,
+          ),
+          { content: "Bruto", rowSpan: 2 } as CellDef,
+          { content: "Total", rowSpan: 2 } as CellDef,
         ],
+        [...etapas.map(e => `P${e.provaNumber}`)],
       ];
 
       const corpo: RowInput[] = lista.map(comp => {
