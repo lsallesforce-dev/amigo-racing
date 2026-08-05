@@ -4,6 +4,7 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { getLoginUrl } from "@/api/_server/const";
 import { trpc } from "@/lib/trpc";
 import { Trophy, Plus, Loader2, ArrowLeft, CalendarDays } from "lucide-react";
@@ -11,6 +12,7 @@ import { Link, useLocation } from "wouter";
 import { useState } from "react";
 import { toast } from "sonner";
 import Navbar from "@/components/Navbar";
+import { PRESETS_PONTUACAO, PRESET_PADRAO, descreverTabela, type IdPreset } from "@/shared/pontuacaoCampeonato";
 
 export default function Championships() {
     const { user, isAuthenticated, loading } = useAuth();
@@ -20,7 +22,13 @@ export default function Championships() {
     const [form, setForm] = useState({
         name: "",
         year: new Date().getFullYear().toString(),
+        // Regra de descarte: unificada com o <Select> 0-3 do modal de edição em
+        // ChampionshipDetails.tsx (lá era Select, aqui era Input livre — duas UIs
+        // pra mesma regra é inconsistência de UX). O regulamento fala em até 2
+        // descartes de 15 provas; o teto de 3 é o que a edição já permite, então
+        // mantemos os dois em paridade em vez de dois limites diferentes no app.
         discardRule: "0",
+        pointsPreset: PRESET_PADRAO as IdPreset,
     });
 
     const utils = trpc.useUtils();
@@ -44,7 +52,7 @@ export default function Championships() {
         onSuccess: () => {
             toast.success("Campeonato criado com sucesso!");
             setDialogOpen(false);
-            setForm({ name: "", year: new Date().getFullYear().toString(), discardRule: "0" });
+            setForm({ name: "", year: new Date().getFullYear().toString(), discardRule: "0", pointsPreset: PRESET_PADRAO });
             utils.championships.getAllByOrganizer.invalidate();
         },
         onError: (error) => {
@@ -71,8 +79,11 @@ export default function Championships() {
             year: yearNum,
             organizerId: principalUserId,
             discardRule: isNaN(discardNum) ? 0 : discardNum,
+            pointsPreset: form.pointsPreset,
         });
     };
+
+    const presetSelecionado = PRESETS_PONTUACAO.find(p => p.id === form.pointsPreset) || PRESETS_PONTUACAO[0];
 
     if (loading) {
         return (
@@ -141,9 +152,46 @@ export default function Championships() {
                                         </div>
                                         <div className="space-y-2">
                                             <Label htmlFor="discardRule">Regra de Descarte</Label>
-                                            <Input id="discardRule" type="number" min="0" value={form.discardRule} onChange={e => setForm({ ...form, discardRule: e.target.value })} placeholder="Ex: 1" />
-                                            <p className="text-[10px] text-muted-foreground leading-tight">Nº de piores resultados descartados (N-x).</p>
+                                            {/* Select 0-3, igual ao modal de edição (ChampionshipDetails.tsx) — antes
+                                                aqui era um Input numérico livre, permitindo qualquer valor absurdo
+                                                (ex: N-15 numa temporada de 15 provas). */}
+                                            <Select
+                                                value={form.discardRule}
+                                                onValueChange={v => setForm({ ...form, discardRule: v })}
+                                            >
+                                                <SelectTrigger id="discardRule">
+                                                    <SelectValue placeholder="Selecione a regra" />
+                                                </SelectTrigger>
+                                                <SelectContent>
+                                                    <SelectItem value="0">Sem descarte</SelectItem>
+                                                    <SelectItem value="1">Descartar 1 (N-1)</SelectItem>
+                                                    <SelectItem value="2">Descartar 2 (N-2)</SelectItem>
+                                                    <SelectItem value="3">Descartar 3 (N-3)</SelectItem>
+                                                </SelectContent>
+                                            </Select>
                                         </div>
+                                    </div>
+
+                                    <div className="space-y-2">
+                                        <Label htmlFor="pointsPreset">Tabela de Pontuação</Label>
+                                        <Select
+                                            value={form.pointsPreset}
+                                            onValueChange={v => setForm({ ...form, pointsPreset: v as IdPreset })}
+                                        >
+                                            <SelectTrigger id="pointsPreset">
+                                                <SelectValue placeholder="Selecione a tabela" />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                {PRESETS_PONTUACAO.map(preset => (
+                                                    <SelectItem key={preset.id} value={preset.id}>{preset.nome}</SelectItem>
+                                                ))}
+                                            </SelectContent>
+                                        </Select>
+                                        <p className="text-[10px] text-muted-foreground leading-tight">
+                                            {presetSelecionado.id === "custom"
+                                                ? "Pontuação personalizada — os valores podem ser ajustados depois, na página do campeonato."
+                                                : `Pontuação: ${descreverTabela(presetSelecionado.tabela, 5)}`}
+                                        </p>
                                     </div>
                                 </div>
                                 <DialogFooter>
@@ -173,34 +221,45 @@ export default function Championships() {
                     </Card>
                 ) : (
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                        {championships.map((champ) => (
-                            <Card
-                                key={champ.id}
-                                className="cursor-pointer hover:border-primary/50 transition-colors flex flex-col"
-                                onClick={() => setLocation(`/organizer/championships/${champ.id}`)}
-                            >
-                                <CardHeader className="p-5 pb-3">
-                                    <div className="flex justify-between items-start gap-2">
-                                        <CardTitle className="text-xl line-clamp-2">{champ.name}</CardTitle>
-                                        <div className="bg-primary/10 text-primary rounded-md px-2 py-1 text-xs font-bold shrink-0">
-                                            {champ.year}
+                        {championships.map((champ) => {
+                            // Fallback pro mesmo padrão que resolverTabela() usa no backend:
+                            // campeonato sem preset gravado (dado anterior à migração) é tratado
+                            // como "regulamento".
+                            const presetId = champ.pointsPreset || PRESET_PADRAO;
+                            const preset = PRESETS_PONTUACAO.find(p => p.id === presetId) || PRESETS_PONTUACAO[0];
+                            return (
+                                <Card
+                                    key={champ.id}
+                                    className="cursor-pointer hover:border-primary/50 transition-colors flex flex-col"
+                                    onClick={() => setLocation(`/organizer/championships/${champ.id}`)}
+                                >
+                                    <CardHeader className="p-5 pb-3">
+                                        <div className="flex justify-between items-start gap-2">
+                                            <CardTitle className="text-xl line-clamp-2">{champ.name}</CardTitle>
+                                            <div className="bg-primary/10 text-primary rounded-md px-2 py-1 text-xs font-bold shrink-0">
+                                                {champ.year}
+                                            </div>
                                         </div>
-                                    </div>
-                                </CardHeader>
-                                <CardContent className="p-5 pt-0 mb-auto">
-                                    <div className="flex items-center text-sm text-muted-foreground mt-2">
-                                        <CalendarDays className="h-4 w-4 mr-2" />
-                                        Criado em {new Date(champ.createdAt).toLocaleDateString('pt-BR')}
-                                    </div>
-                                    <div className="mt-4 pt-4 border-t border-border/50">
-                                        <div className="flex justify-between text-sm">
-                                            <span className="text-muted-foreground">Descarte (N-x):</span>
-                                            <span className="font-medium">{champ.discardRule > 0 ? `${champ.discardRule} etapa(s)` : 'Sem descarte'}</span>
+                                    </CardHeader>
+                                    <CardContent className="p-5 pt-0 mb-auto">
+                                        <div className="flex items-center text-sm text-muted-foreground mt-2">
+                                            <CalendarDays className="h-4 w-4 mr-2" />
+                                            Criado em {new Date(champ.createdAt).toLocaleDateString('pt-BR')}
                                         </div>
-                                    </div>
-                                </CardContent>
-                            </Card>
-                        ))}
+                                        <div className="mt-4 pt-4 border-t border-border/50 space-y-1.5">
+                                            <div className="flex justify-between text-sm">
+                                                <span className="text-muted-foreground">Descarte (N-x):</span>
+                                                <span className="font-medium">{champ.discardRule > 0 ? `${champ.discardRule} etapa(s)` : 'Sem descarte'}</span>
+                                            </div>
+                                            <div className="flex justify-between text-sm">
+                                                <span className="text-muted-foreground">Pontuação:</span>
+                                                <span className="font-medium">{preset.nome}</span>
+                                            </div>
+                                        </div>
+                                    </CardContent>
+                                </Card>
+                            );
+                        })}
                     </div>
                 )}
             </div>

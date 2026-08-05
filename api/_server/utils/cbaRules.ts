@@ -1,39 +1,29 @@
 /**
- * CBA (Confederação Brasileira de Automobilismo) Scoring Rules
- * Points assigned to positions 1 through 15.
+ * Regras de pontuação da CBA — agora só uma casca fina.
+ *
+ * A tabela virou dado do campeonato (shared/pontuacaoCampeonato.ts): cada
+ * campeonato escolhe entre o regulamento do Amigo Racing, a tabela da CBA ou uma
+ * personalizada, e o cálculo acontece na LEITURA da classificação.
+ *
+ * Este arquivo continua existindo porque pages/ChampionshipDetails.tsx importa
+ * daqui (o front atravessa a fronteira da API) — remover quebraria o build antes
+ * da refatoração da tela terminar. Código novo deve importar de
+ * shared/pontuacaoCampeonato.ts direto.
+ *
+ * @deprecated use `resolverTabela` + `calcularPontos` de shared/pontuacaoCampeonato.ts
  */
 
-export const CBA_POINTS_TABLE: Record<number, number> = {
-    1: 17,
-    2: 15,
-    3: 14,
-    4: 13,
-    5: 12,
-    6: 11,
-    7: 10,
-    8: 9,
-    9: 8,
-    10: 7,
-    11: 6,
-    12: 5,
-    13: 4,
-    14: 3,
-    15: 2,
-};
+import { TABELA_CBA, calcularPontos } from "../../../shared/pontuacaoCampeonato.js";
+
+/** @deprecated re-export de TABELA_CBA. */
+export const CBA_POINTS_TABLE: Record<number, number> = TABELA_CBA;
 
 /**
- * Pure function to calculate points according to CBA rules based on position.
- * Disqualified or non-finishing pilots score 0.
+ * Pontos pela tabela da CBA. Desclassificado (ou fora da tabela) faz 0.
  *
- * @param position - The finish position of the competitor
- * @param isDisqualified - True if the competitor was disqualified or did not finish properly
- * @returns The amount of points earned per CBA rules.
+ * @deprecated a pontuação do campeonato pode não ser a da CBA — use
+ * `calcularPontos(posicao, isDsq, isDns, tabela)` com a tabela do campeonato.
  */
 export const calculateCbaPoints = (position: number, isDisqualified: boolean = false): number => {
-    if (isDisqualified) {
-        return 0;
-    }
-
-    // Se a posição estiver na tabela (1 a 15), retorna a pontuação de lá. Se não, retorna 0.
-    return CBA_POINTS_TABLE[position] || 0;
+  return calcularPontos(position, isDisqualified, false, TABELA_CBA);
 };

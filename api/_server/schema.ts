@@ -418,7 +418,14 @@ export const championships = pgTable("championships", {
   sponsorBannerUrl: text("sponsorBannerUrl"),
   imageUrl: text("imageUrl"),
   active: boolean("active").default(true).notNull(),
+  /** Pode descartar etapa em que o competidor NÃO LARGOU (DNS). */
   allowDiscardMissedStages: boolean("allowDiscardMissedStages").default(true).notNull(),
+  /** Pode descartar etapa em que o competidor foi DESCLASSIFICADO (DSQ/NC). */
+  allowDiscardDisqualified: boolean("allowDiscardDisqualified").default(false).notNull(),
+  /** Qual tabela de pontos vale: 'regulamento' | 'cba' | 'custom'. */
+  pointsPreset: varchar("pointsPreset", { length: 30 }).default("regulamento").notNull(),
+  /** Tabela custom {posicao: pontos}; só é lida quando pointsPreset = 'custom'. */
+  pointsTable: json("pointsTable"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().notNull(),
 });
@@ -454,14 +461,36 @@ export const championshipResults = pgTable("championship_results", {
   pilotName: varchar("pilotName", { length: 200 }),
   navigatorName: varchar("navigatorName", { length: 200 }),
   position: integer("position").notNull(),
+  /** Legado: os pontos congelados na gravação. O cálculo agora é na leitura. */
   points: doublePrecision("points").notNull(),
   isDiscarded: boolean("isDiscarded").default(false).notNull(),
   isDisqualified: boolean("isDisqualified").default(false).notNull(),
+  /** Não largou. Antes isso era adivinhado por position = 0. */
+  isDns: boolean("isDns").default(false).notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 });
 
 export type ChampionshipResult = typeof championshipResults.$inferSelect;
 export type InsertChampionshipResult = typeof championshipResults.$inferInsert;
+
+/**
+ * Championship Name Aliases
+ * Memória das decisões de nome tomadas na importação de planilha: "Rogerião" e
+ * "Rogério Flávio Paggioro" são a mesma pessoa? A resposta fica gravada para a
+ * planilha seguinte não reperguntar — inclusive o "não, são pessoas diferentes"
+ * (isDistinct). `aliasNorm` é o nome já normalizado, que serve de chave.
+ */
+export const championshipNameAliases = pgTable("championship_name_aliases", {
+  id: serial("id").primaryKey(),
+  championshipId: integer("championshipId").notNull(),
+  aliasNorm: varchar("aliasNorm", { length: 200 }).notNull(),
+  canonicalName: varchar("canonicalName", { length: 200 }).notNull(),
+  isDistinct: boolean("isDistinct").default(false).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type ChampionshipNameAlias = typeof championshipNameAliases.$inferSelect;
+export type InsertChampionshipNameAlias = typeof championshipNameAliases.$inferInsert;
 
 /**
  * Championship Requests

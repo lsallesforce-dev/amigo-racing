@@ -1,43 +1,93 @@
 import { z } from "zod";
 import { router, publicProcedure, protectedProcedure } from "../_core/trpc.js";
-import { getDb, getOrganizerContext, getUserById } from "../db.js";
+import { getDb, getOrganizerContext } from "../db.js";
 import {
     championships,
     championshipStages,
     championshipResults,
     championshipRequests,
+    championshipNameAliases,
     events,
-    organizers,
+    registrations,
     users
 } from "../schema.js";
-import { eq, and, desc, sql, inArray, not, ne } from "drizzle-orm";
+import { eq, and, desc, inArray, ne } from "drizzle-orm";
 import { TRPCError } from "@trpc/server";
-import { calculateCbaPoints } from "../utils/cbaRules.js";
+import {
+    resolverTabela,
+    normalizarTabela,
+    calcularPontos,
+} from "../../../shared/pontuacaoCampeonato.js";
+import {
+    calcularClassificacao,
+    nomeDeCompetidorValido,
+    type CompetidorClassificado,
+    type CategoriaClassificacao,
+} from "../../../shared/classificacaoCampeonato.js";
+import {
+    importarPlanilhaCampeonato,
+    normalizarCabecalho,
+    type AbaPlanilha,
+    type CelulaPlanilha,
+} from "../../../shared/importarPlanilhaCampeonato.js";
+import {
+    normalizarNome,
+    conciliarNomes,
+    sugerirUnificacoes,
+    type DecisaoAlias,
+} from "../../../shared/nomesCampeonato.js";
 
-export type CompetitorStandings = {
-    name: string;
-    category: string;
-    role: "pilot" | "navigator";
-    stageResults: { stageId: number; points: number; position: number; isDisqualified: boolean; isDiscarded: boolean }[];
-    grossPoints: number;
-    netPoints: number;
-    positionHistory: number[];
-};
+type Banco = NonNullable<Awaited<ReturnType<typeof getDb>>>;
 
-export async function calculateChampionshipStandings(championshipId: number) {
+/** @deprecated o tipo de verdade agora é `CompetidorClassificado` (shared/classificacaoCampeonato.ts). */
+export type CompetitorStandings = CompetidorClassificado;
+
+// ------------------------------------------------------------------ ferramentas
+
+async function conectar(): Promise<Banco> {
     const db = await getDb();
     if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database error" });
+    return db;
+}
 
-    // 1. Get Championship Discard Rule
+/**
+ * Gate genérico de permissão (o mesmo que o resto do arquivo usa).
+ * Só diz que a PESSOA pode mexer em campeonato — não diz em QUAL.
+ */
+async function exigirPermissaoDeEventos(user: any) {
+    const organizerCtx = await getOrganizerContext(user);
+    if (organizerCtx.type === "MEMBER" && !organizerCtx.permissions.includes("events")) {
+        throw new TRPCError({ code: "FORBIDDEN", message: "Not authorized to manage championships" });
+    }
+    return organizerCtx;
+}
+
+/**
+ * O gate acima sozinho deixava qualquer organizador editar/apagar o campeonato de
+ * QUALQUER outro — bastava mandar o id na chamada (updateChampionship e
+ * deleteChampionship não checavam dono nenhum). Toda rota que escreve no
+ * campeonato passa por aqui.
+ */
+async function exigirDonoDoCampeonato(db: Banco, user: any, championshipId: number) {
+    const organizerCtx = await exigirPermissaoDeEventos(user);
+
     const [champ] = await db
         .select()
         .from(championships)
-        .where(eq(championships.id, championshipId));
+        .where(eq(championships.id, championshipId))
+        .limit(1);
 
     if (!champ) throw new TRPCError({ code: "NOT_FOUND", message: "Campeonato não encontrado" });
+    if (champ.organizerId !== organizerCtx.principalUserId) {
+        throw new TRPCError({ code: "FORBIDDEN", message: "Apenas o dono do campeonato pode fazer isso" });
+    }
 
-    // 2. Get Stages & Results
-    const stagesData = await db
+    return { champ, organizerCtx };
+}
+
+/** Etapas do campeonato já com o nome resolvido (evento da plataforma ou prova externa). */
+async function carregarEtapas(db: Banco, championshipId: number) {
+    const etapas = await db
         .select({
             id: championshipStages.id,
             championshipId: championshipStages.championshipId,
@@ -54,135 +104,230 @@ export async function calculateChampionshipStandings(championshipId: number) {
         .where(eq(championshipStages.championshipId, championshipId))
         .orderBy(championshipStages.stageNumber);
 
+    return etapas;
+}
+
+function nomeDaEtapa(e: { customName: string | null; stageNumber: number; event: { name: string | null } | null }) {
+    return e.customName || e.event?.name || `Etapa ${e.stageNumber}`;
+}
+
+/**
+ * Linhas cruas de resultado das etapas.
+ *
+ * A ordem NÃO é decorativa: quando o mesmo competidor aparece duas vezes na mesma
+ * etapa (dupla que trocou de parceiro, planilha com o nome repetido), a
+ * classificação fica com a PRIMEIRA linha. Trazendo resultado real antes de
+ * DNS/DSQ, quem vale é a corrida que ele de fato fez.
+ */
+async function carregarResultados(db: Banco, stageIds: number[]) {
+    if (stageIds.length === 0) return [];
+    return await db
+        .select({
+            stageId: championshipResults.stageId,
+            category: championshipResults.category,
+            pilotName: championshipResults.pilotName,
+            navigatorName: championshipResults.navigatorName,
+            position: championshipResults.position,
+            isDisqualified: championshipResults.isDisqualified,
+            isDns: championshipResults.isDns,
+        })
+        .from(championshipResults)
+        .where(inArray(championshipResults.stageId, stageIds))
+        .orderBy(
+            championshipResults.stageId,
+            championshipResults.isDns,
+            championshipResults.isDisqualified,
+            championshipResults.position,
+        );
+}
+
+const limparNome = (nome: string | null | undefined) => String(nome ?? "").replace(/\s+/g, " ").trim();
+
+/** Nomes distintos já gravados no campeonato (piloto + navegador, sem o lixo do importador antigo). */
+function nomesDosResultados(linhas: { pilotName: string | null; navigatorName: string | null }[]): string[] {
+    const vistos = new Set<string>();
+    for (const r of linhas) {
+        for (const bruto of [r.pilotName, r.navigatorName]) {
+            if (!nomeDeCompetidorValido(bruto)) continue;
+            vistos.add(limparNome(bruto));
+        }
+    }
+    return [...vistos].sort((a, b) => a.localeCompare(b, "pt-BR"));
+}
+
+function categoriasDosResultados(linhas: { category: string | null }[]): string[] {
+    const vistas = new Set<string>();
+    for (const r of linhas) {
+        const c = limparNome(r.category);
+        if (c) vistas.add(c);
+    }
+    return [...vistas].sort((a, b) => a.localeCompare(b, "pt-BR"));
+}
+
+/**
+ * A aba de CLASSIFICAÇÃO é relatório, não entrada: ela sai no exportWorkbook e
+ * seria lida de volta como se fosse mais uma categoria (tem NOME e FUNÇÃO). Fica
+ * de fora da leitura para o round-trip exportar→importar não inventar competidor.
+ */
+const ABA_CLASSIFICACAO = "CLASSIFICAÇÃO";
+const ehAbaDeRelatorio = (nome: string) => normalizarCabecalho(nome) === normalizarCabecalho(ABA_CLASSIFICACAO);
+
+/**
+ * Monta a aba de relatório: pontos por etapa, com o descarte entre parênteses.
+ * As colunas são "PTS ETAPA-n" de propósito — "ETAPA-n" faria o importador ler
+ * esta aba como se fosse resultado.
+ *
+ * Só sai daqui o que a vitrine pública já mostra (nome, posição, pontos). Nada de
+ * e-mail/CPF: é por isso que a exportação pública consegue reusar esta função.
+ */
+function montarLinhasClassificacao(
+    standings: CategoriaClassificacao[],
+    numerosDeEtapa: number[],
+): (string | number)[][] {
+    const linhas: (string | number)[][] = [[
+        "CATEGORIA", "POSIÇÃO", "NOME", "FUNÇÃO",
+        ...numerosDeEtapa.map(n => `PTS ETAPA-${n}`),
+        "PONTOS BRUTOS", "DESCARTES", "PONTOS LÍQUIDOS",
+    ]];
+
+    for (const cat of standings) {
+        const emitir = (c: CompetidorClassificado, funcao: string) => {
+            const porEtapa = new Map(c.stageResults.map(sr => [sr.stageNumber, sr]));
+            const pontos = numerosDeEtapa.map(n => {
+                const sr = porEtapa.get(n);
+                if (!sr) return "";
+                return sr.isDiscarded ? `(${sr.points})` : sr.points;
+            });
+            const descartadas = c.stageResults.filter(sr => sr.isDiscarded).map(sr => `Etapa ${sr.stageNumber}`);
+            linhas.push([
+                cat.name, c.posicao, c.name, funcao,
+                ...pontos,
+                c.grossPoints, descartadas.join(", "), c.netPoints,
+            ]);
+        };
+        cat.pilots.forEach(p => emitir(p, "Piloto"));
+        cat.navigators.forEach(n => emitir(n, "Navegador"));
+    }
+
+    return linhas;
+}
+
+/** Base64 -> abas em matriz. Quem entende de planilha é o servidor; o parser é puro. */
+async function lerAbasDaPlanilha(arquivoBase64: string): Promise<AbaPlanilha[]> {
+    const XLSX = await import("xlsx");
+
+    // O front costuma mandar o resultado de readAsDataURL ("data:...;base64,XXXX").
+    const puro = String(arquivoBase64 || "").replace(/^data:[^,]*,/, "").trim();
+    if (!puro) throw new TRPCError({ code: "BAD_REQUEST", message: "Arquivo vazio" });
+
+    let wb: any;
+    try {
+        wb = XLSX.read(Buffer.from(puro, "base64"), { type: "buffer" });
+    } catch (e: any) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: `Não consegui abrir a planilha: ${e?.message || e}` });
+    }
+
+    const abas: AbaPlanilha[] = [];
+    for (const nome of wb.SheetNames || []) {
+        if (ehAbaDeRelatorio(nome)) continue;
+        const sheet = wb.Sheets[nome];
+        if (!sheet) continue;
+        const linhas = XLSX.utils.sheet_to_json(sheet, { header: 1, raw: true, defval: null }) as unknown as CelulaPlanilha[][];
+        abas.push({ nome, linhas });
+    }
+
+    if (abas.length === 0) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "A planilha não tem nenhuma aba para importar" });
+    }
+    return abas;
+}
+
+/** Decisões de nome já gravadas, no formato que a conciliação entende. */
+async function carregarDecisoes(db: Banco, championshipId: number): Promise<DecisaoAlias[]> {
+    const linhas = await db
+        .select()
+        .from(championshipNameAliases)
+        .where(eq(championshipNameAliases.championshipId, championshipId));
+
+    return linhas.map(l => ({
+        aliasNorm: l.aliasNorm,
+        canonicalName: l.canonicalName,
+        isDistinct: l.isDistinct,
+    }));
+}
+
+/** Nomes distintos que a planilha trouxe (piloto + navegador). */
+function nomesDaPlanilha(resultados: { pilotName: string | null; navigatorName: string | null }[]): string[] {
+    const vistos = new Set<string>();
+    for (const r of resultados) {
+        for (const bruto of [r.pilotName, r.navigatorName]) {
+            const nome = limparNome(bruto);
+            if (nome && nomeDeCompetidorValido(nome)) vistos.add(nome);
+        }
+    }
+    return [...vistos];
+}
+
+/** Insert em lotes: uma planilha inteira passa fácil de mil linhas. */
+async function inserirResultadosEmLotes(tx: any, linhas: any[]) {
+    const TAMANHO = 500;
+    for (let i = 0; i < linhas.length; i += TAMANHO) {
+        await tx.insert(championshipResults).values(linhas.slice(i, i + TAMANHO));
+    }
+}
+
+// ------------------------------------------------------------------ classificação
+
+/**
+ * Casca fina: carrega campeonato + etapas + resultados e entrega para o motor puro
+ * (shared/classificacaoCampeonato.ts). Os pontos são calculados AQUI, na leitura —
+ * `championship_results.points` virou cache legado e não é mais lido.
+ */
+export async function calculateChampionshipStandings(championshipId: number) {
+    const db = await conectar();
+
+    const [champ] = await db
+        .select()
+        .from(championships)
+        .where(eq(championships.id, championshipId));
+
+    if (!champ) throw new TRPCError({ code: "NOT_FOUND", message: "Campeonato não encontrado" });
+
+    const stagesData = await carregarEtapas(db, championshipId);
     const stageIds = stagesData.map(s => s.id);
-    if (stageIds.length === 0) return { standings: [], stages: [], championship: champ };
+    if (stageIds.length === 0) return { standings: [], stages: stagesData, championship: champ };
 
-    // 3. Process All Results (since no simple inArray, get all results for these stages manually)
-    const allResultsList = await Promise.all(
-        stageIds.map(stId => db.select().from(championshipResults).where(eq(championshipResults.stageId, stId)))
-    );
-    const allResults = allResultsList.flat();
+    // Era um SELECT por etapa (N+1); com inArray é uma consulta só.
+    const resultados = await carregarResultados(db, stageIds);
 
-    const competitorsMap = new Map<string, CompetitorStandings>();
-
-    const getCompetitorKey = (name: string, category: string, role: string) => `${name}|${category}|${role}`;
-
-    for (const r of allResults) {
-        const cat = r.category || "Geral";
-
-        // Pilot Entry
-        if (r.pilotName && r.pilotName !== "-" && r.pilotName.toLowerCase() !== "false") {
-            const key = getCompetitorKey(r.pilotName, cat, "pilot");
-            if (!competitorsMap.has(key)) competitorsMap.set(key, { name: r.pilotName, category: cat, role: "pilot", stageResults: [], grossPoints: 0, netPoints: 0, positionHistory: [] });
-            competitorsMap.get(key)!.stageResults.push({ stageId: r.stageId, points: r.points, position: r.position, isDisqualified: r.isDisqualified, isDiscarded: false });
-        }
-
-        // Navigator Entry
-        if (r.navigatorName && r.navigatorName !== "-" && r.navigatorName.toLowerCase() !== "false") {
-            const key = getCompetitorKey(r.navigatorName, cat, "navigator");
-            if (!competitorsMap.has(key)) competitorsMap.set(key, { name: r.navigatorName, category: cat, role: "navigator", stageResults: [], grossPoints: 0, netPoints: 0, positionHistory: [] });
-            competitorsMap.get(key)!.stageResults.push({ stageId: r.stageId, points: r.points, position: r.position, isDisqualified: r.isDisqualified, isDiscarded: false });
-        }
-    }
-
-    // 4. Apply Discard Logic & Calculations
-    const competitorsArray = Array.from(competitorsMap.values());
-
-    for (const comp of competitorsArray) {
-        comp.grossPoints = comp.stageResults.reduce((sum, sr) => sum + sr.points, 0);
-        comp.positionHistory = comp.stageResults.filter(sr => !sr.isDisqualified && sr.position > 0).map(sr => sr.position);
-
-        if (champ.discardRule > 0) {
-            // Build a list of all potential results for discard
-            // We need to look at EVERY stage in the championship
-            const potentialDiscards: { points: number; stageId: number; isDNS: boolean; isDSQ: boolean; isEligible: boolean }[] = [];
-
-            for (const stage of stagesData) {
-                const result = comp.stageResults.find(sr => sr.stageId === stage.id);
-                if (result) {
-                    potentialDiscards.push({
-                        points: result.points,
-                        stageId: stage.id,
-                        isDNS: false,
-                        isDSQ: result.isDisqualified,
-                        isEligible: !result.isDisqualified || champ.allowDiscardMissedStages // If rule is ON, even NC/DSQ can be discarded
-                    });
-                } else {
-                    // Missing stage (DNS)
-                    potentialDiscards.push({
-                        points: 0,
-                        stageId: stage.id,
-                        isDNS: true,
-                        isDSQ: false,
-                        isEligible: champ.allowDiscardMissedStages // DNS eligibility depends on rule
-                    });
-                }
-            }
-
-            // Sort eligible discards by points ascending
-            const eligibleToDiscard = potentialDiscards
-                .filter(pd => pd.isEligible)
-                .sort((a, b) => a.points - b.points);
-
-            // Mark the worst ones as discarded
-            for (let i = 0; i < Math.min(champ.discardRule, eligibleToDiscard.length); i++) {
-                const targetId = eligibleToDiscard[i].stageId;
-                const sr = comp.stageResults.find(res => res.stageId === targetId);
-                // If the target was a real result (not a DNS), mark it as discarded
-                if (sr) {
-                    sr.isDiscarded = true;
-                }
-                // Note: If the target was a DNS (virtual), it doesn't have an 'sr' object,
-                // which is fine because it's already 0 and not in grossPoints.
-            }
-        }
-
-        // Calculate Net Points
-        comp.netPoints = comp.stageResults.reduce((sum, sr) => sum + (sr.isDiscarded ? 0 : sr.points), 0);
-    }
-
-    // 5. Build Grouped Results
-    const categoriesSet = new Set<string>();
-    competitorsArray.forEach(c => categoriesSet.add(c.category));
-
-    const categories = Array.from(categoriesSet).sort();
-
-    const groupedByCat = categories.map(cat => {
-        const pilots = competitorsArray.filter(c => c.category === cat && c.role === "pilot");
-        const navigators = competitorsArray.filter(c => c.category === cat && c.role === "navigator");
-
-        const sortFn = (a: CompetitorStandings, b: CompetitorStandings) => {
-            if (b.netPoints !== a.netPoints) return b.netPoints - a.netPoints;
-            if (b.grossPoints !== a.grossPoints) return b.grossPoints - a.grossPoints;
-
-            // Tiebreaker: More 1sts, 2nds, etc.
-            const maxPos = Math.max(...a.positionHistory, ...b.positionHistory, 0);
-            for (let pos = 1; pos <= maxPos; pos++) {
-                const countA = a.positionHistory.filter(p => p === pos).length;
-                const countB = b.positionHistory.filter(p => p === pos).length;
-                if (countA !== countB) return countB - countA;
-            }
-
-            const lastA = Math.max(...a.stageResults.map(sr => sr.stageId), 0);
-            const lastB = Math.max(...b.stageResults.map(sr => sr.stageId), 0);
-            if (lastA !== lastB) return lastB - lastA;
-
-            return 0;
-        };
-
-        return {
-            name: cat,
-            pilots: pilots.sort(sortFn),
-            navigators: navigators.sort(sortFn)
-        };
+    const { categorias } = calcularClassificacao({
+        etapas: stagesData.map(s => ({ id: s.id, stageNumber: s.stageNumber, nome: nomeDaEtapa(s) })),
+        resultados,
+        config: {
+            discardRule: champ.discardRule,
+            allowDiscardMissedStages: champ.allowDiscardMissedStages,
+            allowDiscardDisqualified: champ.allowDiscardDisqualified,
+            tabela: resolverTabela(champ.pointsPreset, champ.pointsTable),
+        },
     });
 
     return {
         stages: stagesData,
-        standings: groupedByCat,
+        standings: categorias,
         championship: champ
     };
 }
+
+/**
+ * Uma implementação só para os dois nomes: `getPublicClassification` era cópia
+ * literal de `getStandings`, e as duas divergiam a cada mexida. O front público
+ * chama pelo nome público, o painel pelo outro — o corpo é o mesmo.
+ */
+const consultarClassificacao = publicProcedure
+    .input(z.object({ championshipId: z.number().int() }))
+    .query(async ({ input }) => {
+        return await calculateChampionshipStandings(input.championshipId);
+    });
 
 export const championshipRouter = router({
     // Cria um novo campeonato vinculado a um organizador
@@ -194,20 +339,20 @@ export const championshipRouter = router({
                 organizerId: z.number().int(),
                 discardRule: z.number().int().default(0),
                 allowDiscardMissedStages: z.boolean().default(true),
+                allowDiscardDisqualified: z.boolean().default(false),
+                pointsPreset: z.enum(["regulamento", "cba", "custom"]).default("regulamento"),
+                pointsTable: z.any().optional(),
             })
         )
         .mutation(async ({ input, ctx }) => {
-            const db = await getDb();
-            if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database error" });
+            const db = await conectar();
+            const organizerCtx = await exigirPermissaoDeEventos(ctx.user);
 
-            const organizerCtx = await getOrganizerContext(ctx.user);
-
-            // Simple permission check: must be owner or have events permission
-            if (
-                organizerCtx.type === "MEMBER" &&
-                !organizerCtx.permissions.includes("events")
-            ) {
-                throw new TRPCError({ code: "FORBIDDEN", message: "Not authorized to manage championships" });
+            // O organizerId vinha do INPUT sem conferência: dava para criar campeonato
+            // no nome de outro organizador. Quem manda é o contexto; o input só é
+            // aceito se apontar para a mesma conta (o membro pode mandar o próprio id).
+            if (input.organizerId !== organizerCtx.principalUserId && input.organizerId !== ctx.user.id) {
+                throw new TRPCError({ code: "FORBIDDEN", message: "Não é possível criar campeonato para outro organizador" });
             }
 
             const [result] = await db
@@ -215,9 +360,13 @@ export const championshipRouter = router({
                 .values({
                     name: input.name,
                     year: input.year,
-                    organizerId: input.organizerId,
+                    organizerId: organizerCtx.principalUserId,
                     discardRule: input.discardRule,
                     allowDiscardMissedStages: input.allowDiscardMissedStages,
+                    allowDiscardDisqualified: input.allowDiscardDisqualified,
+                    pointsPreset: input.pointsPreset,
+                    // Tabela custom só existe no preset custom — nos outros o json fica nulo.
+                    pointsTable: input.pointsPreset === "custom" ? normalizarTabela(input.pointsTable) : null,
                 })
                 .returning();
 
@@ -228,8 +377,7 @@ export const championshipRouter = router({
     getAllByOrganizer: publicProcedure
         .input(z.object({ organizerId: z.number().int() }))
         .query(async ({ input }) => {
-            const db = await getDb();
-            if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database error" });
+            const db = await conectar();
 
             // 1. Campeonatos onde o usuário é o DONO
             const owned = await db
@@ -254,6 +402,9 @@ export const championshipRouter = router({
                     sponsorBannerUrl: championships.sponsorBannerUrl,
                     imageUrl: championships.imageUrl,
                     allowDiscardMissedStages: championships.allowDiscardMissedStages,
+                    allowDiscardDisqualified: championships.allowDiscardDisqualified,
+                    pointsPreset: championships.pointsPreset,
+                    pointsTable: championships.pointsTable,
                     createdAt: championships.createdAt,
                     updatedAt: championships.updatedAt
                 })
@@ -278,8 +429,7 @@ export const championshipRouter = router({
     // Lista todos os campeonatos ativos na plataforma (para vínculo entre organizadores)
     getAllActive: publicProcedure
         .query(async () => {
-            const db = await getDb();
-            if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database error" });
+            const db = await conectar();
 
             return await db
                 .select({
@@ -309,16 +459,8 @@ export const championshipRouter = router({
             })
         )
         .mutation(async ({ input, ctx }) => {
-            const db = await getDb();
-            if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database error" });
-
-            const organizerCtx = await getOrganizerContext(ctx.user);
-            if (
-                organizerCtx.type === "MEMBER" &&
-                !organizerCtx.permissions.includes("events")
-            ) {
-                throw new TRPCError({ code: "FORBIDDEN", message: "Not authorized to manage championships" });
-            }
+            const db = await conectar();
+            await exigirPermissaoDeEventos(ctx.user);
 
             const [result] = await db
                 .insert(championshipStages)
@@ -338,8 +480,7 @@ export const championshipRouter = router({
     getStageByEventId: publicProcedure
         .input(z.object({ eventId: z.number().int() }))
         .query(async ({ input }) => {
-            const db = await getDb();
-            if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database error" });
+            const db = await conectar();
 
             const [stage] = await db
                 .select()
@@ -354,8 +495,7 @@ export const championshipRouter = router({
     getStages: publicProcedure
         .input(z.object({ championshipId: z.number().int() }))
         .query(async ({ input }) => {
-            const db = await getDb();
-            if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database error" });
+            const db = await conectar();
 
             const stages = await db
                 .select({
@@ -407,8 +547,7 @@ export const championshipRouter = router({
     getStageResults: publicProcedure
         .input(z.object({ stageId: z.number().int() }))
         .query(async ({ input }) => {
-            const db = await getDb();
-            if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database error" });
+            const db = await conectar();
 
             return await db
                 .select()
@@ -421,8 +560,7 @@ export const championshipRouter = router({
     getStageUploadedCategories: publicProcedure
         .input(z.object({ stageId: z.number().int() }))
         .query(async ({ input }) => {
-            const db = await getDb();
-            if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database error" });
+            const db = await conectar();
 
             const results = await db
                 .select({ category: championshipResults.category })
@@ -444,20 +582,13 @@ export const championshipRouter = router({
                     navigatorName: z.string().nullable(),
                     position: z.number().int(),
                     isDisqualified: z.boolean(),
+                    isDns: z.boolean().default(false),
                 })).min(1, "O array de resultados não pode estar vazio"),
             })
         )
         .mutation(async ({ input, ctx }) => {
-            const db = await getDb();
-            if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database error" });
-
-            const organizerCtx = await getOrganizerContext(ctx.user);
-            if (
-                organizerCtx.type === "MEMBER" &&
-                !organizerCtx.permissions.includes("events")
-            ) {
-                throw new TRPCError({ code: "FORBIDDEN", message: "Not authorized to manage championships" });
-            }
+            const db = await conectar();
+            const organizerCtx = await exigirPermissaoDeEventos(ctx.user);
 
             // --- PERMISSION CHECK ---
             const [stage] = await db.select().from(championshipStages).where(eq(championshipStages.id, input.stageId)).limit(1);
@@ -481,7 +612,10 @@ export const championshipRouter = router({
             }
             // -------------------------
 
-            // Calculates the points for each result using the cbaRules pure function logic
+            // `points` virou cache: quem manda na classificação é o cálculo da leitura.
+            // A coluna continua NOT NULL, então gravamos o valor pela tabela DESTE
+            // campeonato (não mais pela CBA cravada no código).
+            const tabela = resolverTabela(champ.pointsPreset, champ.pointsTable);
             const resultsWithPoints = input.results.map(r => ({
                 stageId: input.stageId,
                 category: r.category || "Geral",
@@ -489,7 +623,8 @@ export const championshipRouter = router({
                 navigatorName: r.navigatorName,
                 position: r.position,
                 isDisqualified: r.isDisqualified,
-                points: calculateCbaPoints(r.position, r.isDisqualified),
+                isDns: r.isDns,
+                points: calcularPontos(r.position, r.isDisqualified, r.isDns, tabela),
                 isDiscarded: false, // Will be computed globally later
             }));
 
@@ -510,8 +645,7 @@ export const championshipRouter = router({
                 }
 
                 // Insert new results in bulk
-                await tx.insert(championshipResults)
-                    .values(resultsWithPoints);
+                await inserirResultadosEmLotes(tx, resultsWithPoints);
             });
 
             return { success: true, count: resultsWithPoints.length };
@@ -526,16 +660,8 @@ export const championshipRouter = router({
             })
         )
         .mutation(async ({ input, ctx }) => {
-            const db = await getDb();
-            if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database error" });
-
-            const organizerCtx = await getOrganizerContext(ctx.user);
-            if (
-                organizerCtx.type === "MEMBER" &&
-                !organizerCtx.permissions.includes("events")
-            ) {
-                throw new TRPCError({ code: "FORBIDDEN", message: "Not authorized to manage championships" });
-            }
+            const db = await conectar();
+            const organizerCtx = await exigirPermissaoDeEventos(ctx.user);
 
             // --- PERMISSION CHECK ---
             const [stage] = await db.select().from(championshipStages).where(eq(championshipStages.id, input.stageId)).limit(1);
@@ -580,16 +706,10 @@ export const championshipRouter = router({
             })
         )
         .mutation(async ({ input, ctx }) => {
-            const db = await getDb();
-            if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database error" });
-
-            const organizerCtx = await getOrganizerContext(ctx.user);
-            if (
-                organizerCtx.type === "MEMBER" &&
-                !organizerCtx.permissions.includes("events")
-            ) {
-                throw new TRPCError({ code: "FORBIDDEN", message: "Not authorized to manage championships" });
-            }
+            const db = await conectar();
+            // Antes só passava pelo gate genérico: qualquer organizador unificava
+            // nomes no campeonato alheio.
+            await exigirDonoDoCampeonato(db, ctx.user, input.championshipId);
 
             // 1. Get all stage IDs for this championship
             const stages = await db
@@ -600,11 +720,14 @@ export const championshipRouter = router({
             const stageIds = stages.map(s => s.id);
             if (stageIds.length === 0) return { success: true };
 
+            const alvo = limparNome(input.targetName);
+            const origens = input.sourceNames.map(limparNome).filter(n => n && n !== alvo);
+
             await db.transaction(async (tx) => {
                 // 2. Update Pilot Names
                 await tx
                     .update(championshipResults)
-                    .set({ pilotName: input.targetName })
+                    .set({ pilotName: alvo })
                     .where(
                         and(
                             inArray(championshipResults.stageId, stageIds),
@@ -615,34 +738,46 @@ export const championshipRouter = router({
                 // 3. Update Navigator Names
                 await tx
                     .update(championshipResults)
-                    .set({ navigatorName: input.targetName })
+                    .set({ navigatorName: alvo })
                     .where(
                         and(
                             inArray(championshipResults.stageId, stageIds),
                             inArray(championshipResults.navigatorName, input.sourceNames)
                         )
                     );
+
+                // 4. A unificação vira MEMÓRIA: sem isso a próxima planilha traz o nome
+                //    antigo de novo e o competidor se parte em dois outra vez.
+                for (const origem of origens) {
+                    const aliasNorm = normalizarNome(origem);
+                    if (!aliasNorm) continue;
+                    await tx
+                        .insert(championshipNameAliases)
+                        .values({
+                            championshipId: input.championshipId,
+                            aliasNorm,
+                            canonicalName: alvo,
+                            isDistinct: false,
+                        })
+                        .onConflictDoUpdate({
+                            target: [championshipNameAliases.championshipId, championshipNameAliases.aliasNorm],
+                            set: { canonicalName: alvo, isDistinct: false },
+                        });
+                }
             });
 
             return { success: true };
         }),
 
     // Get Final Standings
-    getStandings: publicProcedure
-        .input(z.object({ championshipId: z.number().int() }))
-        .query(async ({ input }) => {
-            return await calculateChampionshipStandings(input.championshipId);
-        }),
+    getStandings: consultarClassificacao,
 
     // --- PHASE 7: MULTI-ORGANIZER CUPS COLLAB ---
 
     // For Local Organizer: list all available championships in the platform
     listAvailableChampionships: protectedProcedure
         .query(async ({ ctx }) => {
-            const db = await getDb();
-            if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database error" });
-
-            const organizerCtx = await getOrganizerContext(ctx.user);
+            const db = await conectar();
 
             // Fetch all active championships excluding current user's ones
             const available = await db
@@ -670,8 +805,7 @@ export const championshipRouter = router({
     getChampionshipRequestsByEvent: protectedProcedure
         .input(z.object({ eventId: z.number().int() }))
         .query(async ({ input }) => {
-            const db = await getDb();
-            if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database error" });
+            const db = await conectar();
 
             return await db.select().from(championshipRequests).where(eq(championshipRequests.eventId, input.eventId));
         }),
@@ -683,13 +817,8 @@ export const championshipRouter = router({
             championshipId: z.number().int(),
         }))
         .mutation(async ({ input, ctx }) => {
-            const db = await getDb();
-            if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database error" });
-
-            const organizerCtx = await getOrganizerContext(ctx.user);
-            if (organizerCtx.type === "MEMBER" && !organizerCtx.permissions.includes("events")) {
-                throw new TRPCError({ code: "FORBIDDEN", message: "Not authorized" });
-            }
+            const db = await conectar();
+            await exigirPermissaoDeEventos(ctx.user);
 
             // Check if request already exists
             const existing = await db.select().from(championshipRequests)
@@ -716,13 +845,8 @@ export const championshipRouter = router({
     getPendingStageRequests: protectedProcedure
         .input(z.object({ organizerId: z.number().int() }))
         .query(async ({ input, ctx }) => {
-            const db = await getDb();
-            if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database error" });
-
-            const organizerCtx = await getOrganizerContext(ctx.user);
-            if (organizerCtx.type === "MEMBER" && !organizerCtx.permissions.includes("events")) {
-                throw new TRPCError({ code: "FORBIDDEN", message: "Not authorized" });
-            }
+            const db = await conectar();
+            await exigirPermissaoDeEventos(ctx.user);
 
             const pending = await db
                 .select({
@@ -754,17 +878,14 @@ export const championshipRouter = router({
             status: z.enum(["APPROVED", "REJECTED"])
         }))
         .mutation(async ({ input, ctx }) => {
-            const db = await getDb();
-            if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database error" });
-
-            const organizerCtx = await getOrganizerContext(ctx.user);
-            if (organizerCtx.type === "MEMBER" && !organizerCtx.permissions.includes("events")) {
-                throw new TRPCError({ code: "FORBIDDEN", message: "Not authorized" });
-            }
+            const db = await conectar();
 
             // Get Request details
             const [request] = await db.select().from(championshipRequests).where(eq(championshipRequests.id, input.requestId));
             if (!request) throw new TRPCError({ code: "NOT_FOUND", message: "Request not found" });
+
+            // Quem aceita a etapa no campeonato é o DONO do campeonato.
+            await exigirDonoDoCampeonato(db, ctx.user, request.championshipId);
 
             await db.transaction(async (tx) => {
                 // Update the request status
@@ -799,13 +920,8 @@ export const championshipRouter = router({
     clearStageResults: protectedProcedure
         .input(z.object({ stageId: z.number().int() }))
         .mutation(async ({ input, ctx }) => {
-            const db = await getDb();
-            if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database error" });
-
-            const organizerCtx = await getOrganizerContext(ctx.user);
-            if (organizerCtx.type === "MEMBER" && !organizerCtx.permissions.includes("events")) {
-                throw new TRPCError({ code: "FORBIDDEN", message: "Not authorized" });
-            }
+            const db = await conectar();
+            const organizerCtx = await exigirPermissaoDeEventos(ctx.user);
 
             // --- PERMISSION CHECK ---
             const [stage] = await db.select().from(championshipStages).where(eq(championshipStages.id, input.stageId)).limit(1);
@@ -839,25 +955,13 @@ export const championshipRouter = router({
     deleteStage: protectedProcedure
         .input(z.object({ stageId: z.number().int() }))
         .mutation(async ({ input, ctx }) => {
-            const db = await getDb();
-            if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database error" });
+            const db = await conectar();
 
-            const organizerCtx = await getOrganizerContext(ctx.user);
-            if (organizerCtx.type === "MEMBER" && !organizerCtx.permissions.includes("events")) {
-                throw new TRPCError({ code: "FORBIDDEN", message: "Not authorized" });
-            }
-
-            // --- PERMISSION CHECK ---
+            // --- PERMISSION CHECK --- (só o dono do campeonato exclui etapa)
             const [stage] = await db.select().from(championshipStages).where(eq(championshipStages.id, input.stageId)).limit(1);
             if (!stage) throw new TRPCError({ code: "NOT_FOUND", message: "Etapa não encontrada" });
 
-            const [champ] = await db.select().from(championships).where(eq(championships.id, stage.championshipId)).limit(1);
-            if (!champ) throw new TRPCError({ code: "NOT_FOUND", message: "Campeonato não encontrado" });
-
-            if (champ.organizerId !== organizerCtx.principalUserId) {
-                throw new TRPCError({ code: "FORBIDDEN", message: "Apenas o dono do campeonato pode excluir etapas" });
-            }
-            // -------------------------
+            await exigirDonoDoCampeonato(db, ctx.user, stage.championshipId);
 
             await db.transaction(async (tx) => {
                 // Delete results first
@@ -874,31 +978,45 @@ export const championshipRouter = router({
 
     // --- PHASE 12: CHAMPIONSHIP MANAGEMENT (Edit/Delete) ---
 
-    // Updates name and discard rule
+    // Updates name, discard rules and points table
     updateChampionship: protectedProcedure
         .input(z.object({
             id: z.number().int(),
             name: z.string().min(3).optional(),
             discardRule: z.number().int().min(0).optional(),
             allowDiscardMissedStages: z.boolean().optional(),
+            allowDiscardDisqualified: z.boolean().optional(),
+            pointsPreset: z.enum(["regulamento", "cba", "custom"]).optional(),
+            pointsTable: z.any().optional(),
             sponsorBannerUrl: z.string().optional().nullable(),
             imageUrl: z.string().optional().nullable(),
         }))
         .mutation(async ({ input, ctx }) => {
-            const db = await getDb();
-            if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database error" });
-
-            const organizerCtx = await getOrganizerContext(ctx.user);
-            if (organizerCtx.type === "MEMBER" && !organizerCtx.permissions.includes("events")) {
-                throw new TRPCError({ code: "FORBIDDEN", message: "Not authorized" });
-            }
+            const db = await conectar();
+            // Não checava dono nenhum: com o gate genérico, qualquer organizador
+            // editava o campeonato de qualquer outro.
+            const { champ } = await exigirDonoDoCampeonato(db, ctx.user, input.id);
 
             const updateData: any = {};
             if (input.name) updateData.name = input.name;
             if (input.discardRule !== undefined) updateData.discardRule = input.discardRule;
             if (input.allowDiscardMissedStages !== undefined) updateData.allowDiscardMissedStages = input.allowDiscardMissedStages;
+            if (input.allowDiscardDisqualified !== undefined) updateData.allowDiscardDisqualified = input.allowDiscardDisqualified;
             if (input.sponsorBannerUrl !== undefined) updateData.sponsorBannerUrl = input.sponsorBannerUrl;
             if (input.imageUrl !== undefined) updateData.imageUrl = input.imageUrl;
+
+            if (input.pointsPreset !== undefined) {
+                updateData.pointsPreset = input.pointsPreset;
+                // Sair do custom limpa o json: tabela órfã confunde na próxima leitura.
+                if (input.pointsPreset !== "custom") updateData.pointsTable = null;
+            }
+            if (input.pointsTable !== undefined) {
+                const presetFinal = input.pointsPreset ?? champ.pointsPreset;
+                if (presetFinal === "custom") {
+                    updateData.pointsTable = input.pointsTable === null ? null : normalizarTabela(input.pointsTable);
+                }
+            }
+
             updateData.updatedAt = new Date();
 
             await db.update(championships)
@@ -912,13 +1030,9 @@ export const championshipRouter = router({
     deleteChampionship: protectedProcedure
         .input(z.object({ id: z.number().int() }))
         .mutation(async ({ input, ctx }) => {
-            const db = await getDb();
-            if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database error" });
-
-            const organizerCtx = await getOrganizerContext(ctx.user);
-            if (organizerCtx.type === "MEMBER" && !organizerCtx.permissions.includes("events")) {
-                throw new TRPCError({ code: "FORBIDDEN", message: "Not authorized" });
-            }
+            const db = await conectar();
+            // Idem updateChampionship: apagava campeonato alheio.
+            await exigirDonoDoCampeonato(db, ctx.user, input.id);
 
             await db.transaction(async (tx) => {
                 // 1. Get all stages
@@ -942,7 +1056,11 @@ export const championshipRouter = router({
                 await tx.delete(championshipRequests)
                     .where(eq(championshipRequests.championshipId, input.id));
 
-                // 5. Delete the championship
+                // 5. Delete name aliases
+                await tx.delete(championshipNameAliases)
+                    .where(eq(championshipNameAliases.championshipId, input.id));
+
+                // 6. Delete the championship
                 await tx.delete(championships)
                     .where(eq(championships.id, input.id));
             });
@@ -952,10 +1070,541 @@ export const championshipRouter = router({
 
     // --- PHASE 17: PUBLIC SHOWCASE ---
 
-    // Publicly accessible classification (no login required)
-    getPublicClassification: publicProcedure
+    // Publicly accessible classification (no login required) — mesmo corpo do getStandings
+    getPublicClassification: consultarClassificacao,
+
+    // --- IMPORTAÇÃO / EXPORTAÇÃO DE PLANILHA ---
+
+    /**
+     * Lê a planilha e devolve o que ACONTECERIA se ela fosse importada: etapas,
+     * avisos, categorias e as dúvidas de nome. Não escreve nada.
+     *
+     * É `mutation` (e não `query`) por causa do transporte: query do tRPC vai por
+     * GET com o input na URL, e um .xlsx em base64 não cabe numa query string.
+     */
+    previewImport: protectedProcedure
+        .input(z.object({
+            championshipId: z.number().int(),
+            arquivoBase64: z.string(),
+            nomeArquivo: z.string(),
+        }))
+        .mutation(async ({ input, ctx }) => {
+            const db = await conectar();
+            await exigirDonoDoCampeonato(db, ctx.user, input.championshipId);
+
+            const etapasBanco = await carregarEtapas(db, input.championshipId);
+            const jaGravados = await carregarResultados(db, etapasBanco.map(s => s.id));
+
+            const categoriasExistentes = categoriasDosResultados(jaGravados);
+            const nomesExistentes = nomesDosResultados(jaGravados);
+
+            const abas = await lerAbasDaPlanilha(input.arquivoBase64);
+            const parse = importarPlanilhaCampeonato(abas, { categoriasConhecidas: categoriasExistentes });
+
+            const conciliacao = conciliarNomes({
+                novos: nomesDaPlanilha(parse.resultados),
+                existentes: nomesExistentes,
+                decisoes: await carregarDecisoes(db, input.championshipId),
+            });
+
+            // Quantas duplas por categoria em cada etapa — é o número que o
+            // organizador confere antes de mandar gravar.
+            const contagem = new Map<string, { categoria: string; stageNumber: number; duplas: number }>();
+            for (const r of parse.resultados) {
+                const categoria = limparNome(r.categoria) || "Geral";
+                const chave = `${categoria}|${r.stageNumber}`;
+                const atual = contagem.get(chave) || { categoria, stageNumber: r.stageNumber, duplas: 0 };
+                atual.duplas++;
+                contagem.set(chave, atual);
+            }
+            const resumo = [...contagem.values()].sort(
+                (a, b) => a.categoria.localeCompare(b.categoria, "pt-BR") || a.stageNumber - b.stageNumber,
+            );
+
+            return {
+                etapas: parse.etapas,
+                abas: parse.abas,
+                avisos: parse.avisos,
+                resumo,
+                conciliacao,
+                etapasExistentes: etapasBanco.map(s => ({ id: s.id, stageNumber: s.stageNumber, nome: nomeDaEtapa(s) })),
+                categoriasExistentes,
+            };
+        }),
+
+    /**
+     * Grava a planilha inteira numa transação: cria as etapas que faltam, aplica os
+     * apelidos (os já gravados + as decisões desta importação) e insere os
+     * resultados. Repetir a mesma planilha não duplica nada — cada etapa apaga só
+     * as categorias que o arquivo traz, igual ao saveStageResults.
+     */
+    importWorkbook: protectedProcedure
+        .input(z.object({
+            championshipId: z.number().int(),
+            arquivoBase64: z.string(),
+            nomeArquivo: z.string(),
+            decisoes: z.array(z.object({
+                novo: z.string(),
+                /** string = "é a mesma pessoa, use este nome"; null = "é outra pessoa". */
+                canonico: z.string().nullable(),
+            })).default([]),
+            mapaEtapas: z.array(z.object({
+                stageNumber: z.number().int(),
+                /** Etapa da plataforma já existente. */
+                stageId: z.number().int().optional(),
+                /** Prova externa a criar com este nome. */
+                customName: z.string().optional(),
+            })).default([]),
+        }))
+        .mutation(async ({ input, ctx }) => {
+            const db = await conectar();
+            const { champ } = await exigirDonoDoCampeonato(db, ctx.user, input.championshipId);
+
+            const etapasBanco = await carregarEtapas(db, input.championshipId);
+            const jaGravados = await carregarResultados(db, etapasBanco.map(s => s.id));
+            const categoriasExistentes = categoriasDosResultados(jaGravados);
+            const nomesExistentes = nomesDosResultados(jaGravados);
+
+            const abas = await lerAbasDaPlanilha(input.arquivoBase64);
+            const parse = importarPlanilhaCampeonato(abas, { categoriasConhecidas: categoriasExistentes });
+            const novos = nomesDaPlanilha(parse.resultados);
+
+            const decisoesGravadas = await carregarDecisoes(db, input.championshipId);
+
+            // As decisões desta importação viram registro permanente. O "é outra
+            // pessoa" não diz contra QUEM foi a pergunta, então refazemos a
+            // conciliação para recuperar os candidatos que o wizard ofereceu — sem
+            // isso o popup voltaria na planilha seguinte.
+            const duvidasOferecidas = conciliarNomes({
+                novos,
+                existentes: nomesExistentes,
+                decisoes: decisoesGravadas,
+            }).duvidas;
+
+            const novasDecisoes: DecisaoAlias[] = [];
+            for (const d of input.decisoes) {
+                const novo = limparNome(d.novo);
+                const aliasNorm = normalizarNome(novo);
+                if (!aliasNorm) continue;
+
+                const canonico = limparNome(d.canonico);
+                if (canonico) {
+                    novasDecisoes.push({ aliasNorm, canonicalName: canonico, isDistinct: false });
+                    continue;
+                }
+                const duvida = duvidasOferecidas.find(x => x.novo === novo);
+                for (const candidato of duvida?.candidatos || []) {
+                    novasDecisoes.push({ aliasNorm, canonicalName: candidato.nome, isDistinct: true });
+                }
+            }
+
+            const conciliacao = conciliarNomes({
+                novos,
+                existentes: nomesExistentes,
+                decisoes: [...decisoesGravadas, ...novasDecisoes],
+            });
+            // "exato"/"normalizado"/"alias": tudo que resolve sozinho vira tradução.
+            const traducao = new Map(conciliacao.automaticos.map(a => [a.novo, a.canonico]));
+            const traduzir = (bruto: string | null): string | null => {
+                const nome = limparNome(bruto);
+                if (!nome) return null;
+                return traducao.get(nome) ?? nome;
+            };
+            const nomesConciliados = [...traducao.entries()].filter(([novo, canonico]) => novo !== canonico).length;
+
+            const tabela = resolverTabela(champ.pointsPreset, champ.pointsTable);
+            const mapaPedido = new Map(input.mapaEtapas.map(m => [m.stageNumber, m]));
+
+            let etapasCriadas = 0;
+            let resultadosGravados = 0;
+            const categoriasGravadas = new Set<string>();
+
+            await db.transaction(async (tx) => {
+                const etapasAtuais = await tx
+                    .select({ id: championshipStages.id, stageNumber: championshipStages.stageNumber })
+                    .from(championshipStages)
+                    .where(eq(championshipStages.championshipId, input.championshipId));
+
+                const idPorNumero = new Map<number, number>();
+
+                for (const stageNumber of parse.etapas) {
+                    const pedido = mapaPedido.get(stageNumber);
+
+                    // 1) Etapa da plataforma escolhida a dedo — tem que ser DESTE campeonato.
+                    if (pedido?.stageId) {
+                        const daCasa = etapasAtuais.find(e => e.id === pedido.stageId);
+                        if (!daCasa) {
+                            throw new TRPCError({
+                                code: "BAD_REQUEST",
+                                message: `A etapa ${pedido.stageId} não pertence a este campeonato`,
+                            });
+                        }
+                        idPorNumero.set(stageNumber, daCasa.id);
+                        continue;
+                    }
+
+                    // 2) Já existe etapa com esse número: reaproveita (reimportar não duplica).
+                    const existente = etapasAtuais.find(e => e.stageNumber === stageNumber);
+                    if (existente) {
+                        idPorNumero.set(stageNumber, existente.id);
+                        continue;
+                    }
+
+                    // 3) Não existe: cria como prova externa.
+                    const customName = limparNome(pedido?.customName) || `Etapa ${stageNumber}`;
+                    const [criada] = await tx
+                        .insert(championshipStages)
+                        .values({
+                            championshipId: input.championshipId,
+                            eventId: null,
+                            customName,
+                            isExternal: true,
+                            stageNumber,
+                        })
+                        .returning({ id: championshipStages.id, stageNumber: championshipStages.stageNumber });
+
+                    etapasAtuais.push(criada);
+                    idPorNumero.set(stageNumber, criada.id);
+                    etapasCriadas++;
+                }
+
+                const linhas = parse.resultados.map(r => {
+                    const stageId = idPorNumero.get(r.stageNumber);
+                    if (!stageId) return null;
+                    const category = limparNome(r.categoria) || "Geral";
+                    categoriasGravadas.add(category);
+                    return {
+                        stageId,
+                        category,
+                        pilotName: traduzir(r.pilotName),
+                        navigatorName: traduzir(r.navigatorName),
+                        position: r.position,
+                        isDisqualified: r.isDisqualified,
+                        isDns: r.isDns,
+                        // Cache legado (coluna NOT NULL); a classificação recalcula na leitura.
+                        points: calcularPontos(r.position, r.isDisqualified, r.isDns, tabela),
+                        isDiscarded: false,
+                    };
+                }).filter((l): l is NonNullable<typeof l> => l !== null);
+
+                // Mesma semântica do saveStageResults: por etapa, limpa só as
+                // categorias que o arquivo traz — categoria que não veio fica intacta.
+                const porEtapa = new Map<number, Set<string>>();
+                for (const l of linhas) {
+                    if (!porEtapa.has(l.stageId)) porEtapa.set(l.stageId, new Set());
+                    porEtapa.get(l.stageId)!.add(l.category);
+                }
+                for (const [stageId, categorias] of porEtapa) {
+                    await tx.delete(championshipResults).where(
+                        and(
+                            eq(championshipResults.stageId, stageId),
+                            inArray(championshipResults.category, [...categorias]),
+                        )
+                    );
+                }
+
+                await inserirResultadosEmLotes(tx, linhas);
+                resultadosGravados = linhas.length;
+
+                for (const d of novasDecisoes) {
+                    await tx
+                        .insert(championshipNameAliases)
+                        .values({
+                            championshipId: input.championshipId,
+                            aliasNorm: d.aliasNorm,
+                            canonicalName: d.canonicalName,
+                            isDistinct: d.isDistinct,
+                        })
+                        .onConflictDoUpdate({
+                            target: [championshipNameAliases.championshipId, championshipNameAliases.aliasNorm],
+                            set: { canonicalName: d.canonicalName, isDistinct: d.isDistinct },
+                        });
+                }
+            });
+
+            return {
+                etapasCriadas,
+                resultadosGravados,
+                categorias: [...categoriasGravadas].sort((a, b) => a.localeCompare(b, "pt-BR")),
+                nomesConciliados,
+            };
+        }),
+
+    /**
+     * Exporta no MESMO formato que a importação lê (uma aba por categoria, layout
+     * longo NOME + FUNÇÃO), para o round-trip fechar: exportar, corrigir no Excel,
+     * importar de volta. A aba CLASSIFICAÇÃO é relatório e é ignorada na releitura.
+     */
+    exportWorkbook: protectedProcedure
+        .input(z.object({ championshipId: z.number().int() }))
+        .mutation(async ({ input, ctx }) => {
+            const db = await conectar();
+            const { champ } = await exigirDonoDoCampeonato(db, ctx.user, input.championshipId);
+            const XLSX = await import("xlsx");
+
+            const { standings, stages } = await calculateChampionshipStandings(input.championshipId);
+            const stageIds = stages.map(s => s.id);
+            const brutos = await carregarResultados(db, stageIds);
+
+            const numeroDaEtapa = new Map(stages.map(s => [s.id, s.stageNumber]));
+            const numerosDeEtapa = stages.map(s => s.stageNumber);
+
+            // Os campos de ficha (email, CPF, veículo...) não moram no resultado —
+            // vêm da inscrição do evento, casada pelo nome normalizado. Etapa externa
+            // não tem inscrição, então a coluna sai vazia mesmo.
+            type Ficha = { email: string; cpf: string; cidade: string; uf: string; veiculo: string; equipe: string };
+            const fichaPorNome = new Map<string, Ficha>();
+            const eventIds = stages.map(s => s.eventId).filter((id): id is number => !!id);
+            if (eventIds.length > 0) {
+                const inscricoes = await db
+                    .select({
+                        pilotName: registrations.pilotName,
+                        pilotEmail: registrations.pilotEmail,
+                        pilotCpf: registrations.pilotCpf,
+                        pilotCity: registrations.pilotCity,
+                        pilotState: registrations.pilotState,
+                        navigatorName: registrations.navigatorName,
+                        navigatorEmail: registrations.navigatorEmail,
+                        navigatorCpf: registrations.navigatorCpf,
+                        navigatorCity: registrations.navigatorCity,
+                        navigatorState: registrations.navigatorState,
+                        team: registrations.team,
+                        vehicleBrand: registrations.vehicleBrand,
+                        vehicleModel: registrations.vehicleModel,
+                    })
+                    .from(registrations)
+                    .where(inArray(registrations.eventId, eventIds));
+
+                for (const i of inscricoes) {
+                    const veiculo = `${i.vehicleBrand || ""} ${i.vehicleModel || ""}`.trim();
+                    const equipe = i.team || "";
+                    const guardar = (nome: string | null, ficha: Ficha) => {
+                        const chave = normalizarNome(nome);
+                        if (!chave || fichaPorNome.has(chave)) return;
+                        fichaPorNome.set(chave, ficha);
+                    };
+                    guardar(i.pilotName, {
+                        email: i.pilotEmail || "", cpf: i.pilotCpf || "",
+                        cidade: i.pilotCity || "", uf: i.pilotState || "", veiculo, equipe,
+                    });
+                    guardar(i.navigatorName, {
+                        email: i.navigatorEmail || "", cpf: i.navigatorCpf || "",
+                        cidade: i.navigatorCity || "", uf: i.navigatorState || "", veiculo, equipe,
+                    });
+                }
+            }
+            const VAZIA: Ficha = { email: "", cpf: "", cidade: "", uf: "", veiculo: "", equipe: "" };
+            const ficha = (nome: string | null) => fichaPorNome.get(normalizarNome(nome)) || VAZIA;
+
+            // Uma linha da planilha = uma dupla. O agrupamento é por (piloto,
+            // navegador) como a dupla de fato correu: quem trocou de parceiro no meio
+            // do campeonato vira duas linhas, cada uma com as suas etapas.
+            interface Dupla {
+                pilotName: string | null;
+                navigatorName: string | null;
+                celulas: Map<number, string | number>;
+            }
+            const duplasPorCategoria = new Map<string, Map<string, Dupla>>();
+
+            for (const r of brutos) {
+                const categoria = limparNome(r.category) || "Geral";
+                const stageNumber = numeroDaEtapa.get(r.stageId);
+                if (stageNumber === undefined) continue;
+
+                const pilotName = nomeDeCompetidorValido(r.pilotName) ? limparNome(r.pilotName) : null;
+                const navigatorName = nomeDeCompetidorValido(r.navigatorName) ? limparNome(r.navigatorName) : null;
+                if (!pilotName && !navigatorName) continue;
+
+                if (!duplasPorCategoria.has(categoria)) duplasPorCategoria.set(categoria, new Map());
+                const daCategoria = duplasPorCategoria.get(categoria)!;
+                const chave = `${pilotName || ""}|${navigatorName || ""}`;
+                if (!daCategoria.has(chave)) daCategoria.set(chave, { pilotName, navigatorName, celulas: new Map() });
+
+                // "NC" para desclassificado e 0 para quem não largou: é exatamente o
+                // que o parser da importação sabe ler de volta.
+                const valor = r.isDisqualified ? "NC" : (!r.isDns && r.position > 0 ? r.position : 0);
+                daCategoria.get(chave)!.celulas.set(stageNumber, valor);
+            }
+
+            const wb = XLSX.utils.book_new();
+            const nomesDeAbaUsados = new Set<string>();
+            const nomeDeAba = (bruto: string) => {
+                // Excel: 31 caracteres, sem : \ / ? * [ ]
+                let base = (bruto || "Categoria").replace(/[:\\/?*[\]]/g, "-").slice(0, 31).trim() || "Categoria";
+                let nome = base;
+                let n = 2;
+                while (nomesDeAbaUsados.has(nome.toLowerCase())) {
+                    const sufixo = ` (${n++})`;
+                    nome = base.slice(0, 31 - sufixo.length) + sufixo;
+                }
+                nomesDeAbaUsados.add(nome.toLowerCase());
+                return nome;
+            };
+
+            const cabecalho = [
+                "NOME", "FUNÇÃO", "EMAIL", "CPF", "CIDADE", "UF",
+                "VEÍCULO", "EQUIPE", "PATROCÍNIO", "CATEGORIA",
+                ...numerosDeEtapa.map(n => `ETAPA-${n}`),
+            ];
+
+            const categoriasOrdenadas = [...duplasPorCategoria.keys()].sort((a, b) => a.localeCompare(b, "pt-BR"));
+
+            for (const categoria of categoriasOrdenadas) {
+                const classificacao = standings.find(c => c.name === categoria);
+                const posicaoDoPiloto = new Map<string, number>();
+                for (const p of classificacao?.pilots || []) posicaoDoPiloto.set(p.name, p.posicao);
+
+                const duplas = [...duplasPorCategoria.get(categoria)!.values()].sort((a, b) => {
+                    const pa = posicaoDoPiloto.get(a.pilotName || "") ?? Number.MAX_SAFE_INTEGER;
+                    const pb = posicaoDoPiloto.get(b.pilotName || "") ?? Number.MAX_SAFE_INTEGER;
+                    return pa - pb
+                        || (a.pilotName || "").localeCompare(b.pilotName || "", "pt-BR")
+                        || (a.navigatorName || "").localeCompare(b.navigatorName || "", "pt-BR");
+                });
+
+                const linhas: (string | number)[][] = [cabecalho];
+                for (const d of duplas) {
+                    const celulas = numerosDeEtapa.map(n => d.celulas.get(n) ?? 0);
+                    const linhaDe = (nome: string, funcao: "Piloto" | "Navegador") => {
+                        const f = ficha(nome);
+                        return [nome, funcao, f.email, f.cpf, f.cidade, f.uf, f.veiculo, f.equipe, "", categoria, ...celulas];
+                    };
+                    // Piloto primeiro, navegador logo abaixo: é assim que o layout
+                    // longo amarra a dupla na releitura.
+                    if (d.pilotName) linhas.push(linhaDe(d.pilotName, "Piloto"));
+                    if (d.navigatorName) linhas.push(linhaDe(d.navigatorName, "Navegador"));
+                }
+
+                XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(linhas), nomeDeAba(categoria));
+            }
+
+            const linhasClassificacao = montarLinhasClassificacao(standings, numerosDeEtapa);
+            XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(linhasClassificacao), nomeDeAba(ABA_CLASSIFICACAO));
+
+            const buffer = XLSX.write(wb, { type: "buffer", bookType: "xlsx" });
+            const nomeLimpo = (champ.name || "campeonato").replace(/[\\/:*?"<>|]/g, "").replace(/\s+/g, "-");
+
+            return {
+                success: true as const,
+                data: Buffer.from(buffer).toString("base64"),
+                filename: `campeonato-${nomeLimpo}-${champ.year}.xlsx`,
+            };
+        }),
+
+    /**
+     * Versão pública do export, para o competidor baixar a classificação da vitrine.
+     *
+     * NÃO é o mesmo arquivo do exportWorkbook: aquele carrega e-mail, CPF, cidade e
+     * estado vindos da inscrição, para fechar o round-trip de importação — dado
+     * pessoal que não pode sair numa rota sem login. Aqui sai só a aba de
+     * CLASSIFICAÇÃO, exatamente o que a vitrine e o PDF público já mostram na tela.
+     */
+    exportClassificacaoPublica: publicProcedure
+        .input(z.object({ championshipId: z.number().int() }))
+        .mutation(async ({ input }) => {
+            const XLSX = await import("xlsx");
+
+            const { standings, stages, championship } = await calculateChampionshipStandings(input.championshipId);
+            const numerosDeEtapa = stages.map(s => s.stageNumber);
+
+            const wb = XLSX.utils.book_new();
+            const linhas = montarLinhasClassificacao(standings, numerosDeEtapa);
+            // Aba única e de nome fixo: não precisa do saneamento de nome que o
+            // exportWorkbook faz para as categorias (limite de 31 chars do Excel).
+            XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(linhas), ABA_CLASSIFICACAO);
+
+            const buffer = XLSX.write(wb, { type: "buffer", bookType: "xlsx" });
+            const nomeLimpo = (championship.name || "campeonato").replace(/[\\/:*?"<>|]/g, "").replace(/\s+/g, "-");
+
+            return {
+                success: true as const,
+                data: Buffer.from(buffer).toString("base64"),
+                filename: `classificacao-${nomeLimpo}-${championship.year}.xlsx`,
+            };
+        }),
+
+    /** Renomeia uma categoria em TODAS as etapas do campeonato de uma vez. */
+    renameCategory: protectedProcedure
+        .input(z.object({
+            championshipId: z.number().int(),
+            de: z.string().min(1),
+            para: z.string().min(1),
+        }))
+        .mutation(async ({ input, ctx }) => {
+            const db = await conectar();
+            await exigirDonoDoCampeonato(db, ctx.user, input.championshipId);
+
+            const de = limparNome(input.de);
+            const para = limparNome(input.para);
+            if (!de || !para) throw new TRPCError({ code: "BAD_REQUEST", message: "Informe o nome atual e o novo nome da categoria" });
+            if (de === para) return { atualizados: 0 };
+
+            const etapas = await db
+                .select({ id: championshipStages.id })
+                .from(championshipStages)
+                .where(eq(championshipStages.championshipId, input.championshipId));
+
+            const stageIds = etapas.map(e => e.id);
+            if (stageIds.length === 0) return { atualizados: 0 };
+
+            const atualizados = await db
+                .update(championshipResults)
+                .set({ category: para })
+                .where(
+                    and(
+                        inArray(championshipResults.stageId, stageIds),
+                        eq(championshipResults.category, de),
+                    )
+                )
+                .returning({ id: championshipResults.id });
+
+            return { atualizados: atualizados.length };
+        }),
+
+    /**
+     * Nomes que provavelmente são a mesma pessoa. Público porque a classificação
+     * também é: não expõe nada que a vitrine já não mostre.
+     */
+    sugestoesUnificacao: publicProcedure
         .input(z.object({ championshipId: z.number().int() }))
         .query(async ({ input }) => {
-            return calculateChampionshipStandings(input.championshipId);
+            const db = await conectar();
+
+            const etapas = await db
+                .select({ id: championshipStages.id })
+                .from(championshipStages)
+                .where(eq(championshipStages.championshipId, input.championshipId));
+
+            const linhas = await carregarResultados(db, etapas.map(e => e.id));
+
+            // Com repetição de propósito: a frequência é o que elege o nome canônico.
+            const nomes: string[] = [];
+            for (const r of linhas) {
+                for (const bruto of [r.pilotName, r.navigatorName]) {
+                    if (nomeDeCompetidorValido(bruto)) nomes.push(limparNome(bruto));
+                }
+            }
+
+            return sugerirUnificacoes(nomes);
+        }),
+
+    /** Decisões de nome já tomadas neste campeonato (o que o wizard não vai reperguntar). */
+    listarAliases: protectedProcedure
+        .input(z.object({ championshipId: z.number().int() }))
+        .query(async ({ input, ctx }) => {
+            const db = await conectar();
+            await exigirDonoDoCampeonato(db, ctx.user, input.championshipId);
+
+            const linhas = await db
+                .select({
+                    aliasNorm: championshipNameAliases.aliasNorm,
+                    canonicalName: championshipNameAliases.canonicalName,
+                    isDistinct: championshipNameAliases.isDistinct,
+                })
+                .from(championshipNameAliases)
+                .where(eq(championshipNameAliases.championshipId, input.championshipId))
+                .orderBy(championshipNameAliases.aliasNorm);
+
+            return linhas;
         }),
 });

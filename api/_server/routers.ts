@@ -1016,13 +1016,15 @@ export const competitorRouter = router({
           const pilotEntry = cat.pilots.find(p => possibleNames.has(p.name.toLowerCase()));
           if (pilotEntry) {
             myEntry = pilotEntry;
-            myPosition = cat.pilots.indexOf(pilotEntry) + 1;
+            // A colocação vem pronta do cálculo: derivar de indexOf dava números
+            // diferentes para quem está EMPATADO (dois 3ºs viravam 3º e 4º).
+            myPosition = pilotEntry.posicao;
             break;
           }
           const navEntry = cat.navigators.find(n => possibleNames.has(n.name.toLowerCase()));
           if (navEntry) {
             myEntry = navEntry;
-            myPosition = cat.navigators.indexOf(navEntry) + 1;
+            myPosition = navEntry.posicao;
             break;
           }
         }
@@ -1048,7 +1050,9 @@ export const competitorRouter = router({
                 position: result?.position || 0,
                 isDiscarded: result?.isDiscarded || false,
                 isDisqualified: result?.isDisqualified || false,
-                hasResult: !!result
+                // Agora existe UMA entrada por etapa do campeonato (com isDns onde
+                // ele não correu), então `!!result` seria sempre true.
+                hasResult: !!result && !result.isDns
               };
             })
           });

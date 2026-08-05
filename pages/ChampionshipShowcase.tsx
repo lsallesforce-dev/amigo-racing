@@ -1,19 +1,70 @@
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Badge } from "@/components/ui/badge";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Label } from "@/components/ui/label";
 import { trpc } from "@/lib/trpc";
-import { Trophy, Loader2, ArrowLeft, MapPin, CalendarDays, Flag, FileDown, Settings, GitMerge, Check, XCircle, CheckCircle2 } from "lucide-react";
+import { Trophy, Loader2, ArrowLeft, Flag, FileDown, FileSpreadsheet, Settings, TrendingUp } from "lucide-react";
 import { Link, useRoute } from "wouter";
-import { useState, useEffect, useRef } from "react";
-import { format } from "date-fns";
-import { ptBR } from "date-fns/locale";
-import jsPDF from "jspdf";
-import autoTable from "jspdf-autotable";
+import { useRef, useState, useEffect } from "react";
+import { toast } from "sonner";
+import StandingsTable from "@/components/championship/StandingsTable";
+import { gerarPdfClassificacao } from "@/lib/championshipPdf";
 import { PerformanceChart } from "@/components/PerformanceChart";
 import MetaSEO from "@/components/MetaSEO";
+import type { CategoriaClassificacao, CompetidorClassificado } from "@/shared/classificacaoCampeonato";
+
+// Decodifica o base64 devolvido pela exportação num Blob baixável.
+// Não é o mesmo problema do urlToBase64 que existia aqui antes (aquele ia de
+// imagem -> base64 pro PDF); aqui é o caminho inverso, base64 -> arquivo.
+function base64ParaBlob(base64: string, mimeType: string): Blob {
+    const binario = atob(base64);
+    const bytes = new Uint8Array(binario.length);
+    for (let i = 0; i < binario.length; i++) bytes[i] = binario.charCodeAt(i);
+    return new Blob([bytes], { type: mimeType });
+}
+
+/**
+ * Etapas com nome já resolvido (StandingsTable e o PDF esperam essa forma pronta,
+ * não o dado cru com `event`/`customName` separados). A ordem de prioridade
+ * espelha `nomeDaEtapa()` do backend (api/_server/backend_routers/championship.ts):
+ * nome customizado da prova externa primeiro, depois o nome do evento cadastrado.
+ */
+function montarEtapasComNome(stages: { id: number; stageNumber: number; customName?: string | null; event?: { name: string | null } | null }[]) {
+    return [...stages]
+        .sort((a, b) => a.stageNumber - b.stageNumber)
+        .map(st => ({
+            id: st.id,
+            stageNumber: st.stageNumber,
+            nome: st.customName || st.event?.name || `Etapa ${st.stageNumber}`,
+        }));
+}
+
+/** Cartão de pódio (top 3 da categoria/papel selecionado). Puramente visual — quem decide quem entra é o pai. */
+function PodiumCard({ posicao, competidor }: { posicao: 1 | 2 | 3; competidor: CompetidorClassificado | undefined }) {
+    if (!competidor) return <div />;
+
+    const estilos: Record<1 | 2 | 3, { badge: string; altura: string; medalha: string }> = {
+        1: { badge: "bg-yellow-400 text-yellow-900 shadow-yellow-400/30", altura: "pt-6 pb-8", medalha: "1º" },
+        2: { badge: "bg-slate-300 text-slate-800 shadow-slate-300/30", altura: "pt-10 pb-6", medalha: "2º" },
+        3: { badge: "bg-amber-600 text-white shadow-amber-600/30", altura: "pt-10 pb-6", medalha: "3º" },
+    };
+    const estilo = estilos[posicao];
+
+    return (
+        // A ordem visual 2º-1º-3º já vem da ordem em que o pai chama este componente
+        // no grid (não precisa de utilitário `order-*` dinâmico — Tailwind não gera
+        // classe a partir de string interpolada, só literais presentes no source).
+        <div className={`flex flex-col items-center justify-end rounded-2xl border bg-card/50 backdrop-blur-sm shadow-lg ${estilo.altura} px-3`}>
+            {posicao === 1 && <Trophy className="h-8 w-8 text-yellow-400 mb-2" />}
+            <div className={`w-12 h-12 rounded-full flex items-center justify-center font-black text-lg shadow-lg mb-3 ${estilo.badge}`}>
+                {estilo.medalha}
+            </div>
+            <p className="font-bold text-center text-sm sm:text-base leading-tight line-clamp-2">{competidor.name}</p>
+            <p className="text-primary font-black text-xl mt-1">{competidor.netPoints}<span className="text-[10px] text-muted-foreground font-medium ml-1">pts</span></p>
+        </div>
+    );
+}
 
 export default function ChampionshipShowcase() {
     const [, params] = useRoute("/championship/:id");
@@ -22,21 +73,23 @@ export default function ChampionshipShowcase() {
 
     const [selectedCategory, setSelectedCategory] = useState<string>("");
     const [selectedRole, setSelectedRole] = useState<"pilot" | "navigator">("pilot");
+    const [competidorEmFoco, setCompetidorEmFoco] = useState<string | undefined>(undefined);
+    const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
     const chartRef = useRef<HTMLDivElement>(null);
 
     // Fetch public classification
     const { data: standingsData, isLoading: isStandingsLoading, error } = trpc.championships.getPublicClassification.useQuery(
         { championshipId },
-        { 
+        {
             enabled: championshipId > 0,
-            retry: false 
+            retry: false
         }
     );
 
-    // Fetch name and other info (we can get this from standingsData if we modify the backend, 
-    // but for now let's assume standingsData has the basic championship info or we can use another public query if needed)
-    // Actually, calculateChampionshipStandings already returns the stages and championship info? 
-    // Let me check what it returns exactly.
+    // Rota PÚBLICA de propósito: o exportWorkbook do painel carrega e-mail e CPF
+    // vindos da inscrição (para o round-trip de importação), e esta página não tem
+    // login. Aqui sai só a aba de classificação — o mesmo dado que já está na tela.
+    const exportClassificacaoMutation = trpc.championships.exportClassificacaoPublica.useMutation();
 
     useEffect(() => {
         if (standingsData?.standings?.length && standingsData.standings.length > 0 && !selectedCategory) {
@@ -44,155 +97,53 @@ export default function ChampionshipShowcase() {
         }
     }, [standingsData, selectedCategory]);
 
-    const urlToBase64 = async (url: string): Promise<string> => {
-        if (!url) return "";
-        if (url.startsWith('data:')) return url;
+    // Troca de categoria/papel invalida o destaque — ele só faz sentido pro competidor
+    // que estava visível na tabela no momento do clique.
+    useEffect(() => {
+        setCompetidorEmFoco(undefined);
+    }, [selectedCategory, selectedRole]);
+
+    const handleDownloadPdf = async () => {
+        if (!standingsData?.championship) return;
+        setIsGeneratingPdf(true);
         try {
-            const response = await fetch(url);
-            const blob = await response.blob();
-            return new Promise((resolve, reject) => {
-                const reader = new FileReader();
-                reader.onloadend = () => resolve(reader.result as string);
-                reader.onerror = reject;
-                reader.readAsDataURL(blob);
+            await gerarPdfClassificacao({
+                championship: {
+                    name: standingsData.championship.name,
+                    year: standingsData.championship.year,
+                    discardRule: standingsData.championship.discardRule,
+                    imageUrl: standingsData.championship.imageUrl,
+                    sponsorBannerUrl: standingsData.championship.sponsorBannerUrl,
+                },
+                // Ver comentário mais abaixo sobre o cast de Serialize<T> do tRPC v11.
+                categorias: standingsData.standings as unknown as CategoriaClassificacao[],
+                etapas: montarEtapasComNome(standingsData.stages),
             });
         } catch (e) {
-            console.error("Error converting image to base64", e);
-            return "";
+            console.error("Erro ao gerar PDF", e);
+            toast.error("Não foi possível gerar o PDF. Tente novamente.");
+        } finally {
+            setIsGeneratingPdf(false);
         }
     };
 
-    const exportStandingsPDF = async () => {
-        if (!standingsData || !standingsData.standings.length) return;
-
-        const doc = new jsPDF("p", "mm", "a4");
-        const pageWidth = doc.internal.pageSize.getWidth();
-        const pageHeight = doc.internal.pageSize.getHeight();
-        const margin = 14;
-
-        // Pre-convert images to base64 to avoid CORS issues
-        const champLogoBase64 = standingsData.championship?.imageUrl ? await urlToBase64(standingsData.championship.imageUrl) : "";
-        const sponsorBannerBase64 = standingsData.championship?.sponsorBannerUrl ? await urlToBase64(standingsData.championship.sponsorBannerUrl) : "";
-
-
-        // Sort stages by number
-        const orderedStages = [...standingsData.stages].sort((a, b) => a.stageNumber - b.stageNumber);
-
-        standingsData.standings.forEach((cat, catIdx) => {
-            if (catIdx > 0) doc.addPage();
-
-            // --- HEADER ---
-            if (champLogoBase64) {
-                try {
-                    doc.addImage(champLogoBase64, "JPEG", margin, 10, 25, 0, undefined, 'FAST');
-                } catch (e) { console.error("Logo error", e); }
-            } else {
-                doc.setDrawColor(200);
-                doc.rect(margin, 10, 25, 25);
-                doc.setFontSize(8);
-                doc.text("COPA", margin + 12.5, 23, { align: 'center' });
-            }
-
-            doc.setFontSize(16);
-            doc.setTextColor(0, 0, 0);
-            doc.setFont("helvetica", "bold");
-            doc.text(standingsData.championship?.name || "Campeonato", pageWidth / 2, 20, { align: 'center' });
-
-            doc.setFontSize(10);
-            doc.setFont("helvetica", "normal");
-            doc.setTextColor(100, 100, 100);
-            doc.text(`Classificação Geral Oficial - ${cat.name}`, pageWidth / 2, 27, { align: 'center' });
-
-            doc.setFontSize(8);
-            doc.setTextColor(60, 60, 60);
-            doc.text("www.amigoracing.com.br", pageWidth / 2, 33, { align: 'center' });
-
-            try {
-                doc.addImage("/logo-light.png", "PNG", pageWidth - margin - 32, 12, 32, 0);
-            } catch (e) {
-                doc.setFontSize(10);
-                doc.text("AMIGO RACING", pageWidth - margin - 32, 20);
-            }
-
-            doc.setDrawColor(230, 230, 230);
-            doc.setLineWidth(0.5);
-            doc.line(margin, 38, pageWidth - margin, 38);
-
-            // --- TABLE ---
-            const roles: ("pilot" | "navigator")[] = ["pilot", "navigator"];
-            let currentY = 45;
-
-            roles.forEach(role => {
-                const list = role === "pilot" ? cat.pilots : cat.navigators;
-                if (list.length === 0) return;
-
-                doc.setFontSize(12);
-                doc.setFont("helvetica", "bold");
-                doc.text(role === "pilot" ? "PILOTOS" : "NAVEGADORES", margin, currentY);
-                currentY += 5;
-
-                const abbreviate = (name: string) => {
-                    if (name.length <= 12) return name;
-                    return name.substring(0, 10) + "..";
-                };
-
-                const head = [
-                    ["Pos", "Nome", ...orderedStages.map(s => `E${s.stageNumber}\n(${abbreviate(s.event?.name || s.customName || "")})`), "Total"]
-                ];
-
-                const body = list.map((comp, idx) => [
-                    `${idx + 1}º`,
-                    comp.name,
-                    ...orderedStages.map(st => {
-                        const res = comp.stageResults.find(sr => sr.stageId === st.id);
-                        if (!res) return "0";
-                        if (res.isDisqualified) return "NC";
-                        return { content: res.points.toString(), isDiscarded: res.isDiscarded };
-                    }),
-                    comp.netPoints.toString()
-                ]);
-
-                autoTable(doc, {
-                    startY: currentY,
-                    head: head,
-                    body: body,
-                    margin: { left: margin, right: margin },
-                    styles: { fontSize: 8, cellPadding: 2, halign: 'center' },
-                    columnStyles: {
-                        1: { halign: 'left', cellWidth: 'auto' },
-                    },
-                    headStyles: { fillColor: [40, 40, 40], textColor: 255, fontSize: 7 },
-                    alternateRowStyles: { fillColor: [245, 245, 245] },
-                    didParseCell: (data) => {
-                        if (data.section === 'body' && typeof data.cell.raw === 'object' && (data.cell.raw as any).isDiscarded) {
-                            data.cell.styles.textColor = [255, 0, 0];
-                            data.cell.styles.fontStyle = 'bolditalic';
-                        }
-                    },
-                    didDrawPage: (data) => {
-                        const str = "Página " + doc.internal.pages.length;
-                        doc.setFontSize(8);
-                        doc.setTextColor(100);
-                        doc.text(str, pageWidth - margin - 15, pageHeight - 5);
-
-                        doc.setFontSize(7);
-                        doc.setTextColor(255, 0, 0);
-                        doc.text("* Valores em vermelho/itálico representam resultados descartados pelo regulamento.", margin, pageHeight - 5);
-
-                        if (sponsorBannerBase64) {
-                            try {
-                                doc.addImage(sponsorBannerBase64, "JPEG", margin, pageHeight - 32, pageWidth - (margin * 2), 0);
-                            } catch (e) { }
-                        }
-                    }
-                });
-
-                currentY = (doc as any).lastAutoTable.finalY + 10;
-
-            });
-        });
-
-        doc.save(`Classificacao_${standingsData.championship?.name || "Copa"}.pdf`);
+    const handleDownloadWorkbook = async () => {
+        if (!standingsData?.championship) return;
+        try {
+            const result = await exportClassificacaoMutation.mutateAsync({ championshipId });
+            const blob = base64ParaBlob(result.data, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement("a");
+            a.href = url;
+            a.download = result.filename || `Classificacao_${standingsData.championship.name}.xlsx`;
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+            URL.revokeObjectURL(url);
+        } catch (e: any) {
+            console.error("Erro ao gerar planilha", e);
+            toast.error("Não foi possível gerar a planilha. Tente novamente.");
+        }
     };
 
     if (isStandingsLoading) {
@@ -209,8 +160,8 @@ export default function ChampionshipShowcase() {
                 <Trophy className="h-16 w-16 text-muted-foreground/20 mb-4" />
                 <h2 className="text-xl font-bold mb-2">Classificação não encontrada</h2>
                 <p className="text-muted-foreground text-center max-w-sm mb-6">
-                    {error?.message === "Campeonato não encontrado" 
-                        ? "Este campeonato não existe ou foi removido." 
+                    {error?.message === "Campeonato não encontrado"
+                        ? "Este campeonato não existe ou foi removido."
                         : "Não conseguimos carregar os dados deste campeonato. Verifique o link ou tente novamente mais tarde."}
                 </p>
                 <Link href="/">
@@ -220,12 +171,25 @@ export default function ChampionshipShowcase() {
         );
     }
 
-    const { championship, standings, stages } = standingsData;
+    const { championship, stages } = standingsData;
+    const etapasComNome = montarEtapasComNome(stages);
+
+    // O tRPC v11 infere a saída de query via `Serialize<T>`, que deixa os campos
+    // opcionais nesse formato (mapped type recursivo genérico) — mas o runtime
+    // sempre entrega o shape completo de CategoriaClassificacao, porque é
+    // exatamente isso que calcularClassificacao() devolve no backend. Cast único
+    // aqui evita espalhar `as` pelo resto do arquivo.
+    const standings = standingsData.standings as unknown as CategoriaClassificacao[];
+
+    const categoryData = standings.find(s => s.name === selectedCategory);
+    const competitorsList: CompetidorClassificado[] = categoryData
+        ? (selectedRole === "pilot" ? categoryData.pilots : categoryData.navigators)
+        : [];
 
     return (
         <div className="min-h-screen bg-background flex flex-col">
-            <MetaSEO 
-                title={championship.name} 
+            <MetaSEO
+                title={championship.name}
                 description={`Classificação Geral do ${championship.name} - Temporada ${championship.year}. Acompanhe os resultados oficiais na Amigo Racing.`}
                 ogImage={championship.imageUrl || undefined}
             />
@@ -282,174 +246,90 @@ export default function ChampionshipShowcase() {
                         </div>
                     </div>
 
-                    <Button
-                        onClick={exportStandingsPDF}
-                        className="bg-primary hover:bg-primary/90 text-white font-bold h-12 px-6 rounded-xl shadow-lg shadow-primary/20 transition-all hover:scale-105"
-                    >
-                        <FileDown className="h-5 w-5 mr-2" />
-                        Baixar PDF Oficial
-                    </Button>
+                    <div className="flex flex-col sm:flex-row gap-3 w-full md:w-auto">
+                        <Button
+                            onClick={handleDownloadPdf}
+                            disabled={isGeneratingPdf}
+                            className="bg-primary hover:bg-primary/90 text-white font-bold h-12 px-6 rounded-xl shadow-lg shadow-primary/20 transition-all hover:scale-105"
+                        >
+                            {isGeneratingPdf ? <Loader2 className="h-5 w-5 mr-2 animate-spin" /> : <FileDown className="h-5 w-5 mr-2" />}
+                            Baixar PDF Oficial
+                        </Button>
+                        <Button
+                            onClick={handleDownloadWorkbook}
+                            disabled={exportClassificacaoMutation.isPending}
+                            variant="outline"
+                            className="font-bold h-12 px-6 rounded-xl border-primary/20 transition-all hover:scale-105"
+                        >
+                            {exportClassificacaoMutation.isPending ? <Loader2 className="h-5 w-5 mr-2 animate-spin" /> : <FileSpreadsheet className="h-5 w-5 mr-2" />}
+                            Baixar Planilha
+                        </Button>
+                    </div>
                 </div>
+
+                {/* Filtros */}
+                <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 mb-6">
+                    <div className="space-y-1.5 flex-1">
+                        <Label className="text-[10px] uppercase font-bold text-muted-foreground ml-1">Categoria</Label>
+                        {/* Sem opção "Todas" de propósito — na vitrine pública o competidor sempre
+                            escolhe uma categoria concreta (diferente do painel admin). */}
+                        <Select value={selectedCategory} onValueChange={setSelectedCategory}>
+                            <SelectTrigger className="w-full sm:w-[220px] bg-background border-primary/10 h-10 font-semibold focus:ring-primary/20 transition-all">
+                                <SelectValue placeholder="Selecione..." />
+                            </SelectTrigger>
+                            <SelectContent>
+                                {standings.map((cat) => (
+                                    <SelectItem key={cat.name} value={cat.name} className="font-medium">{cat.name}</SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
+                    </div>
+
+                    <div className="space-y-1.5">
+                        <Label className="text-[10px] uppercase font-bold text-muted-foreground ml-1">Modalidade</Label>
+                        <ToggleGroup
+                            type="single"
+                            value={selectedRole}
+                            onValueChange={(v) => v && setSelectedRole(v as "pilot" | "navigator")}
+                            className="bg-background/80 p-1 rounded-xl border border-primary/10 h-10 shadow-sm justify-start"
+                        >
+                            <ToggleGroupItem value="pilot" className="flex-1 h-8 rounded-lg font-bold text-xs data-[state=on]:bg-primary data-[state=on]:text-white">
+                                Pilotos
+                            </ToggleGroupItem>
+                            <ToggleGroupItem value="navigator" className="flex-1 h-8 rounded-lg font-bold text-xs data-[state=on]:bg-primary data-[state=on]:text-white">
+                                Navegadores
+                            </ToggleGroupItem>
+                        </ToggleGroup>
+                    </div>
+                </div>
+
+                {/* Pódio */}
+                {competitorsList.length > 0 && (
+                    <div className="grid grid-cols-3 gap-3 sm:gap-6 mb-8 max-w-2xl mx-auto">
+                        <PodiumCard posicao={2} competidor={competitorsList[1]} />
+                        <PodiumCard posicao={1} competidor={competitorsList[0]} />
+                        <PodiumCard posicao={3} competidor={competitorsList[2]} />
+                    </div>
+                )}
 
                 {/* Standings Table Card */}
                 <Card className="border-none shadow-2xl bg-card/50 backdrop-blur-sm overflow-hidden">
                     <CardHeader className="bg-gradient-to-r from-primary/5 to-transparent border-b">
-                        <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
-                            <div>
-                                <CardTitle className="text-2xl font-bold flex items-center gap-3">
-                                    <Trophy className="h-6 w-6 text-primary" /> Classificação Geral
-                                </CardTitle>
-                                <CardDescription className="font-medium">
-                                    Acesse o ranking e desempenho detalhado de cada competidor.
-                                </CardDescription>
-                            </div>
-
-                            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
-                                <div className="space-y-1.5 flex-1">
-                                    <Label className="text-[10px] uppercase font-bold text-muted-foreground ml-1">Categoria</Label>
-                                    <Select value={selectedCategory} onValueChange={setSelectedCategory}>
-                                        <SelectTrigger className="w-full sm:w-[200px] bg-background border-primary/10 h-10 font-semibold focus:ring-primary/20 transition-all">
-                                            <SelectValue placeholder="Selecione..." />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                            {standings.map(cat => (
-                                                <SelectItem key={cat.name} value={cat.name} className="font-medium">{cat.name}</SelectItem>
-                                            ))}
-                                        </SelectContent>
-                                    </Select>
-                                </div>
-
-                                <div className="space-y-1.5 flex-1">
-                                    <Label className="text-[10px] uppercase font-bold text-muted-foreground ml-1">Modalidade</Label>
-                                    <div className="bg-background/80 p-1 rounded-xl border border-primary/10 flex items-center h-10 shadow-sm">
-                                        <Button
-                                            variant={selectedRole === "pilot" ? "default" : "ghost"}
-                                            size="sm"
-                                            onClick={() => setSelectedRole("pilot")}
-                                            className={`flex-1 h-8 rounded-lg font-bold text-xs transition-all ${selectedRole === "pilot" ? 'shadow-md' : 'text-muted-foreground'}`}
-                                        >
-                                            Pilotos
-                                        </Button>
-                                        <Button
-                                            variant={selectedRole === "navigator" ? "default" : "ghost"}
-                                            size="sm"
-                                            onClick={() => setSelectedRole("navigator")}
-                                            className={`flex-1 h-8 rounded-lg font-bold text-xs transition-all ${selectedRole === "navigator" ? 'shadow-md' : 'text-muted-foreground'}`}
-                                        >
-                                            Navegadores
-                                        </Button>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
+                        <CardTitle className="text-2xl font-bold flex items-center gap-3">
+                            <Trophy className="h-6 w-6 text-primary" /> Classificação Geral
+                        </CardTitle>
+                        <CardDescription className="font-medium">
+                            Acesse o ranking e desempenho detalhado de cada competidor.
+                        </CardDescription>
                     </CardHeader>
                     <CardContent className="p-0">
-                        {(() => {
-                            if (!standings || standings.length === 0) {
-                                return (
-                                    <div className="p-20 text-center bg-muted/5">
-                                        <Trophy className="h-16 w-16 text-muted-foreground/10 mx-auto mb-4" />
-                                        <h3 className="text-xl font-bold text-muted-foreground mb-1">Resultados em breve</h3>
-                                        <p className="text-sm text-muted-foreground">Este campeonato ainda não possui resultados cadastrados.</p>
-                                    </div>
-                                );
-                            }
-
-                            const categoryData = standings.find(s => s.name === selectedCategory);
-                            if (!categoryData) {
-                                return (
-                                    <div className="p-20 text-center">
-                                        <Loader2 className="h-10 w-10 animate-spin text-primary/20 mx-auto mb-4" />
-                                        <p className="text-muted-foreground font-medium">Selecione uma categoria para visualizar...</p>
-                                    </div>
-                                );
-                            }
-
-                            const competitorsList = selectedRole === "pilot" ? categoryData.pilots : categoryData.navigators;
-                            const orderedStages = [...stages].sort((a, b) => a.stageNumber - b.stageNumber);
-
-                            if (competitorsList.length === 0) {
-                                return (
-                                    <div className="p-20 text-center bg-muted/5">
-                                        <Trophy className="h-16 w-16 text-muted-foreground/10 mx-auto mb-4" />
-                                        <h3 className="text-xl font-bold text-muted-foreground mb-1">Pódio Vazio</h3>
-                                        <p className="text-sm text-muted-foreground">Nenhum {selectedRole === "pilot" ? "piloto" : "navegador"} pontuou nesta categoria ainda.</p>
-                                    </div>
-                                );
-                            }
-
-                            return (
-                                <div className="w-full overflow-x-auto pb-4">
-                                    <Table className="min-w-[800px]">
-                                        <TableHeader className="bg-muted/30">
-                                            <TableRow className="hover:bg-transparent">
-                                                <TableHead className="w-[80px] text-center font-black text-xs uppercase tracking-wider py-5">Pos</TableHead>
-                                                <TableHead className="font-black text-xs uppercase tracking-wider">Competidor</TableHead>
-                                                {orderedStages.map(st => {
-                                                    const eventName = st.event?.name || st.customName || "";
-                                                    return (
-                                                        <TableHead key={st.id} className="text-center w-[110px] text-[10px] leading-tight px-1 font-bold uppercase tracking-wider">
-                                                            E{st.stageNumber}
-                                                            {eventName && (
-                                                                <div className="text-[9px] font-normal text-muted-foreground truncate max-w-[100px] mt-1" title={eventName}>
-                                                                    {eventName}
-                                                                </div>
-                                                            )}
-                                                        </TableHead>
-                                                    );
-                                                })}
-                                                <TableHead className="w-[120px] text-center font-black text-xs uppercase tracking-wider text-primary">Pontos Líquidos</TableHead>
-                                            </TableRow>
-                                        </TableHeader>
-                                        <TableBody>
-                                            {competitorsList.map((comp, idx) => (
-                                                <TableRow key={comp.name} className={`group transition-colors hover:bg-primary/5 ${idx < 3 ? 'bg-primary/[0.02]' : ''}`}>
-                                                    <TableCell className="text-center py-5">
-                                                        <div className="flex items-center justify-center">
-                                                            {idx === 0 && <div className="bg-yellow-400 text-yellow-900 w-8 h-8 rounded-full flex items-center justify-center font-black text-sm shadow-lg shadow-yellow-400/20">1º</div>}
-                                                            {idx === 1 && <div className="bg-slate-300 text-slate-800 w-8 h-8 rounded-full flex items-center justify-center font-black text-sm shadow-lg shadow-slate-300/20">2º</div>}
-                                                            {idx === 2 && <div className="bg-amber-600 text-white w-8 h-8 rounded-full flex items-center justify-center font-black text-sm shadow-lg shadow-amber-600/20">3º</div>}
-                                                            {idx > 2 && <span className="font-bold text-muted-foreground">{idx + 1}º</span>}
-                                                        </div>
-                                                    </TableCell>
-                                                    <TableCell className="font-bold whitespace-nowrap text-base group-hover:text-primary transition-colors">
-                                                        {comp.name}
-                                                    </TableCell>
-                                                    {orderedStages.map(st => {
-                                                        const res = comp.stageResults.find(sr => sr.stageId === st.id);
-                                                        return (
-                                                            <TableCell key={st.id} className="text-center p-2">
-                                                                {!res ? (
-                                                                    <span className="text-muted-foreground/20 font-light">-</span>
-                                                                ) : res.isDisqualified ? (
-                                                                    <Badge variant="destructive" className="text-[9px] uppercase font-black px-1.5 py-0 shadow-sm border-none">NC/DSQ</Badge>
-                                                                ) : res.isDiscarded ? (
-                                                                    <div className="relative inline-block px-2">
-                                                                        <span className="text-sm line-through text-red-500/50 font-medium">
-                                                                            {res.points}
-                                                                        </span>
-                                                                        <span className="text-[8px] absolute -top-1 -right-1.5 text-red-500 font-black">DESC</span>
-                                                                    </div>
-                                                                ) : (
-                                                                    <span className="text-sm font-bold text-foreground bg-muted/30 px-2 py-1 rounded-md min-w-[30px] inline-block">
-                                                                        {res.points}
-                                                                    </span>
-                                                                )}
-                                                            </TableCell>
-                                                        );
-                                                    })}
-                                                    <TableCell className="text-center py-5">
-                                                        <div className="inline-block bg-primary text-white font-black text-lg px-4 py-1.5 rounded-xl shadow-md min-w-[60px]">
-                                                            {comp.netPoints}
-                                                        </div>
-                                                    </TableCell>
-                                                </TableRow>
-                                            ))}
-                                        </TableBody>
-                                    </Table>
-                                </div>
-                            );
-                        })()}
+                        <StandingsTable
+                            categoria={categoryData}
+                            etapas={etapasComNome}
+                            papel={selectedRole}
+                            variante="vitrine"
+                            onSelecionarCompetidor={setCompetidorEmFoco}
+                        />
                     </CardContent>
                 </Card>
 
@@ -458,11 +338,13 @@ export default function ChampionshipShowcase() {
                     <Card className="mt-8 border-none shadow-2xl bg-card/50 backdrop-blur-sm overflow-hidden">
                         <CardHeader className="bg-gradient-to-r from-primary/5 to-transparent border-b">
                             <CardTitle className="text-xl font-bold flex items-center gap-3">
-                                <ArrowLeft className="h-5 w-5 rotate-180 text-primary" />
+                                <TrendingUp className="h-5 w-5 text-primary" />
                                 Evolução de Performance - {selectedCategory}
                             </CardTitle>
                             <CardDescription className="font-medium">
-                                Visualização da constância de pontos ao longo das etapas para o Top 8.
+                                {competidorEmFoco
+                                    ? `Destacando ${competidorEmFoco} — clique novamente na tabela pra voltar à visão geral do Top 8.`
+                                    : "Visualização da constância de pontos ao longo das etapas para o Top 8. Clique num competidor na tabela pra destacá-lo aqui."}
                             </CardDescription>
                         </CardHeader>
                         <CardContent>
@@ -472,6 +354,7 @@ export default function ChampionshipShowcase() {
                                     selectedCategory={selectedCategory}
                                     selectedRole={selectedRole}
                                     chartRef={chartRef}
+                                    highlightedName={competidorEmFoco}
                                 />
                             </div>
                         </CardContent>
@@ -479,15 +362,19 @@ export default function ChampionshipShowcase() {
                 )}
 
                 {/* Legend */}
-                <div className="mt-8 flex flex-col sm:flex-row items-center justify-between gap-4 px-2">
-                    <div className="flex items-center gap-4 text-[10px] uppercase font-bold text-muted-foreground tracking-widest">
+                <div className="mt-8 flex flex-col sm:flex-row items-center justify-center gap-4 px-2">
+                    <div className="flex flex-wrap items-center justify-center gap-4 text-[10px] uppercase font-bold text-muted-foreground tracking-widest">
                         <div className="flex items-center gap-1.5">
                             <div className="w-3 h-0.5 bg-red-500"></div>
-                            Resultados Descartados
+                            Resultado Descartado
                         </div>
                         <div className="flex items-center gap-1.5">
                             <div className="w-3 h-3 bg-destructive/10 rounded-sm"></div>
-                            Não Completou / Desclassificado
+                            Desclassificado (DSQ)
+                        </div>
+                        <div className="flex items-center gap-1.5">
+                            <div className="w-3 h-3 border border-dashed border-muted-foreground/50 rounded-sm"></div>
+                            Não Largou (DNS)
                         </div>
                     </div>
                 </div>
