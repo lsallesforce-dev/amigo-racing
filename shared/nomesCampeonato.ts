@@ -7,6 +7,13 @@
 //
 // Este arquivo não decide nada sozinho — ele SUGERE. Quem confirma a unificação
 // é o organizador, na tela do unificador de competidores.
+//
+// A dependência para `importarPlanilhaCampeonato` é de MÃO ÚNICA (só a
+// `chaveCategoria` vem de lá). O parser não pode importar nada daqui, senão vira
+// ciclo — é por isso que ele tem a própria normalização de nome para as
+// exclusões.
+
+import { chaveCategoria } from "./importarPlanilhaCampeonato.js";
 
 /** Sem acento, sem pontuação, espaços colapsados, minúsculo. */
 export function normalizarNome(nome: string | null | undefined): string {
@@ -213,18 +220,41 @@ export type PapelCompetidor = "pilot" | "navigator";
  * piloto) e SEMPRE como sugestão que o humano confirma. Casar automático por
  * e-mail ligaria pessoas erradas.
  */
-export type DicaEmail = { nome: string; emailNorm: string; papel: PapelCompetidor };
+export type DicaEmail = {
+  nome: string;
+  emailNorm: string;
+  papel: PapelCompetidor;
+  /**
+   * Categoria em que esse e-mail apareceu, quando quem chama sabe. A dica de
+   * e-mail é presa à CATEGORIA do mesmo jeito que é presa ao papel: e-mail
+   * repetido entre categorias diferentes não é a mesma classificação e não pode
+   * virar sugestão. Ausente/null = quem chama não sabe, e aí a categoria vem da
+   * lista de nomes (`novos`/`existentes`).
+   */
+  categoria?: string | null;
+};
 
 /** trim + lowercase. E-mail vazio nunca casa com e-mail vazio. */
 export function normalizarEmail(email: string | null | undefined): string {
   return String(email ?? "").trim().toLowerCase();
 }
 
+/**
+ * Um nome com o contexto que decide se ele PODE ser conciliado com outro.
+ *
+ * `categoria`/`papel` null = "não sei" — e "não sei" nunca bloqueia (é o que
+ * mantém retrocompatível quem passa só a string).
+ */
+export type NomeConciliavel = { nome: string; categoria: string | null; papel: PapelCompetidor | null };
+
+/** Aceita a string pelada (retrocompatível) ou o nome com categoria/papel. */
+export type EntradaNome = string | NomeConciliavel;
+
 export interface EntradaConciliacao {
   /** Nomes vindos da planilha sendo importada. */
-  novos: string[];
+  novos: EntradaNome[];
   /** Nomes já gravados no campeonato. */
-  existentes: string[];
+  existentes: EntradaNome[];
   /** Decisões de importações anteriores. */
   decisoes?: DecisaoAlias[];
   /** E-mails vindos da planilha sendo importada (opcional, retrocompatível). */
@@ -246,7 +276,25 @@ export interface SaidaConciliacao {
     novo: string;
     /** Papel do nome novo, quando a planilha deixou claro; null se veio nos dois papéis (ou em nenhum). */
     papel: PapelCompetidor | null;
-    candidatos: { nome: string; similaridade: number; mesmoEmail: boolean }[];
+    /**
+     * Categoria do nome novo, quando ele veio de UMA só; null se veio de várias
+     * (ou de nenhuma). A tela mostra isso — sem a categoria o organizador não
+     * tem como julgar "esse é o mesmo?".
+     */
+    categoria: string | null;
+    candidatos: {
+      nome: string;
+      similaridade: number;
+      mesmoEmail: boolean;
+      /**
+       * O candidato está em OUTRA categoria. Não impede a conciliação (troca de
+       * categoria entre eventos é legítima — ver `mesmaCategoria`), mas a tela
+       * precisa avisar e a ação em LOTE não pode aceitar sozinha.
+       */
+      categoriaDiferente: boolean;
+      /** Categoria do candidato, para a tela escrever "está em X, não em Y". */
+      categoria: string | null;
+    }[];
   }[];
   /** Ninguém parecido: entra como competidor novo. */
   ineditos: string[];
@@ -286,12 +334,63 @@ export function similaridadeConciliacao(a: string, b: string): number {
 }
 
 /**
+ * Contexto acumulado de um nome: em que categorias e em que papéis ele apareceu.
+ * Um nome pode aparecer em mais de uma linha (piloto numa prova, navegador em
+ * outra), então é conjunto, não valor único.
+ */
+type ContextoNome = {
+  /** Chaves normalizadas (`chaveCategoria`) — é por elas que se compara. */
+  categorias: Set<string>;
+  /** As categorias como o organizador escreveu, para a tela mostrar. */
+  rotulos: string[];
+  papeis: Set<PapelCompetidor>;
+};
+
+/**
+ * PAPEL é trava DURA: piloto só concilia com piloto, navegador só com navegador.
+ * "Não sei" (conjunto vazio) nunca bloqueia — quem passa só a string continua
+ * tendo o comportamento antigo.
+ */
+function papeisCompativeis(a: ContextoNome, b: ContextoNome): boolean {
+  return (
+    a.papeis.size === 0 || b.papeis.size === 0 ||
+    [...a.papeis].some(p => b.papeis.has(p))
+  );
+}
+
+/**
+ * CATEGORIA, ao contrário do papel, NÃO é trava — é ranqueamento.
+ *
+ * ⚠️ NÃO TRANSFORME ISSO EM BLOQUEIO. Parece óbvio que competidor de categorias
+ * diferentes nunca é a mesma pessoa, e é errado: o regulamento do organizador
+ * manda o vencedor SUBIR de categoria (dois primeiros lugares na temporada =
+ * promoção opcional), e isso acontece de um EVENTO para o outro, dentro do mesmo
+ * campeonato. No dado real, a dupla "Paulo"/"Fabricio" corre na Carros Graduado
+ * no Rally do Amigo e na Carros Master no Rally do Cavalo — é a mesma dupla, e
+ * conciliar os nomes dela é o comportamento CERTO. (A classificação continua
+ * sendo por categoria; o que se ganha ao conciliar é consistência de nome, não
+ * soma de pontos.)
+ *
+ * O estrago do "lucas"(CARRO MASTER) -> "Lucas Car Rio"(CARRO RALLY) não veio de
+ * a conciliação OFERECER o par — veio de o par ter sido aceito pelo botão de
+ * LOTE do wizard, sem ninguém olhar. Por isso o conserto é:
+ *   - candidato de outra categoria nunca vem em primeiro;
+ *   - vem marcado com `categoriaDiferente`, para a tela avisar;
+ *   - a dica de e-mail não o promove;
+ *   - e a ação em lote não pode aceitá-lo (regra da UI, ver ImportWizard).
+ */
+function mesmaCategoria(a: ContextoNome, b: ContextoNome): boolean {
+  if (a.categorias.size === 0 || b.categorias.size === 0) return true; // "não sei" não penaliza
+  return [...a.categorias].some(c => b.categorias.has(c));
+}
+
+/**
  * Conciliação dos nomes de UMA planilha contra o que o campeonato já tem.
  *
- * A comparação de TEXTO não sabe de papel — quem chama passa as listas já
- * separadas quando isso importar. Já a dica de E-MAIL é obrigatoriamente
- * escopada por papel: o mesmo endereço num piloto e num navegador é o contato
- * da dupla, não a mesma pessoa, e casar isso ligaria gente errada.
+ * PAPEL é trava dura (o mesmo e-mail num piloto e num navegador é o contato da
+ * dupla, não a mesma pessoa). CATEGORIA não trava, mas ordena: candidato da
+ * mesma categoria vem sempre na frente de candidato de outra, e só dentro da
+ * mesma categoria a dica de e-mail promove alguém para o topo.
  *
  * O e-mail NUNCA promove para `automaticos` — ele só coloca o candidato na
  * frente da fila da pergunta (`mesmoEmail: true`). É o que finalmente liga
@@ -301,21 +400,63 @@ export function similaridadeConciliacao(a: string, b: string): number {
 export function conciliarNomes(entrada: EntradaConciliacao): SaidaConciliacao {
   const limiar = entrada.limiar ?? 0.82;
 
-  const limpar = (lista: string[]) => {
-    const vistos = new Set<string>();
+  /** Nomes distintos, na ordem de entrada, junto do contexto acumulado de cada um. */
+  const limpar = (lista: EntradaNome[]) => {
+    const contexto = new Map<string, ContextoNome>();
     const saida: string[] = [];
     for (const cru of lista || []) {
-      const nome = String(cru ?? "").replace(/\s+/g, " ").trim();
-      if (!nome || !normalizarNome(nome) || vistos.has(nome)) continue;
-      vistos.add(nome);
-      saida.push(nome);
+      const item: NomeConciliavel =
+        typeof cru === "string" || cru == null
+          ? { nome: String(cru ?? ""), categoria: null, papel: null }
+          : cru;
+      const nome = String(item.nome ?? "").replace(/\s+/g, " ").trim();
+      if (!nome || !normalizarNome(nome)) continue;
+      if (!contexto.has(nome)) {
+        contexto.set(nome, { categorias: new Set(), rotulos: [], papeis: new Set() });
+        saida.push(nome);
+      }
+      const ctx = contexto.get(nome)!;
+      const rotulo = String(item.categoria ?? "").replace(/\s+/g, " ").trim();
+      const chave = chaveCategoria(rotulo);
+      if (chave) {
+        ctx.categorias.add(chave);
+        if (!ctx.rotulos.includes(rotulo)) ctx.rotulos.push(rotulo);
+      }
+      if (item.papel === "pilot" || item.papel === "navigator") ctx.papeis.add(item.papel);
     }
-    return saida;
+    return { nomes: saida, contexto };
   };
 
-  const novos = limpar(entrada.novos);
-  const existentes = limpar(entrada.existentes);
+  const { nomes: novos, contexto: contextoNovo } = limpar(entrada.novos);
+  const { nomes: existentes, contexto: contextoExistente } = limpar(entrada.existentes);
   const decisoes = entrada.decisoes || [];
+
+  const VAZIO: ContextoNome = { categorias: new Set(), rotulos: [], papeis: new Set() };
+  const ctxNovo = (nome: string) => contextoNovo.get(nome) || VAZIO;
+  const ctxExistente = (nome: string) => contextoExistente.get(nome) || VAZIO;
+  /** A categoria de um nome quando ele veio de UMA só; várias (ou nenhuma) = null. */
+  const rotuloUnico = (ctx: ContextoNome) => (ctx.categorias.size === 1 ? ctx.rotulos[0] ?? null : null);
+
+  // A dica de e-mail também carrega contexto (papel e, quando quem chama sabe,
+  // categoria). Ela alimenta os mesmos índices — é assim que o escopo por papel
+  // e o ranqueamento por categoria valem para o candidato vindo do e-mail.
+  const absorverDica = (contexto: Map<string, ContextoNome>, dicas: DicaEmail[] | undefined) => {
+    for (const d of dicas || []) {
+      const nome = String(d?.nome ?? "").replace(/\s+/g, " ").trim();
+      if (!nome || (d.papel !== "pilot" && d.papel !== "navigator")) continue;
+      if (!contexto.has(nome)) contexto.set(nome, { categorias: new Set(), rotulos: [], papeis: new Set() });
+      const ctx = contexto.get(nome)!;
+      ctx.papeis.add(d.papel);
+      const rotulo = String(d.categoria ?? "").replace(/\s+/g, " ").trim();
+      const chave = chaveCategoria(rotulo);
+      if (chave) {
+        ctx.categorias.add(chave);
+        if (!ctx.rotulos.includes(rotulo)) ctx.rotulos.push(rotulo);
+      }
+    }
+  };
+  absorverDica(contextoNovo, entrada.dicasNovos);
+  absorverDica(contextoExistente, entrada.dicasExistentes);
 
   const existentePorNome = new Set(existentes);
   const existentePorNorm = new Map<string, string>();
@@ -340,13 +481,9 @@ export function conciliarNomes(entrada: EntradaConciliacao): SaidaConciliacao {
 
   /** nome NOVO -> os (email, papel) que a planilha trouxe para ele. */
   const emailsDoNovo = new Map<string, { emailNorm: string; papel: PapelCompetidor }[]>();
-  /** nome NOVO -> papéis em que ele apareceu (para o campo `papel` da dúvida). */
-  const papeisDoNovo = new Map<string, Set<PapelCompetidor>>();
   for (const d of entrada.dicasNovos || []) {
     const nome = String(d?.nome ?? "").replace(/\s+/g, " ").trim();
     if (!nome || (d.papel !== "pilot" && d.papel !== "navigator")) continue;
-    if (!papeisDoNovo.has(nome)) papeisDoNovo.set(nome, new Set());
-    papeisDoNovo.get(nome)!.add(d.papel);
 
     const email = normalizarEmail(d?.emailNorm);
     if (!email) continue; // e-mail vazio nunca casa com e-mail vazio
@@ -356,8 +493,8 @@ export function conciliarNomes(entrada: EntradaConciliacao): SaidaConciliacao {
   }
 
   const papelDoNovo = (nome: string): PapelCompetidor | null => {
-    const papeis = papeisDoNovo.get(nome);
-    if (!papeis || papeis.size !== 1) return null;
+    const papeis = ctxNovo(nome).papeis;
+    if (papeis.size !== 1) return null;
     return [...papeis][0];
   };
 
@@ -394,6 +531,10 @@ export function conciliarNomes(entrada: EntradaConciliacao): SaidaConciliacao {
     //    que são pessoas DIFERENTES.
     const recusados = new Set(minhasDecisoes.filter(d => d.isDistinct).map(d => d.canonicalName));
 
+    const meuCtx = ctxNovo(novo);
+    /** PAPEL é trava dura — candidato de outro papel nem é cogitado. */
+    const papelBate = (candidato: string) => papeisCompativeis(meuCtx, ctxExistente(candidato));
+
     // 4a) Mesmo e-mail no MESMO papel: entra na frente, mesmo com semelhança de
     //     texto baixa, e mesmo que o nome seja curto demais para a heurística.
     //     Papéis diferentes NÃO geram dica: lá o e-mail é da dupla, não da pessoa.
@@ -402,27 +543,50 @@ export function conciliarNomes(entrada: EntradaConciliacao): SaidaConciliacao {
       for (const candidato of existentesPorEmail.get(chaveEmail(emailNorm, papel)) || []) {
         if (candidato === novo || recusados.has(candidato) || porEmail.includes(candidato)) continue;
         if (!existentePorNome.has(candidato)) continue; // só sugere quem de fato existe
+        if (!papelBate(candidato)) continue;
         porEmail.push(candidato);
       }
     }
     const daDica = new Set(porEmail);
 
-    // 4b) Os parecidos de texto de sempre, atrás dos do e-mail.
+    // 4b) Os parecidos de texto de sempre.
     const porTexto = norm.length >= MIN_CARACTERES_PARA_DUVIDA
       ? existentes
-        .filter(e => !recusados.has(e) && !daDica.has(e))
+        .filter(e => !recusados.has(e) && !daDica.has(e) && papelBate(e))
         .map(nome => ({ nome, similaridade: similaridadeConciliacao(novo, nome) }))
         .filter(c => c.similaridade >= limiar)
         .sort((a, b) => b.similaridade - a.similaridade || a.nome.localeCompare(b.nome, "pt-BR"))
       : [];
 
+    // 4c) Ordenação final. A categoria não elimina ninguém, mas manda na ordem:
+    //     1º os da MESMA categoria (entre eles, o e-mail promove);
+    //     2º os de OUTRA categoria, por semelhança — e o e-mail NÃO os promove,
+    //        senão um "mesmo e-mail" de outra classificação volta a liderar a
+    //        fila e o botão de lote encosta nele.
+    const montar = (nome: string, mesmoEmail: boolean) => {
+      const ctx = ctxExistente(nome);
+      return {
+        nome,
+        similaridade: similaridadeConciliacao(novo, nome),
+        mesmoEmail,
+        categoriaDiferente: !mesmaCategoria(meuCtx, ctx),
+        categoria: rotuloUnico(ctx),
+      };
+    };
+    const todos = [
+      ...porEmail.map(nome => montar(nome, true)),
+      ...porTexto.map(c => montar(c.nome, false)),
+    ];
+
     const candidatos = [
-      ...porEmail.map(nome => ({ nome, similaridade: similaridadeConciliacao(novo, nome), mesmoEmail: true })),
-      ...porTexto.map(c => ({ ...c, mesmoEmail: false })),
+      ...todos.filter(c => !c.categoriaDiferente),
+      ...todos
+        .filter(c => c.categoriaDiferente)
+        .sort((a, b) => b.similaridade - a.similaridade || a.nome.localeCompare(b.nome, "pt-BR")),
     ].slice(0, MAX_CANDIDATOS);
 
     if (candidatos.length > 0) {
-      duvidas.push({ novo, papel: papelDoNovo(novo), candidatos });
+      duvidas.push({ novo, papel: papelDoNovo(novo), categoria: rotuloUnico(meuCtx), candidatos });
       continue;
     }
 

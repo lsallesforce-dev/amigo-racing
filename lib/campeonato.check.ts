@@ -34,6 +34,8 @@ import {
   normalizarCabecalho,
   chaveCategoria,
   planejarProvas,
+  aplicarExclusoes,
+  aplicarMapaCategorias,
   type AbaPlanilha,
   type ResultadoImportacao,
   type ResultadoImportado,
@@ -49,6 +51,8 @@ import {
   similaridadeConciliacao,
   type DecisaoAlias,
   type DicaEmail,
+  type NomeConciliavel,
+  type SaidaConciliacao,
 } from "../shared/nomesCampeonato.js";
 
 let falhas = 0;
@@ -58,6 +62,7 @@ const check = (nome: string, ok: boolean, detalhe: string) => {
 };
 
 const PLANILHA_IDA = "C:\\Users\\lsaud\\Downloads\\Campeonato - Rally do Amigo Ida 2026 (3).xlsx";
+const PLANILHA_VOLTA = "C:\\Users\\lsaud\\Downloads\\Campeonato - Rally do Amigo Volta 2026.xlsx";
 const PLANILHA_CAVALO = "C:\\Users\\lsaud\\Downloads\\Campeonato - 7º Rally do Cavalo.xlsx";
 const KRAKEN = "ExportarKraken.xlsx";
 const LISTA_EVENTO = "ListaEvento.xlsx";
@@ -231,20 +236,54 @@ function semDuplicata(campeonato: CampeonatoMemoria): boolean {
 function dicasDe(resultados: ResultadoImportado[]): DicaEmail[] {
   const vistos = new Set<string>();
   const dicas: DicaEmail[] = [];
-  const juntar = (nome: string | null, email: string | null, papel: "pilot" | "navigator") => {
+  const juntar = (nome: string | null, email: string | null, papel: "pilot" | "navigator", categoria: string) => {
     const limpo = String(nome ?? "").replace(/\s+/g, " ").trim();
     const emailNorm = normalizarEmail(email);
     if (!limpo || !emailNorm) return;
-    const chave = `${limpo}|${emailNorm}|${papel}`;
+    const chave = `${limpo}|${emailNorm}|${papel}|${categoria}`;
     if (vistos.has(chave)) return;
     vistos.add(chave);
-    dicas.push({ nome: limpo, emailNorm, papel });
+    dicas.push({ nome: limpo, emailNorm, papel, categoria });
   };
   for (const r of resultados) {
-    juntar(r.pilotName, r.pilotEmail, "pilot");
-    juntar(r.navigatorName, r.navigatorEmail, "navigator");
+    juntar(r.pilotName, r.pilotEmail, "pilot", r.categoria);
+    juntar(r.navigatorName, r.navigatorEmail, "navigator", r.categoria);
   }
   return dicas;
+}
+
+/** Os competidores da planilha com categoria e papel — o que o router manda para a conciliação. */
+function competidoresDe(resultados: ResultadoImportado[]): NomeConciliavel[] {
+  const vistos = new Set<string>();
+  const saida: NomeConciliavel[] = [];
+  const juntar = (nome: string | null, categoria: string, papel: "pilot" | "navigator") => {
+    const limpo = String(nome ?? "").replace(/\s+/g, " ").trim();
+    if (!limpo) return;
+    const chave = `${limpo}|${categoria}|${papel}`;
+    if (vistos.has(chave)) return;
+    vistos.add(chave);
+    saida.push({ nome: limpo, categoria, papel });
+  };
+  for (const r of resultados) {
+    juntar(r.pilotName, r.categoria, "pilot");
+    juntar(r.navigatorName, r.categoria, "navigator");
+  }
+  return saida;
+}
+
+/**
+ * A regra do botão de LOTE do wizard ("aceitar o mais provável nos que faltam"),
+ * espelhada aqui: candidato de OUTRA categoria nunca é aceito no automático — é
+ * a trava que faltava quando "lucas" virou "Lucas Car Rio".
+ */
+function aceitarEmLote(saida: SaidaConciliacao): Record<string, string> {
+  const aceitas: Record<string, string> = {};
+  for (const d of saida.duvidas) {
+    const melhor = d.candidatos[0];
+    if (!melhor || melhor.categoriaDiferente) continue;
+    aceitas[d.novo] = melhor.nome;
+  }
+  return aceitas;
 }
 
 async function main() {
@@ -649,8 +688,12 @@ async function main() {
       ida.abas.length === 6 && ida.abas.every(a => a.layout === "longo"),
       ida.abas.map(a => `${a.nome}(${a.duplas})`).join(", "));
     check("Ida 2026: achou as duas provas do evento", JSON.stringify(ida.provas) === "[1,2]", `provas ${ida.provas.join(", ")}`);
-    check("Ida 2026: importa sem nenhum aviso", ida.avisos.length === 0,
-      ida.avisos.length ? ida.avisos.map(a => a.mensagem).join(" | ") : "planilha limpa");
+    // O aviso `competidor_sem_participacao` é INFORMATIVO e existe de propósito
+    // nesta planilha (Deputado/David e Mineirinho/Davi Vera estão 0,0 nas duas
+    // provas). Ele não é "dado torto" — por isso sai da conta de planilha limpa.
+    const avisosDeProblema = ida.avisos.filter(a => a.tipo !== "competidor_sem_participacao");
+    check("Ida 2026: importa sem nenhum aviso de problema", avisosDeProblema.length === 0,
+      avisosDeProblema.length ? avisosDeProblema.map(a => a.mensagem).join(" | ") : "planilha limpa");
 
     const moto = ida.resultados.filter(r => r.categoria === "MOTO GRADUADO");
     check("Ida 2026: categoria só de moto funciona sem navegador",
@@ -1067,6 +1110,174 @@ async function main() {
         const s = conciliarNomes({ novos: ["Paulo Gallina"], existentes: ["Paulo Caixa"] });
         return s.automaticos.length === 0 && (s.duvidas.length === 1 || s.ineditos.length === 1);
       })(), "dois Paulos diferentes nunca são fundidos sem resposta humana");
+  }
+
+  // ====================== 6b. categoria na conciliação (incidente do "lucas")
+  //
+  // O caso real: a aba CARRO MASTER do Volta 2026 tem uma linha de lixo chamada
+  // "lucas", zerada nas 3 provas. Ela foi conciliada com "Lucas Car Rio", que é
+  // da CARRO RALLY, e o Lucas Car Rio apareceu no pódio da Master com 0 ponto.
+  //
+  // O conserto NÃO é bloquear cruzamento de categoria: o regulamento promove o
+  // vencedor de categoria entre eventos, e a dupla "Paulo"/"Fabricio" faz isso de
+  // verdade (Carros Graduado no Amigo, Carros Master no Cavalo). O conserto é o
+  // par cruzado nunca liderar a fila e NUNCA ser aceito pelo botão de lote.
+  console.log("\n--- categoria na conciliação");
+
+  const abasVolta = lerAbas(PLANILHA_VOLTA);
+
+  if (!abasVolta || !abasIda) {
+    console.log(`PULADO | preciso do Ida 2026 e do Volta 2026 (${PLANILHA_VOLTA})`);
+  } else {
+    const volta = importarPlanilhaCampeonato(abasVolta);
+    const ida = importarPlanilhaCampeonato(abasIda);
+
+    // Ida já gravado; Volta chegando agora — a ordem real das importações.
+    const s = conciliarNomes({
+      novos: competidoresDe(volta.resultados),
+      existentes: competidoresDe(ida.resultados),
+      dicasNovos: dicasDe(volta.resultados),
+      dicasExistentes: dicasDe(ida.resultados),
+    });
+
+    const lucas = s.duvidas.find(d => d.novo === "lucas");
+    const carRio = lucas?.candidatos.find(c => c.nome === "Lucas Car Rio");
+    check("'lucas'(CARRO MASTER) x 'Lucas Car Rio'(CARRO RALLY): oferecido, mas marcado como outra categoria",
+      !!carRio && carRio.categoriaDiferente === true && carRio.categoria === "CARRO RALLY" &&
+      lucas!.categoria === "CARRO MASTER",
+      lucas ? `categoria da dúvida=${lucas.categoria}; candidatos: ${lucas.candidatos.map(c => `${c.nome}[${c.categoria}]${c.categoriaDiferente ? " (outra cat.)" : ""}`).join(", ")}` : "não virou dúvida");
+
+    check("'lucas' NUNCA é aceito pelo botão de lote — foi assim que ele virou piloto da Master",
+      !("lucas" in aceitarEmLote(s)),
+      `lote resolveu ${Object.keys(aceitarEmLote(s)).length} dúvida(s), nenhuma delas o "lucas"`);
+
+    check("'lucas' também não é resolvido sozinho (nem exato, nem alias)",
+      !s.automaticos.some(a => a.novo === "lucas"), "continua exigindo resposta individual");
+
+    // Candidato da MESMA categoria sempre na frente, mesmo empatando na semelhança.
+    const ordenado = conciliarNomes({
+      novos: [{ nome: "lucas", categoria: "CARRO MASTER", papel: "pilot" }],
+      existentes: [
+        { nome: "Lucas Car Rio", categoria: "CARRO RALLY", papel: "pilot" },
+        { nome: "Lucas Andrade", categoria: "Carros Master", papel: "pilot" },
+      ],
+    });
+    check("candidato da MESMA categoria vem na frente do de outra categoria",
+      ordenado.duvidas[0]?.candidatos[0]?.nome === "Lucas Andrade" &&
+      ordenado.duvidas[0]?.candidatos[0]?.categoriaDiferente === false,
+      ordenado.duvidas[0]?.candidatos.map(c => `${c.nome}${c.categoriaDiferente ? "(outra)" : "(mesma)"}`).join(" > ") || "sem dúvida");
+
+    // Caso LEGÍTIMO de troca de categoria: continua possível de conciliar à mão.
+    const promovido = conciliarNomes({
+      novos: [{ nome: "Paulo Gallina", categoria: "Carros Master", papel: "pilot" }],
+      existentes: [{ nome: "Paulo", categoria: "CARRO GRADUADO", papel: "pilot" }],
+    });
+    check("promoção de categoria (Paulo Gallina: Graduado -> Master) segue conciliável à mão",
+      promovido.duvidas[0]?.candidatos[0]?.nome === "Paulo" &&
+      promovido.duvidas[0]?.candidatos[0]?.categoriaDiferente === true,
+      promovido.duvidas.length ? "oferecido com aviso de categoria" : "sumiu (ERRADO — o regulamento promove o vencedor)");
+
+    // PAPEL, esse sim, é trava dura.
+    const papelCruzado = conciliarNomes({
+      novos: [{ nome: "Marcelo Borsatto", categoria: "CARRO TURISMO", papel: "pilot" }],
+      existentes: [{ nome: "Marcelo", categoria: "CARRO TURISMO", papel: "navigator" }],
+    });
+    check("papel continua sendo trava DURA: piloto não vira candidato de navegador",
+      papelCruzado.duvidas.length === 0 && papelCruzado.ineditos.includes("Marcelo Borsatto"),
+      papelCruzado.duvidas.length ? "virou dúvida (ERRADO)" : "entra como inédito");
+
+    // ---- Benê x Benedito Lopes: o apelido só liga pelo e-mail, e a grafia da
+    // categoria ("CARRO MASTER" x "Carros Master") é a mesma depois de normalizada.
+    const bene = conciliarNomes({
+      novos: [{ nome: "Benedito Lopes", categoria: "Carros Master", papel: "pilot" }],
+      existentes: [{ nome: "Benê", categoria: "CARRO MASTER", papel: "pilot" }],
+      dicasNovos: [{ nome: "Benedito Lopes", emailNorm: "ditocolin@hotmail.com", papel: "pilot", categoria: "Carros Master" }],
+      dicasExistentes: [{ nome: "Benê", emailNorm: "ditocolin@hotmail.com", papel: "pilot", categoria: "CARRO MASTER" }],
+    });
+    const candidatoBene = bene.duvidas[0]?.candidatos[0];
+    check("'Benê'(CARRO MASTER) x 'Benedito Lopes'(Carros Master): casa e lidera — a grafia unificada é a MESMA categoria",
+      candidatoBene?.nome === "Benê" && candidatoBene.mesmoEmail === true && candidatoBene.categoriaDiferente === false,
+      candidatoBene ? `${candidatoBene.nome} email=${candidatoBene.mesmoEmail} outraCat=${candidatoBene.categoriaDiferente}` : "não virou dúvida");
+
+    check("o mesmo 'Benê' em categoria de VERDADE diferente já vem marcado (e o lote não aceita)",
+      (() => {
+        const outra = conciliarNomes({
+          novos: [{ nome: "Benedito Lopes", categoria: "Carros Master", papel: "pilot" }],
+          existentes: [{ nome: "Benê", categoria: "CARRO TURISMO", papel: "pilot" }],
+          dicasNovos: [{ nome: "Benedito Lopes", emailNorm: "ditocolin@hotmail.com", papel: "pilot", categoria: "Carros Master" }],
+          dicasExistentes: [{ nome: "Benê", emailNorm: "ditocolin@hotmail.com", papel: "pilot", categoria: "CARRO TURISMO" }],
+        });
+        return outra.duvidas[0]?.candidatos[0]?.categoriaDiferente === true &&
+          !("Benedito Lopes" in aceitarEmLote(outra));
+      })(),
+      "mesmo com e-mail igual, categoria diferente não é promovida nem aceita no lote");
+
+    // ---- competidor zerado no arquivo inteiro
+    const zerados = volta.semParticipacao;
+    check("Volta 2026: 'lucas' aparece em semParticipacao (0 nas 3 provas)",
+      zerados.some(c => c.nome === "lucas" && c.categoria === "CARRO MASTER" && c.papel === "pilot"),
+      zerados.map(c => `${c.nome}(${c.categoria})`).join(", ") || "lista vazia");
+
+    // A prova de que a lista é INFORMATIVA: a dupla que o organizador QUER ver
+    // com 0 aparece nela do mesmo jeito — e continua sendo importada.
+    const zeradosIda = ida.semParticipacao;
+    check("Ida 2026: 'Deputado' e 'David' (0,0 nas duas provas) também aparecem — a lista não apaga ninguém",
+      zeradosIda.some(c => c.nome === "Deputado") && zeradosIda.some(c => c.nome === "David") &&
+      ida.resultados.some(r => r.pilotName === "Deputado"),
+      zeradosIda.map(c => c.nome).join(", "));
+
+    check("competidor_sem_participacao sai como aviso com nome, categoria e explicação em PT-BR",
+      volta.avisos.some(a =>
+        a.tipo === "competidor_sem_participacao" &&
+        a.mensagem.includes("lucas") && a.mensagem.includes("CARRO MASTER") && a.categoria === "CARRO MASTER"),
+      volta.avisos.find(a => a.tipo === "competidor_sem_participacao")?.mensagem || "nenhum aviso");
+
+    check("quem pontuou em ALGUMA prova nunca entra em semParticipacao",
+      !zerados.some(c => c.nome === "Lucas Car Rio" || c.nome === "Cavalo"),
+      `${zerados.length} zerado(s) no Volta`);
+
+    // ---- exclusão: só sai quem foi marcado, e a dupla do lado não vai junto
+    const semLucas = aplicarExclusoes(volta.resultados, [{ nome: "lucas", categoria: "CARRO MASTER" }]);
+    check("excluir 'lucas' tira só ele — o resto da CARRO MASTER fica inteiro",
+      !semLucas.some(r => r.pilotName === "lucas") &&
+      semLucas.filter(r => r.categoria === "CARRO MASTER").length ===
+        volta.resultados.filter(r => r.categoria === "CARRO MASTER").length - 3 &&
+      semLucas.some(r => r.pilotName === "Zé do Café" && r.navigatorName === "Vado"),
+      `${volta.resultados.length} -> ${semLucas.length} linhas`);
+
+    check("excluir alguém de OUTRA categoria não encosta no homônimo",
+      aplicarExclusoes(volta.resultados, [{ nome: "lucas", categoria: "CARRO RALLY" }])
+        .some(r => r.pilotName === "lucas"),
+      "a chave da exclusão é (nome, categoria)");
+
+    // ---- mapa de categorias: unifica a grafia sem fundir categoria diferente
+    const unificado = aplicarMapaCategorias(volta.resultados, [{ de: "CARRO MASTER", para: "Carros Master" }]);
+    check("mapaCategorias funde 'CARRO MASTER' -> 'Carros Master' sem tocar em 'CARRO RALLY'",
+      !unificado.some(r => r.categoria === "CARRO MASTER") &&
+      unificado.filter(r => r.categoria === "Carros Master").length ===
+        volta.resultados.filter(r => r.categoria === "CARRO MASTER").length &&
+      unificado.filter(r => r.categoria === "CARRO RALLY").length ===
+        volta.resultados.filter(r => r.categoria === "CARRO RALLY").length,
+      `${unificado.filter(r => r.categoria === "Carros Master").length} linhas na Carros Master, ` +
+      `${unificado.filter(r => r.categoria === "CARRO RALLY").length} intactas na CARRO RALLY`);
+
+    check("mapaCategorias casa pela chave normalizada (aceita a grafia da planilha em qualquer caixa/plural)",
+      aplicarMapaCategorias(volta.resultados, [{ de: "Carros Master", para: "Carros Master" }])
+        .every(r => r.categoria !== "CARRO MASTER"),
+      "'Carros Master' no `de` acha a 'CARRO MASTER' da planilha");
+
+    check("categoria fora do mapa nunca é renomeada",
+      aplicarMapaCategorias(volta.resultados, []).every((r, i) => r.categoria === volta.resultados[i].categoria),
+      "mapa vazio = nada muda");
+
+    // O efeito de ponta a ponta: com a grafia unificada, o Volta e o Cavalo caem
+    // na MESMA categoria — é o que faz o rally do cavalo voltar a pontuar.
+    check("grafia unificada faz Volta e Cavalo caírem na mesma classificação",
+      chaveCategoria("CARRO MASTER") === chaveCategoria("Carros Master") &&
+      chaveCategoria("MOTO GRADUADO") === chaveCategoria("Motos Graduado") &&
+      chaveCategoria("CARRO TURISMO") === chaveCategoria("Carros Turismo") &&
+      chaveCategoria("CARRO RALLY") !== chaveCategoria("Carros Light"),
+      "5 pares unificados; CARRO RALLY e Carros Light seguem separadas");
   }
 
   // =============================================================== 7. nomes

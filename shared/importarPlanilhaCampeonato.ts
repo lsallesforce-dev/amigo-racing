@@ -69,7 +69,8 @@ export type TipoAviso =
   | "valor_nao_reconhecido"
   | "posicao_duplicada"
   | "buraco_na_sequencia"
-  | "categoria_divergente";
+  | "categoria_divergente"
+  | "competidor_sem_participacao";
 
 export interface Aviso {
   tipo: TipoAviso;
@@ -93,6 +94,13 @@ export interface ResumoAba {
   etapas: number[];
 }
 
+/** Um competidor identificado dentro do arquivo: nome + onde ele corre. */
+export interface CompetidorDoArquivo {
+  nome: string;
+  categoria: string;
+  papel: "pilot" | "navigator";
+}
+
 export interface ResultadoImportacao {
   /**
    * Números de PROVA achados no cabeçalho (o N de cada "ETAPA-N"), em ordem.
@@ -102,6 +110,18 @@ export interface ResultadoImportacao {
   resultados: ResultadoImportado[];
   avisos: Aviso[];
   abas: ResumoAba[];
+  /**
+   * Competidores que ficaram DNS em TODAS as provas do arquivo — não pontuaram
+   * em prova nenhuma.
+   *
+   * ⚠️ Isto é INFORMATIVO. Não apague ninguém sozinho: o organizador decidiu
+   * explicitamente que ausente aparece com 0 (a dupla "Deputado"/"David" está
+   * 0,0 nas duas provas do Ida e ele QUER que apareça na tabela). Quem some da
+   * importação é só quem ele marcar na tela (ver `excluir`, no importWorkbook).
+   * A lista existe porque o caso oposto também é real: a linha de lixo "lucas"
+   * na aba CARRO MASTER passou batida justamente por estar zerada.
+   */
+  semParticipacao: CompetidorDoArquivo[];
 }
 
 export interface OpcoesImportacao {
@@ -217,7 +237,18 @@ function texto(valor: CelulaPlanilha): string {
 
 /**
  * Chave de comparação de categoria: ignora acento, caixa e plural — é o que
- * permite ver que "CARRO MASTER" e "Carros Master" são a mesma coisa.
+ * permite ver que "CARRO MASTER" (digitado à mão no Ida/Volta) e "Carros Master"
+ * (saído da plataforma, no Cavalo) são a mesma coisa. Sem isso o organizador
+ * ficou com 12 categorias onde deviam ser 7, cada piloto com metade dos pontos
+ * em cada metade — foi o que fez ele dizer que "o rally do cavalo não pontuou
+ * pra ninguém".
+ *
+ * O despluralizador é de propósito CONSERVADOR: só corta o "S" final de palavra
+ * com mais de 3 letras. "CARROS"->"CARRO" e "MOTOS"->"MOTO" casam; "CARRO RALLY"
+ * e "Carros Light", que só existem de um lado, continuam com chave própria e NÃO
+ * se fundem com nada. Não deixe isso ficar mais agressivo (radical/prefixo/
+ * distância de edição): fundir categoria errada é pior que deixar duas
+ * separadas, porque some com uma classificação inteira.
  */
 export function chaveCategoria(nome: string): string {
   return semAcento(String(nome || ""))
@@ -227,6 +258,109 @@ export function chaveCategoria(nome: string): string {
     .filter(Boolean)
     .map(p => (p.length > 3 && p.endsWith("S") ? p.slice(0, -1) : p))
     .join(" ");
+}
+
+/**
+ * Chave de identidade de um NOME dentro do arquivo (sem acento, sem caixa, sem
+ * espaço sobrando).
+ *
+ * Existe aqui, e não reusa a `normalizarNome` de `shared/nomesCampeonato.ts`, só
+ * para não criar import circular: nomesCampeonato importa a `chaveCategoria`
+ * daqui, então a dependência é de mão única.
+ */
+function chaveNome(nome: string | null | undefined): string {
+  return semAcento(String(nome ?? ""))
+    .toUpperCase()
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+// ------------------------------------------------- correções pedidas na tela
+//
+// As duas funções abaixo aplicam, sobre o que o parser leu, o que o organizador
+// respondeu no passo de Conferência do wizard. São puras de propósito — o
+// importWorkbook chama as duas ANTES de gravar, e o check roda as duas sem banco.
+
+/** Competidor que o organizador marcou para NÃO importar. */
+export interface ExclusaoCompetidor {
+  nome: string;
+  categoria: string;
+}
+
+/**
+ * Tira da importação os competidores marcados na tela.
+ *
+ * A linha da planilha é uma DUPLA, então excluir só o piloto não pode levar o
+ * navegador junto: some o nome excluído e a linha continua com o parceiro. Só
+ * quando os dois lados somem é que a linha inteira sai.
+ *
+ * Roda ANTES do `aplicarMapaCategorias`: o organizador marcou a caixa olhando a
+ * categoria como está NA PLANILHA, não a categoria de destino.
+ */
+export function aplicarExclusoes(
+  resultados: ResultadoImportado[],
+  // Aceita a forma frouxa (campo ausente/null) porque a lista chega crua do
+  // input do tRPC; tudo é coagido para string aqui dentro.
+  excluir: Partial<ExclusaoCompetidor>[] | null | undefined,
+): ResultadoImportado[] {
+  const alvos = new Set(
+    (excluir || [])
+      .map(e => `${chaveNome(e?.nome)}|${chaveCategoria(String(e?.categoria ?? ""))}`)
+      .filter(k => !k.startsWith("|")),
+  );
+  if (alvos.size === 0) return resultados;
+
+  const excluido = (nome: string | null, categoria: string) =>
+    !!nome && alvos.has(`${chaveNome(nome)}|${chaveCategoria(categoria)}`);
+
+  const saida: ResultadoImportado[] = [];
+  for (const r of resultados) {
+    const pilotName = excluido(r.pilotName, r.categoria) ? null : r.pilotName;
+    const navigatorName = excluido(r.navigatorName, r.categoria) ? null : r.navigatorName;
+    if (!pilotName && !navigatorName) continue; // a dupla inteira foi excluída
+    saida.push({
+      ...r,
+      pilotName,
+      navigatorName,
+      pilotEmail: pilotName ? r.pilotEmail : null,
+      navigatorEmail: navigatorName ? r.navigatorEmail : null,
+    });
+  }
+  return saida;
+}
+
+/** "A planilha traz X; o campeonato já tem Y" — a escolha que o organizador fez. */
+export interface MapaCategoria {
+  de: string;
+  para: string;
+}
+
+/**
+ * Renomeia categorias antes de gravar, unificando a grafia divergente.
+ *
+ * O casamento do `de` é pela `chaveCategoria`, não pela string crua: o aviso
+ * saiu com a grafia da planilha, e essa é a mesma chave que o parser usou para
+ * detectar a divergência. Categoria que não está no mapa não é tocada — é o que
+ * garante que unificar "CARRO MASTER" -> "Carros Master" não encosta na
+ * "CARRO RALLY".
+ */
+export function aplicarMapaCategorias(
+  resultados: ResultadoImportado[],
+  mapa: Partial<MapaCategoria>[] | null | undefined,
+): ResultadoImportado[] {
+  const porChave = new Map<string, string>();
+  for (const m of mapa || []) {
+    const de = chaveCategoria(String(m?.de ?? ""));
+    const para = texto(m?.para);
+    if (!de || !para) continue;
+    porChave.set(de, para);
+  }
+  if (porChave.size === 0) return resultados;
+
+  return resultados.map(r => {
+    const destino = porChave.get(chaveCategoria(r.categoria));
+    return destino ? { ...r, categoria: destino } : r;
+  });
 }
 
 // ------------------------------------------------------------------ células
@@ -670,6 +804,45 @@ export function importarPlanilhaCampeonato(
   categoriasVistas.forEach(c => registrar(c, "daPlanilha"));
   (opcoes.categoriasConhecidas || []).forEach(c => registrar(c, "conhecidas"));
 
+  // Competidor que ficou DNS em TODAS as provas do ARQUIVO. Zerado numa prova é
+  // normal (faltou àquela); zerado no arquivo inteiro é quase sempre linha
+  // esquecida na planilha — foi assim que a linha "lucas" entrou na CARRO MASTER
+  // e foi parar no pódio. Sai como AVISO + lista; quem apaga é o organizador.
+  const participacao = new Map<string, CompetidorDoArquivo & { participou: boolean; aba: string; linha: number }>();
+  const anotar = (nome: string | null, categoria: string, papel: "pilot" | "navigator", r: ResultadoImportado) => {
+    const limpo = texto(nome);
+    if (!limpo) return;
+    const chave = `${papel}|${chaveCategoria(categoria)}|${chaveNome(limpo)}`;
+    const atual = participacao.get(chave);
+    // DSQ conta como participação: ele largou e não pontuou, é resultado de prova.
+    const participou = !r.isDns;
+    if (!atual) {
+      participacao.set(chave, { nome: limpo, categoria, papel, participou, aba: r.aba, linha: r.linha });
+      return;
+    }
+    atual.participou = atual.participou || participou;
+  };
+  for (const r of resultados) {
+    anotar(r.pilotName, r.categoria, "pilot", r);
+    anotar(r.navigatorName, r.categoria, "navigator", r);
+  }
+
+  const semParticipacao: CompetidorDoArquivo[] = [];
+  for (const c of participacao.values()) {
+    if (c.participou) continue;
+    semParticipacao.push({ nome: c.nome, categoria: c.categoria, papel: c.papel });
+    avisos.push({
+      tipo: "competidor_sem_participacao",
+      aba: c.aba,
+      linha: c.linha,
+      categoria: c.categoria,
+      mensagem:
+        `"${c.nome}" (${c.papel === "pilot" ? "piloto" : "navegador"}, ${c.categoria}) não pontuou em nenhuma ` +
+        `das ${provasVistas.size} prova(s) deste arquivo. Confira se não é linha esquecida na planilha — ` +
+        `se ele realmente correu e ficou de fora, deixe importar normalmente.`,
+    });
+  }
+
   for (const grupo of porChave.values()) {
     const conhecidaIgual = grupo.conhecidas.find(c => grupo.daPlanilha.includes(c));
     for (const daPlanilha of grupo.daPlanilha) {
@@ -692,5 +865,6 @@ export function importarPlanilhaCampeonato(
     resultados,
     avisos,
     abas: resumoAbas,
+    semParticipacao,
   };
 }

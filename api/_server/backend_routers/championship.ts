@@ -29,9 +29,12 @@ import {
     importarPlanilhaCampeonato,
     normalizarCabecalho,
     planejarProvas,
+    aplicarExclusoes,
+    aplicarMapaCategorias,
     type AbaPlanilha,
     type CelulaPlanilha,
     type ProvaExistente,
+    type ResultadoImportado,
 } from "../../../shared/importarPlanilhaCampeonato.js";
 import {
     normalizarNome,
@@ -40,6 +43,7 @@ import {
     sugerirUnificacoes,
     type DecisaoAlias,
     type DicaEmail,
+    type NomeConciliavel,
 } from "../../../shared/nomesCampeonato.js";
 
 type Banco = NonNullable<Awaited<ReturnType<typeof getDb>>>;
@@ -150,16 +154,31 @@ async function carregarResultados(db: Banco, stageIds: number[]) {
 
 const limparNome = (nome: string | null | undefined) => String(nome ?? "").replace(/\s+/g, " ").trim();
 
-/** Nomes distintos já gravados no campeonato (piloto + navegador, sem o lixo do importador antigo). */
-function nomesDosResultados(linhas: { pilotName: string | null; navigatorName: string | null }[]): string[] {
+/**
+ * Os competidores já gravados, com a CATEGORIA e o PAPEL de cada um — é o que a
+ * conciliação precisa para escopar por papel (trava dura) e ranquear por
+ * categoria. Uma entrada por (nome, categoria, papel): quem corre em duas
+ * categorias aparece duas vezes, de propósito.
+ */
+function competidoresDosResultados(
+    linhas: { category: string | null; pilotName: string | null; navigatorName: string | null }[],
+): NomeConciliavel[] {
     const vistos = new Set<string>();
+    const saida: NomeConciliavel[] = [];
+    const juntar = (bruto: string | null, categoria: string, papel: "pilot" | "navigator") => {
+        if (!nomeDeCompetidorValido(bruto)) return;
+        const nome = limparNome(bruto);
+        const chave = `${nome}|${categoria}|${papel}`;
+        if (vistos.has(chave)) return;
+        vistos.add(chave);
+        saida.push({ nome, categoria, papel });
+    };
     for (const r of linhas) {
-        for (const bruto of [r.pilotName, r.navigatorName]) {
-            if (!nomeDeCompetidorValido(bruto)) continue;
-            vistos.add(limparNome(bruto));
-        }
+        const categoria = limparNome(r.category);
+        juntar(r.pilotName, categoria, "pilot");
+        juntar(r.navigatorName, categoria, "navigator");
     }
-    return [...vistos].sort((a, b) => a.localeCompare(b, "pt-BR"));
+    return saida;
 }
 
 function categoriasDosResultados(linhas: { category: string | null }[]): string[] {
@@ -263,16 +282,29 @@ async function carregarDecisoes(db: Banco, championshipId: number): Promise<Deci
     }));
 }
 
-/** Nomes distintos que a planilha trouxe (piloto + navegador). */
-function nomesDaPlanilha(resultados: { pilotName: string | null; navigatorName: string | null }[]): string[] {
+/**
+ * Os competidores que a planilha trouxe, com categoria e papel — a contraparte
+ * de `competidoresDosResultados` do lado do arquivo.
+ */
+function competidoresDaPlanilha(
+    resultados: { categoria: string; pilotName: string | null; navigatorName: string | null }[],
+): NomeConciliavel[] {
     const vistos = new Set<string>();
+    const saida: NomeConciliavel[] = [];
+    const juntar = (bruto: string | null, categoria: string, papel: "pilot" | "navigator") => {
+        const nome = limparNome(bruto);
+        if (!nome || !nomeDeCompetidorValido(nome)) return;
+        const chave = `${nome}|${categoria}|${papel}`;
+        if (vistos.has(chave)) return;
+        vistos.add(chave);
+        saida.push({ nome, categoria, papel });
+    };
     for (const r of resultados) {
-        for (const bruto of [r.pilotName, r.navigatorName]) {
-            const nome = limparNome(bruto);
-            if (nome && nomeDeCompetidorValido(nome)) vistos.add(nome);
-        }
+        const categoria = limparNome(r.categoria);
+        juntar(r.pilotName, categoria, "pilot");
+        juntar(r.navigatorName, categoria, "navigator");
     }
-    return [...vistos];
+    return saida;
 }
 
 // ------------------------------------------------------------------ evento x prova
@@ -345,23 +377,26 @@ function agruparPorEvento(etapas: EtapaComEvento[]) {
  * sozinho — só sugere, e só dentro do mesmo papel.
  */
 function dicasDaPlanilha(
-    resultados: { pilotName: string | null; navigatorName: string | null; pilotEmail: string | null; navigatorEmail: string | null }[],
+    resultados: { categoria?: string | null; pilotName: string | null; navigatorName: string | null; pilotEmail: string | null; navigatorEmail: string | null }[],
 ): DicaEmail[] {
     const vistos = new Set<string>();
     const dicas: DicaEmail[] = [];
-    const juntar = (nome: string | null, email: string | null, papel: "pilot" | "navigator") => {
+    const juntar = (nome: string | null, email: string | null, papel: "pilot" | "navigator", categoria: string | null) => {
         const limpo = limparNome(nome);
         if (!limpo || !nomeDeCompetidorValido(limpo)) return;
         const emailNorm = normalizarEmail(email);
         if (!emailNorm) return;
-        const chave = `${limpo}|${emailNorm}|${papel}`;
+        const chave = `${limpo}|${emailNorm}|${papel}|${categoria || ""}`;
         if (vistos.has(chave)) return;
         vistos.add(chave);
-        dicas.push({ nome: limpo, emailNorm, papel });
+        dicas.push({ nome: limpo, emailNorm, papel, categoria });
     };
     for (const r of resultados) {
-        juntar(r.pilotName, r.pilotEmail, "pilot");
-        juntar(r.navigatorName, r.navigatorEmail, "navigator");
+        // A categoria vai junto porque a dica de e-mail é ranqueada por categoria
+        // do mesmo jeito que os candidatos de texto (ver conciliarNomes).
+        const categoria = limparNome(r.categoria) || null;
+        juntar(r.pilotName, r.pilotEmail, "pilot", categoria);
+        juntar(r.navigatorName, r.navigatorEmail, "navigator", categoria);
     }
     return dicas;
 }
@@ -1297,14 +1332,14 @@ export const championshipRouter = router({
             const jaGravados = await carregarResultados(db, etapasBanco.map(s => s.id));
 
             const categoriasExistentes = categoriasDosResultados(jaGravados);
-            const nomesExistentes = nomesDosResultados(jaGravados);
+            const competidoresExistentes = competidoresDosResultados(jaGravados);
 
             const abas = await lerAbasDaPlanilha(input.arquivoBase64);
             const parse = importarPlanilhaCampeonato(abas, { categoriasConhecidas: categoriasExistentes });
 
             const conciliacao = conciliarNomes({
-                novos: nomesDaPlanilha(parse.resultados),
-                existentes: nomesExistentes,
+                novos: competidoresDaPlanilha(parse.resultados),
+                existentes: competidoresExistentes,
                 decisoes: await carregarDecisoes(db, input.championshipId),
                 dicasNovos: dicasDaPlanilha(parse.resultados),
                 dicasExistentes: await carregarDicasEmail(db, input.championshipId),
@@ -1348,6 +1383,10 @@ export const championshipRouter = router({
                 provas,
                 abas: parse.abas,
                 avisos: parse.avisos,
+                // Competidores zerados no arquivo inteiro. Vão para a tela como
+                // LISTA com caixa de seleção (desmarcada), nunca como exclusão
+                // automática — ausente com 0 é decisão do organizador.
+                semParticipacao: parse.semParticipacao,
                 conciliacao,
                 eventosDoCampeonato: agruparPorEvento(etapasBanco),
                 eventosDaPlataforma,
@@ -1390,6 +1429,26 @@ export const championshipRouter = router({
              * (evento, provaNumber) reaproveita a prova já criada).
              */
             provas: z.array(z.number().int()).optional(),
+            /**
+             * Unificação de grafia de categoria escolhida na Conferência:
+             * "a planilha traz CARRO MASTER, o campeonato já tem Carros Master".
+             * Aplicado ANTES de gravar — é o que impede a mesma categoria virar
+             * duas classificações com metade dos pontos cada.
+             */
+            mapaCategorias: z.array(z.object({
+                de: z.string(),
+                para: z.string(),
+            })).default([]),
+            /**
+             * Competidores que o organizador marcou para NÃO importar (linha
+             * esquecida na planilha). Vazio por padrão: quem não foi marcado
+             * entra, inclusive quem ficou 0 em tudo — ausente aparecer com 0 é
+             * decisão dele.
+             */
+            excluir: z.array(z.object({
+                nome: z.string(),
+                categoria: z.string(),
+            })).default([]),
         }))
         .mutation(async ({ input, ctx }) => {
             const db = await conectar();
@@ -1423,7 +1482,7 @@ export const championshipRouter = router({
             const etapasBanco = await carregarEtapas(db, input.championshipId);
             const jaGravados = await carregarResultados(db, etapasBanco.map(s => s.id));
             const categoriasExistentes = categoriasDosResultados(jaGravados);
-            const nomesExistentes = nomesDosResultados(jaGravados);
+            const competidoresExistentes = competidoresDosResultados(jaGravados);
 
             const abas = await lerAbasDaPlanilha(input.arquivoBase64);
             const parse = importarPlanilhaCampeonato(abas, { categoriasConhecidas: categoriasExistentes });
@@ -1440,9 +1499,19 @@ export const championshipRouter = router({
                 });
             }
             const provasImportadas = pedidas.length > 0 ? parse.provas.filter(p => pedidas.includes(p)) : [...parse.provas];
-            const resultadosSelecionados = parse.resultados.filter(r => provasImportadas.includes(r.provaNumber));
 
-            const novos = nomesDaPlanilha(resultadosSelecionados);
+            // ---- 2b) As correções que o organizador fez na Conferência.
+            // A ORDEM importa: ele marcou a caixa de exclusão olhando a categoria
+            // como está NA PLANILHA, então excluir vem antes de renomear.
+            const resultadosSelecionados: ResultadoImportado[] = aplicarMapaCategorias(
+                aplicarExclusoes(
+                    parse.resultados.filter(r => provasImportadas.includes(r.provaNumber)),
+                    input.excluir,
+                ),
+                input.mapaCategorias,
+            );
+
+            const novos = competidoresDaPlanilha(resultadosSelecionados);
 
             const decisoesGravadas = await carregarDecisoes(db, input.championshipId);
             const dicasNovos = dicasDaPlanilha(resultadosSelecionados);
@@ -1454,7 +1523,7 @@ export const championshipRouter = router({
             // isso o popup voltaria na planilha seguinte.
             const duvidasOferecidas = conciliarNomes({
                 novos,
-                existentes: nomesExistentes,
+                existentes: competidoresExistentes,
                 decisoes: decisoesGravadas,
                 dicasNovos,
                 dicasExistentes,
@@ -1479,7 +1548,7 @@ export const championshipRouter = router({
 
             const conciliacao = conciliarNomes({
                 novos,
-                existentes: nomesExistentes,
+                existentes: competidoresExistentes,
                 decisoes: [...decisoesGravadas, ...novasDecisoes],
                 dicasNovos,
                 dicasExistentes,

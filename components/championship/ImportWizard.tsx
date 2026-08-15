@@ -84,12 +84,25 @@ export interface CandidatoConciliacao {
    *  nestas planilhas o e-mail é da DUPLA, não da pessoa (piloto e navegador dividem
    *  o mesmo contato). Continua exigindo confirmação humana. */
   mesmoEmail: boolean;
+  /** O candidato corre em OUTRA categoria. Pode ser legítimo (o regulamento
+   *  promove o vencedor de categoria entre eventos), mas exige olho humano —
+   *  os botões de LOTE nunca aceitam um destes. */
+  categoriaDiferente: boolean;
+  categoria: string | null;
 }
 
 export interface DuvidaConciliacao {
   novo: string;
   papel: "pilot" | "navigator" | null;
+  categoria: string | null;
   candidatos: CandidatoConciliacao[];
+}
+
+/** Competidor que ficou 0 em TODAS as provas do arquivo. */
+export interface CompetidorSemParticipacao {
+  nome: string;
+  categoria: string;
+  papel: "pilot" | "navigator";
 }
 
 export interface ProvaPrevia {
@@ -115,6 +128,7 @@ export interface PreviaImportacao {
   provas: ProvaPrevia[];
   abas: ResumoAba[];
   avisos: Aviso[];
+  semParticipacao: CompetidorSemParticipacao[];
   conciliacao: {
     automaticos: { novo: string; canonico: string; motivo: string }[];
     duvidas: DuvidaConciliacao[];
@@ -209,6 +223,13 @@ export default function ImportWizard({ championshipId, open, onOpenChange, onImp
   const [provasSelecionadas, setProvasSelecionadas] = useState<Set<number>>(new Set());
   const [respostas, setRespostas] = useState<Respostas>({});
   const [automaticosAbertos, setAutomaticosAbertos] = useState(false);
+  // Competidores marcados para NÃO importar, por `${categoria}|${nome}`.
+  // Começa VAZIO: por padrão importa todo mundo, inclusive quem ficou 0 em tudo.
+  const [excluidos, setExcluidos] = useState<Set<string>>(new Set());
+  // Grafia de categoria escolhida: chave = categoria como veio na planilha,
+  // valor = nome a gravar. Pré-preenchido com a categoria que já existe no
+  // campeonato, que é o que evita partir a classificação em duas.
+  const [grafiaCategoria, setGrafiaCategoria] = useState<Record<string, string>>({});
 
   const previewMutation = trpc.championships.previewImport.useMutation();
   const importMutation = trpc.championships.importWorkbook.useMutation();
@@ -216,12 +237,49 @@ export default function ImportWizard({ championshipId, open, onOpenChange, onImp
   const duvidas = previa?.conciliacao?.duvidas || [];
   const temDuvidas = duvidas.length > 0;
 
+  const chaveCompetidor = (c: { nome: string; categoria: string }) => `${c.categoria}|${c.nome}`;
+  const semParticipacao = previa?.semParticipacao || [];
+
+  // Divergências de grafia que dá para RESOLVER aqui: a sugestão do parser é uma
+  // categoria que o campeonato JÁ TEM. Divergência interna ao arquivo (os dois
+  // lados novos) continua saindo só como aviso — não dá para chamar nenhum dos
+  // dois de "a existente", e fundir no chute é pior que deixar separado.
+  const divergenciasResolviveis = useMemo(() => {
+    if (!previa) return [];
+    const existentes = new Set(previa.categoriasExistentes);
+    const vistas = new Set<string>();
+    return previa.avisos
+      .filter(a => a.tipo === "categoria_divergente" && a.categoria && a.sugestao && existentes.has(a.sugestao))
+      .filter(a => {
+        if (vistas.has(a.categoria!)) return false;
+        vistas.add(a.categoria!);
+        return true;
+      })
+      .map(a => ({ daPlanilha: a.categoria!, existente: a.sugestao! }));
+  }, [previa]);
+
+  // O que sobra para a lista genérica de avisos: o que virou escolha explícita
+  // (grafia de categoria) ou lista com caixa de seleção (competidor zerado) não
+  // se repete ali embaixo.
+  const avisosRestantes = useMemo(() => {
+    if (!previa) return [];
+    const resolvidas = new Set(divergenciasResolviveis.map(d => d.daPlanilha));
+    return previa.avisos.filter(a => {
+      if (a.tipo === "competidor_sem_participacao") return false;
+      if (a.tipo === "categoria_divergente" && a.categoria && resolvidas.has(a.categoria)) return false;
+      return true;
+    });
+  }, [previa, divergenciasResolviveis]);
+
   // Sem dúvida nenhuma o passo de conciliação não existe — não faz sentido
   // mostrar uma tela vazia só para o usuário clicar "Avançar".
   const passosVisiveis = useMemo(() => (temDuvidas ? [1, 2, 3, 4, 5] : [1, 2, 3, 5]), [temDuvidas]);
 
   const respondidas = duvidas.filter(d => d.novo in respostas).length;
   const faltamRespostas = duvidas.length - respondidas;
+  // Dúvidas cujo melhor candidato está em outra categoria: o lote não resolve,
+  // e a tela precisa dizer isso antes de o organizador clicar e ir embora.
+  const exigemRespostaIndividual = duvidas.filter(d => d.candidatos[0]?.categoriaDiferente).length;
 
   const resetar = () => {
     setPasso(1);
@@ -232,6 +290,8 @@ export default function ImportWizard({ championshipId, open, onOpenChange, onImp
     setProvasSelecionadas(new Set());
     setRespostas({});
     setAutomaticosAbertos(false);
+    setExcluidos(new Set());
+    setGrafiaCategoria({});
     enviandoRef.current = false;
     if (inputArquivo.current) inputArquivo.current.value = "";
   };
@@ -277,6 +337,19 @@ export default function ImportWizard({ championshipId, open, onOpenChange, onImp
       setRespostas({});
       // Padrão: todas as provas do arquivo marcadas para importar.
       setProvasSelecionadas(new Set((prev.provas || []).map(p => p.provaNumber)));
+      // Padrão: NINGUÉM excluído. Competidor zerado é listado para conferência,
+      // não sumido no automático — ausente com 0 é escolha do organizador.
+      setExcluidos(new Set());
+      // Padrão: usar a grafia que o campeonato já tem. É o pré-selecionado que
+      // evita a mesma categoria virar duas classificações com metade dos pontos.
+      const existentes = new Set(prev.categoriasExistentes || []);
+      const inicial: Record<string, string> = {};
+      for (const aviso of prev.avisos || []) {
+        if (aviso.tipo !== "categoria_divergente" || !aviso.categoria || !aviso.sugestao) continue;
+        if (!existentes.has(aviso.sugestao) || inicial[aviso.categoria]) continue;
+        inicial[aviso.categoria] = aviso.sugestao;
+      }
+      setGrafiaCategoria(inicial);
 
       // Pré-seleção do passo 3 (Evento): se o backend já sugeriu um evento da
       // plataforma (nome bate com um evento existente), pré-marca "plataforma"
@@ -347,6 +420,17 @@ export default function ImportWizard({ championshipId, open, onOpenChange, onImp
       // a mais aqui.
       const provas = [...provasSelecionadas].sort((a, b) => a - b);
 
+      // Só entra no mapa a categoria em que ele escolheu "usar a existente"
+      // (grafia de destino diferente da grafia da planilha). "Manter como está"
+      // é a ausência da entrada — o backend não toca no que não está no mapa.
+      const mapaCategorias = Object.entries(grafiaCategoria)
+        .filter(([de, para]) => para && para !== de)
+        .map(([de, para]) => ({ de, para }));
+
+      const excluir = semParticipacao
+        .filter(c => excluidos.has(chaveCompetidor(c)))
+        .map(c => ({ nome: c.nome, categoria: c.categoria }));
+
       const resultado = await importMutation.mutateAsync({
         championshipId,
         arquivoBase64,
@@ -354,6 +438,8 @@ export default function ImportWizard({ championshipId, open, onOpenChange, onImp
         evento,
         decisoes,
         provas,
+        mapaCategorias,
+        excluir,
       });
 
       const provasImportadas = resultado.provasImportadas?.length
@@ -507,7 +593,10 @@ export default function ImportWizard({ championshipId, open, onOpenChange, onImp
                   titulo="Categorias"
                   valor={new Set(previa.abas.map(a => a.categoria)).size}
                 />
-                <Painel titulo="Avisos" valor={previa.avisos.length} alerta={previa.avisos.length > 0} />
+                {/* Conta só o que exige atenção. Competidor zerado e grafia de
+                    categoria com escolha pronta viram seção própria logo abaixo —
+                    somá-los aqui faria uma planilha limpa parecer cheia de problema. */}
+                <Painel titulo="Avisos" valor={avisosRestantes.length} alerta={avisosRestantes.length > 0} />
               </div>
 
               <div>
@@ -561,14 +650,125 @@ export default function ImportWizard({ championshipId, open, onOpenChange, onImp
                 </div>
               )}
 
-              {previa.avisos.length > 0 && (
+              {/* Grafia de categoria — o conserto do "o rally do cavalo não
+                  pontuou pra ninguém": a mesma categoria escrita de dois jeitos
+                  vira duas classificações, cada uma com metade dos pontos. */}
+              {divergenciasResolviveis.length > 0 && (
+                <div>
+                  <Label className="text-sm font-bold flex items-center gap-2">
+                    <AlertTriangle className="h-4 w-4 text-amber-500" />
+                    Categorias escritas de outro jeito
+                  </Label>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Se as duas grafias forem a mesma categoria, use a que o campeonato já tem — senão cada piloto
+                    aparece em duas classificações, com metade dos pontos em cada.
+                  </p>
+                  <div className="space-y-2 mt-2">
+                    {divergenciasResolviveis.map(d => {
+                      const usarExistente = grafiaCategoria[d.daPlanilha] === d.existente;
+                      return (
+                        <div
+                          key={d.daPlanilha}
+                          className="rounded-md border px-3 py-2.5 flex flex-wrap items-center gap-2 text-sm"
+                        >
+                          <span className="text-xs">
+                            A planilha traz <strong>{d.daPlanilha}</strong>. O campeonato já tem{" "}
+                            <strong>{d.existente}</strong>.
+                          </span>
+                          <div className="flex-1" />
+                          <div className="flex items-center gap-1">
+                            <Button
+                              variant={usarExistente ? "default" : "outline"}
+                              size="sm"
+                              className="h-7 text-xs"
+                              onClick={() =>
+                                setGrafiaCategoria(prev => ({ ...prev, [d.daPlanilha]: d.existente }))
+                              }
+                            >
+                              Usar a existente
+                            </Button>
+                            <Button
+                              variant={usarExistente ? "outline" : "default"}
+                              size="sm"
+                              className="h-7 text-xs"
+                              onClick={() =>
+                                setGrafiaCategoria(prev => ({ ...prev, [d.daPlanilha]: d.daPlanilha }))
+                              }
+                            >
+                              Manter como está
+                            </Button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* Competidor zerado no arquivo inteiro. A caixa vem DESMARCADA de
+                  propósito: o organizador quer que ausente apareça com 0 (a dupla
+                  Deputado/David é assim). A lista é para ele CONFERIR, não para o
+                  sistema apagar sozinho. */}
+              {semParticipacao.length > 0 && (
+                <div>
+                  <Label className="text-sm font-bold flex items-center gap-2">
+                    <Users className="h-4 w-4 text-amber-500" />
+                    Competidores sem participação em nenhuma prova
+                  </Label>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Estes ficaram zerados em <strong>todas</strong> as provas deste arquivo. Se for gente que se
+                    inscreveu e não correu, deixe como está — vai aparecer com 0, como você quer. Marque só o que for
+                    linha esquecida na planilha.
+                  </p>
+                  <div className="space-y-1.5 mt-2 max-h-[200px] overflow-y-auto pr-1">
+                    {semParticipacao.map(c => {
+                      const chave = chaveCompetidor(c);
+                      const marcado = excluidos.has(chave);
+                      return (
+                        <label
+                          key={chave}
+                          className={cn(
+                            "flex items-center gap-2 rounded-md border px-3 py-2 text-sm cursor-pointer transition-colors",
+                            marcado ? "border-destructive/40 bg-destructive/5" : "hover:bg-muted/60",
+                          )}
+                        >
+                          <Checkbox
+                            checked={marcado}
+                            onCheckedChange={() =>
+                              setExcluidos(prev => {
+                                const copia = new Set(prev);
+                                if (copia.has(chave)) copia.delete(chave);
+                                else copia.add(chave);
+                                return copia;
+                              })
+                            }
+                          />
+                          <span className="font-medium">{c.nome}</span>
+                          <Badge variant="outline" className="text-[9px] uppercase">
+                            {ROTULO_PAPEL[c.papel]}
+                          </Badge>
+                          <Badge variant="outline" className="text-[9px] uppercase">
+                            {c.categoria}
+                          </Badge>
+                          <div className="flex-1" />
+                          <span className="text-xs text-muted-foreground">
+                            {marcado ? "não importar" : "importar com 0"}
+                          </span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {avisosRestantes.length > 0 && (
                 <div>
                   <Label className="text-sm font-bold flex items-center gap-2">
                     <AlertTriangle className="h-4 w-4 text-amber-500" />
                     Avisos da leitura
                   </Label>
                   <div className="space-y-1.5 mt-2 max-h-[240px] overflow-y-auto pr-1">
-                    {previa.avisos.map((aviso, idx) => {
+                    {avisosRestantes.map((aviso, idx) => {
                       const nivel = severidade(aviso);
                       return (
                         <div
@@ -747,6 +947,13 @@ export default function ImportWizard({ championshipId, open, onOpenChange, onImp
                   Mesmo quando o e-mail bate, a confirmação é sua: nestas planilhas o e-mail é da DUPLA, não da
                   pessoa — pode estar em nome do parceiro.
                 </p>
+                {exigemRespostaIndividual > 0 && (
+                  <p className="text-xs text-amber-700 dark:text-amber-400 mt-2 flex items-start gap-1.5">
+                    <AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-0.5" />
+                    {exigemRespostaIndividual} precisa(m) de resposta individual porque o candidato está em
+                    <strong> outra categoria</strong> — os botões de lote não encostam nesses.
+                  </p>
+                )}
                 <div className="flex flex-wrap items-center gap-2 mt-3">
                   <span className="text-xs font-medium">
                     {respondidas} de {duvidas.length} respondida(s)
@@ -759,7 +966,17 @@ export default function ImportWizard({ championshipId, open, onOpenChange, onImp
                     onClick={() =>
                       setRespostas(prev => {
                         const copia = { ...prev };
-                        for (const d of duvidas) if (!(d.novo in copia)) copia[d.novo] = d.candidatos[0]?.nome ?? null;
+                        for (const d of duvidas) {
+                          if (d.novo in copia) continue;
+                          // ⚠️ O lote NUNCA aceita candidato de outra categoria.
+                          // Foi exatamente assim que "lucas" (CARRO MASTER, linha
+                          // de lixo zerada) virou "Lucas Car Rio" (CARRO RALLY) e
+                          // apareceu no pódio da Master: ninguém decidiu isso, o
+                          // botão decidiu. Par que cruza categoria fica pendente.
+                          const melhor = d.candidatos[0];
+                          if (!melhor || melhor.categoriaDiferente) continue;
+                          copia[d.novo] = melhor.nome;
+                        }
                         return copia;
                       })
                     }
@@ -788,11 +1005,14 @@ export default function ImportWizard({ championshipId, open, onOpenChange, onImp
 
               {duvidas.map(duvida => {
                 const resposta = duvida.novo in respostas ? respostas[duvida.novo] : undefined;
-                // Candidato com mesmo e-mail primeiro — é a dica mais forte, a
-                // semelhança de texto sozinha nunca liga "Victinho" a "Victor Hugo
-                // Pizoni Neto".
+                // Categoria manda na ordem, e só DEPOIS o e-mail: dentro da mesma
+                // categoria o mesmo e-mail é a dica mais forte que existe (o texto
+                // puro nunca liga "Victinho" a "Victor Hugo Pizoni Neto"), mas um
+                // "mesmo e-mail" de OUTRA categoria não pode liderar a fila — foi
+                // isso que fez o lote aceitar par errado.
                 const candidatosOrdenados = [...duvida.candidatos].sort((a, b) => {
-                  if (a.mesmoEmail !== b.mesmoEmail) return a.mesmoEmail ? -1 : 1;
+                  if (a.categoriaDiferente !== b.categoriaDiferente) return a.categoriaDiferente ? 1 : -1;
+                  if (!a.categoriaDiferente && a.mesmoEmail !== b.mesmoEmail) return a.mesmoEmail ? -1 : 1;
                   return b.similaridade - a.similaridade;
                 });
                 return (
@@ -810,6 +1030,11 @@ export default function ImportWizard({ championshipId, open, onOpenChange, onImp
                       {duvida.papel && (
                         <Badge variant="outline" className="text-[9px] uppercase">
                           {ROTULO_PAPEL[duvida.papel]}
+                        </Badge>
+                      )}
+                      {duvida.categoria && (
+                        <Badge variant="outline" className="text-[9px] uppercase">
+                          {duvida.categoria}
                         </Badge>
                       )}
                     </div>
@@ -831,6 +1056,21 @@ export default function ImportWizard({ championshipId, open, onOpenChange, onImp
                           >
                             {escolhido ? <CheckCircle2 className="h-4 w-4" /> : <Check className="h-4 w-4 opacity-30" />}
                             <span className="font-medium">É o mesmo: {candidato.nome}</span>
+                            {/* Trocar de categoria entre eventos é legítimo (o
+                                regulamento promove o vencedor), mas tem que ser
+                                decisão consciente — daí o aviso explícito. */}
+                            {candidato.categoriaDiferente && (
+                              <Badge
+                                variant={escolhido ? "secondary" : "outline"}
+                                className="text-[10px] gap-1 border-amber-500/50 text-amber-700 dark:text-amber-400"
+                                title="Este competidor corre em outra categoria. Pode ser a mesma pessoa que mudou de categoria — confira antes de aceitar."
+                              >
+                                <AlertTriangle className="h-2.5 w-2.5" />
+                                {candidato.categoria
+                                  ? `está em ${candidato.categoria}${duvida.categoria ? `, não em ${duvida.categoria}` : ""}`
+                                  : "outra categoria"}
+                              </Badge>
+                            )}
                             {candidato.mesmoEmail && (
                               <Badge
                                 variant={escolhido ? "secondary" : "outline"}
